@@ -44,7 +44,7 @@ struct DiagnosticsPage: View {
             Text(NetworkUse.footer).font(.caption).foregroundStyle(.secondary)
             Text(NetworkUse.catalogSource(model.catalogStatus)).font(.caption).foregroundStyle(.secondary)
             if let problem = model.catalogStatus.cacheProblem {
-                Text("缓存的在线方案清单用不了（\(problem)），先用内置的").font(.caption).foregroundStyle(.orange)
+                Text("在线方案清单的缓存用不了：\(problem)。先用内置的").font(.caption).foregroundStyle(.orange)
             }
         }
         .task { await model.runDiagnostics() }

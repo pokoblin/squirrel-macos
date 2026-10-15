@@ -4,6 +4,7 @@
 #   ./tools/catalog/publish.sh --verify-remote   推送以后，从 GitHub 拉回来再验一次
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+unset RIMEKIT_CATALOG_TEST_PUBKEY RIMEKIT_CATALOG_URL   # 发布时只认正式公钥、只用正式地址
 SERVICE="squirrel-macos-catalog-signing"
 SOURCE="Sources/RimeKit/Resources/catalog.json"
 DEST="catalog/v1"

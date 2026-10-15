@@ -12,8 +12,10 @@ swift build --product rimectl >/dev/null
 OUTPUT="$(.build/debug/rimectl catalog keygen)"
 PRIVATE="$(echo "$OUTPUT" | awk '$1=="private"{print $2}')"
 PUBLIC="$(echo "$OUTPUT" | awk '$1=="public"{print $2}')"
+[[ -n "$PRIVATE" && -n "$PUBLIC" ]] || { echo "没从 rimectl catalog keygen 的输出里读到密钥" >&2; exit 1; }
 # 私钥作为参数传给 security，运行的一瞬间会出现在本机进程列表里；单用户的开发机可以接受
-security add-generic-password -s "$SERVICE" -a catalog -w "$PRIVATE"
+# -T "" ：不信任任何程序，读私钥时钥匙串每次都会问
+security add-generic-password -s "$SERVICE" -a catalog -w "$PRIVATE" -T ""
 echo "私钥已存进登录钥匙串（服务名 $SERVICE）。请另外备份一份，例如存进密码管理器："
 echo "  security find-generic-password -s $SERVICE -w"
 echo "公钥（写进 Sources/RimeKit/Catalog/CatalogSignature.swift 的 publicKeys）："

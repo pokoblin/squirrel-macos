@@ -207,7 +207,7 @@ public struct PackageSpec: Sendable, Equatable, Codable {
         minAppVersion = try c.decodeIfPresent(String.self, forKey: .minAppVersion)
     }
 
-    /// 安装规则一样（名字、说明、许可证、主页、是否下架不算规则）。规则变了，正在用的就要重新应用一次
+    /// 安装规则一样（名字、说明、许可证、主页、是否下架不算规则；minAppVersion 也不算：它挡掉正在用的包时整份清单不会被采用，见 CatalogStore.check）。规则变了，正在用的就要重新应用一次
     public func sameRules(as other: PackageSpec) -> Bool {
         source == other.source && anchor == other.anchor && include == other.include && exclude == other.exclude
             && requiredFiles == other.requiredFiles && schemas == other.schemas && dependencies == other.dependencies

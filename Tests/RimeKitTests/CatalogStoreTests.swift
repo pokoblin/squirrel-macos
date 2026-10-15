@@ -153,6 +153,35 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: paths.catalogCache.path).sorted() == ["catalog.json", "catalog.json.sig"])
     }
 
+    @Test(arguments: [11, 10])
+    func 缓存比内置新时_拉到不比缓存新的不采用(fetched: Int) async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let paths = Fixtures.paths(dir)
+        try C.cache(paths, C.json(serial: 11))
+        let cacheFile = paths.catalogCache.appending(path: "catalog.json")
+        let before = try Data(contentsOf: cacheFile)
+        let http = FakeHTTPClient()
+        C.serve(http, C.json(serial: fetched))
+        let store = C.store(paths, http)
+        #expect(await store.check(inUse: nil) == .upToDate)
+        #expect(try store.effective().catalog.serial == 11)
+        #expect(try Data(contentsOf: cacheFile) == before)
+    }
+
+    @Test func 检查被拒时旧缓存不动() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let paths = Fixtures.paths(dir)
+        try C.cache(paths, C.json(serial: 11))
+        let cacheFile = paths.catalogCache.appending(path: "catalog.json")
+        let before = try Data(contentsOf: cacheFile)
+        let http = FakeHTTPClient()
+        C.serve(http, C.json(serial: 12), signature: C.sign(Data("别的".utf8)))
+        let store = C.store(paths, http)
+        guard case .rejected = await store.check(inUse: nil) else { Issue.record("应该被拒"); return }
+        #expect(try store.effective().catalog.serial == 11)
+        #expect(try Data(contentsOf: cacheFile) == before)
+    }
+
     @Test func 签名地址在清单旁边() {
         #expect(CatalogStore.signatureURL(C.remote).absoluteString == "https://example.com/catalog/v1/catalog.json.sig")
         #expect(CatalogStore.defaultRemote.absoluteString == "https://raw.githubusercontent.com/pokoblin/squirrel-macos/main/catalog/v1/catalog.json")

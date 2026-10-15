@@ -183,7 +183,7 @@ https://raw.githubusercontent.com/pokoblin/squirrel-macos/main/catalog/v1/catalo
 ### 5.2 私钥
 
 - 第一次用 `tools/catalog/keygen.sh` 生成一对密钥：私钥存进宿主机的登录钥匙串（通用密码，服务名 `squirrel-macos-catalog-signing`），公钥打印出来，写进 RimeKit 的 `CatalogSignature.publicKey`。
-- 签名时用 `security find-generic-password -w` 读私钥。钥匙串可能问能不能用，点「始终允许」。
+- 签名时用 `security find-generic-password -w` 读私钥。钥匙串每次都会问能不能用私钥，点「允许」（不要点「始终允许」，不然以后任何程序都能不问就读到私钥）。
 - **私钥要另外备份**（例如存进密码管理器）。丢了只能发新版应用换公钥，旧应用就再也收不到在线清单了。
 - 第一版不做公钥轮换。
 
