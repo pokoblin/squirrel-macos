@@ -40,7 +40,7 @@ struct TransferPage: View {
     func chooseExportFile() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.zip]
-        panel.nameFieldStringValue = "\(AppInfo.name) 导出.zip"
+        panel.nameFieldStringValue = ExportFileName.suggested()
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await model.export(to: url) }
     }
