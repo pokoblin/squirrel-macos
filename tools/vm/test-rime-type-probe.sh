@@ -12,7 +12,7 @@ pass=0; fail=0
 expect() {  # expect <期望退出码> <说明> <命令...>
   local want=$1 name=$2; shift 2
   "$@" >/dev/null 2>&1; local got=$?
-  if [ "$got" = "$want" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $name（期望 $want，实际 $got）"; fi
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: ${name}（期望 ${want}，实际 ${got}）"; fi
 }
 
 if [ -d "$REAL_HOME/Library/Rime" ]; then
@@ -30,5 +30,5 @@ expect 0 "普通副本"               $P --guard-only "$FAKE/copy"
 expect 0 "副本里的 build 子目录"  $P --guard-only "$FAKE/copy/build"
 
 rm -rf "$FAKE"
-echo "通过 $pass，失败 $fail"
+echo "通过 ${pass}，失败 ${fail}"
 [ "$fail" = 0 ]

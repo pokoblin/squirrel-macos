@@ -31,7 +31,7 @@ notarize() {
   printf '%s\n' "$result" > "$OUT/notary-$name.json"
   status="$(printf '%s' "$result" | plutil -extract status raw -o - - 2>/dev/null || true)"
   id="$(printf '%s' "$result" | plutil -extract id raw -o - - 2>/dev/null || true)"
-  echo "公证结果（$name）：${status:-（没拿到）}（${id:-没有 id}）" >&2
+  echo "公证结果（${name}）：${status:-（没拿到）}（${id:-没有 id}）" >&2
   if [ "$status" != "Accepted" ]; then
     if [ -n "$id" ]; then xcrun notarytool log "$id" --keychain-profile "$NOTARY_PROFILE" >&2 || true; fi
     echo "公证没通过，完整结果在 $OUT/notary-$name.json" >&2
