@@ -32,12 +32,12 @@ struct TextReplacementPage: View {
                                 Label("和上次同步时一样", systemImage: "checkmark.circle")
                             } else {
                                 Note(text: "和上次同步比：新增 \(changes.added) 条，删掉 \(changes.removed) 条")
-                                Button("同步这些变化") { Task { await model.apply(); await model.checkTextReplacement() } }
+                                Button("同步这些变化") { Task { await model.syncTextReplacement(); await model.checkTextReplacement() } }
                                     .buttonStyle(.borderedProminent)
                             }
                         } else {
                             Note(text: "还没同步过")
-                            Button("现在同步") { Task { await model.apply(); await model.checkTextReplacement() } }
+                            Button("现在同步") { Task { await model.syncTextReplacement(); await model.checkTextReplacement() } }
                         }
                     }
                 }

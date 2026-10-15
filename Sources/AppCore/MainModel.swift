@@ -48,8 +48,8 @@ public final class MainModel {
     public internal(set) var pendingExternalChanges: [ExternalChange]?
     /// 外部改动里有个人词库被改过（弹窗里多一个「采用」）
     public internal(set) var pendingPersonalChanges = false
-    /// 上次应用用的选项（用户在弹窗里选了以后再用）
-    var lastApply = (options: ApplyOptions(), usingCache: false)
+    /// 上次应用用的选项（用户在弹窗里选了以后再用）；onlySync：只同步文本替换（应用已保存的设置，不带草稿）
+    var lastApply = (options: ApplyOptions(), usingCache: false, onlySync: false)
     public internal(set) var colorSchemes: [ColorSchemeInfo] = []
     public internal(set) var textReplacementStatus: TextReplacementStatus?
     public internal(set) var backups: [BackupInfo] = []

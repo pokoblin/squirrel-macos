@@ -14,8 +14,18 @@ extension MainModel {
     // MARK: 应用改动（设计 6.1）
 
     public func apply(_ options: ApplyOptions = ApplyOptions(), usingCache: Bool = false) async {
+        await run(options, usingCache: usingCache, onlySync: false)
+    }
+
+    /// 只同步文本替换：按已保存的设置（打开同步）重新写入，草稿里别的改动留着
+    public func syncTextReplacement() async {
+        await run(ApplyOptions(), usingCache: false, onlySync: true)
+    }
+
+    func run(_ options: ApplyOptions, usingCache: Bool, onlySync: Bool) async {
         guard working == nil else { return }
-        let settings = draft
+        var settings = onlySync ? saved : draft
+        if onlySync { settings.textReplacement.sync = true }
         do {
             try settings.validate(env.catalog)
         } catch {
@@ -24,7 +34,7 @@ extension MainModel {
         }
         working = "正在准备……"
         defer { working = nil }
-        lastApply = (options, usingCache)
+        lastApply = (options, usingCache, onlySync)
         pendingExternalChanges = nil
         do {
             guard let packages = try await packages(for: settings, usingCache: usingCache) else { return }
@@ -42,7 +52,12 @@ extension MainModel {
             switch outcome {
             case .applied(let report):
                 saved = updated
-                draft = updated
+                if onlySync {
+                    draft.textReplacement.lastSyncedHash = updated.textReplacement.lastSyncedHash
+                    draft.textReplacement.syncedEntries = updated.textReplacement.syncedEntries
+                } else {
+                    draft = updated
+                }
                 notice = Self.notice(for: report)
             case .compileFailed(let errors):
                 notice = Notice(kind: .error, title: "新配置编译不过，没有写入", lines: errors)
@@ -126,9 +141,10 @@ extension MainModel {
         case .cancel:
             return
         case .overwrite:
-            await apply(ApplyOptions(overwriteExternalChanges: true), usingCache: usingCache)
+            await run(ApplyOptions(overwriteExternalChanges: true), usingCache: usingCache, onlySync: lastApply.onlySync)
         case .adoptPersonal:
-            await apply(ApplyOptions(overwriteExternalChanges: true, adoptPersonalChanges: true), usingCache: usingCache)
+            await run(ApplyOptions(overwriteExternalChanges: true, adoptPersonalChanges: true), usingCache: usingCache,
+                      onlySync: lastApply.onlySync)
         }
     }
 
@@ -137,7 +153,7 @@ extension MainModel {
         notice = nil
         switch action {
         case .applyUsingCache:
-            await apply(lastApply.options, usingCache: true)
+            await run(lastApply.options, usingCache: true, onlySync: lastApply.onlySync)
         case .restore(let id):
             await restore(id)
         }

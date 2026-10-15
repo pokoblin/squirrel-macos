@@ -236,4 +236,24 @@ import Testing
         await model.checkTextReplacement()
         #expect(model.textReplacementStatus?.changes == nil)   // 和诊断一致：还没同步过
     }
+
+    @Test func 同步文本替换只同步_别的改动留在草稿里() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let a = Phrase(text: "替换甲", code: "tha", weight: 1)
+        let b = Phrase(text: "替换乙", code: "thb", weight: 1)
+        let r = Replacements([a])
+        let model = try MainModel(env: m.environment(textReplacements: { r.get() }))
+        model.draft.textReplacement.sync = true
+        await model.apply()
+        let font = model.saved.appearance.fontPoint
+        r.set([a, b])
+        model.draft.appearance.fontPoint = 30   // 还没应用的改动
+        await model.syncTextReplacement()
+        #expect(model.saved.appearance.fontPoint == font)
+        #expect(try SettingsStore(paths: m.paths).load()?.appearance.fontPoint == font)
+        #expect(model.draft.appearance.fontPoint == 30)
+        #expect(model.isDirty)
+        await model.checkTextReplacement()
+        #expect(model.textReplacementStatus?.changes == TextReplacementSync.Changes(added: 0, removed: 0))
+    }
 }
