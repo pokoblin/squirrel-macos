@@ -3,6 +3,10 @@ import Foundation
 /// 用户在应用里做的所有选择（设计第 5 节）
 public struct Settings: Sendable, Equatable, Codable {
     public static let currentFormatVersion = 1
+    /// 字号的范围（候选字、序号、注释）
+    public static let fontPointRange = 8...72
+    /// 每页候选数的范围
+    public static let pageSizeRange = 1...10
 
     public var formatVersion: Int
     /// 启用的方案，按顺序；第一个是默认方案
@@ -48,10 +52,10 @@ public struct Settings: Sendable, Equatable, Codable {
                 }
             }
         }
-        try Self.check("候选字字号", appearance.fontPoint, 8...72)
-        try Self.check("序号字号", appearance.labelFontPoint, 8...72)
-        try Self.check("注释字号", appearance.commentFontPoint, 8...72)
-        try Self.check("每页候选数", appearance.pageSize, 1...10)
+        try Self.check("候选字字号", appearance.fontPoint, Self.fontPointRange)
+        try Self.check("序号字号", appearance.labelFontPoint, Self.fontPointRange)
+        try Self.check("注释字号", appearance.commentFontPoint, Self.fontPointRange)
+        try Self.check("每页候选数", appearance.pageSize, Self.pageSizeRange)
     }
 
     /// 这个包的这个选项现在选的是哪一项（没选就是默认值）

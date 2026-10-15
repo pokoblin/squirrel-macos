@@ -204,6 +204,18 @@ final class GenerationContext {
 
     // MARK: 规则 7：短语
 
+    /// 注入短语翻译器时写的 custom_phrase 配置（接管时也用它认出这段补丁）
+    static func phraseConfig() -> Node {
+        YAMLNode.map([
+            ("dictionary", YAMLNode.text("")),
+            ("user_dict", YAMLNode.text("custom_phrase")),
+            ("db_class", YAMLNode.text("stabledb")),
+            ("enable_completion", YAMLNode.bool(false)),
+            ("enable_sentence", YAMLNode.bool(false)),
+            ("initial_quality", YAMLNode.int(100)),
+        ])
+    }
+
     func applyPhrases() throws {
         var phrases: [Phrase] = []
         var seen = Set<String>()
@@ -226,14 +238,7 @@ final class GenerationContext {
             } else {
                 var p = patches[schema] ?? Patch()
                 p.set("engine/translators/@before 0", YAMLNode.text("table_translator@custom_phrase"))
-                p.set("custom_phrase", YAMLNode.map([
-                    ("dictionary", YAMLNode.text("")),
-                    ("user_dict", YAMLNode.text("custom_phrase")),
-                    ("db_class", YAMLNode.text("stabledb")),
-                    ("enable_completion", YAMLNode.bool(false)),
-                    ("enable_sentence", YAMLNode.bool(false)),
-                    ("initial_quality", YAMLNode.int(100)),
-                ]))
+                p.set("custom_phrase", Self.phraseConfig())
                 patches[schema] = p
                 file = "custom_phrase.txt"
             }
