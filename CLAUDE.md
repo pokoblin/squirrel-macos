@@ -1,6 +1,6 @@
 # squirrel-macos 项目约定
 
-鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0（待验证项）、阶段 1（工程骨架、方案清单、下载缓存）已完成，下一步写阶段 2 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
+鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0、1、2 已完成（待验证项；方案清单和下载缓存；设置和生成配置），下一步写阶段 3 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
 
 ## 先读这些
 
@@ -21,7 +21,7 @@
   - 安装、启用输入法这类系统级操作：在测试虚拟机里做（`tools/vm/`）。
 - 隐私：用户的 macOS「文本替换」内容（`~/Library/KeyboardServices/TextReplacements.db`、生成的 `custom_phrase.txt`）是个人信息，检查时只统计条数、比对哈希，不打印内容，不进 git。
 - 改 Rime 配置项前，先用 `strings` 查 Squirrel 二进制确认键名真的存在（踩过 `candidate_font_point` 无效的坑）。
-- Swift 工程：`swift test` 跑全部单元测试（只用临时目录）；`RIMEKIT_ONLINE=1 swift test --filter OnlineTests` 联网检查上游；手动试 `rimectl fetch` 一律加 `--data-dir`，别写进真实的 `~/Library/Application Support/squirrel-macos`。测试机里可以直接运行 `/Volumes/My Shared Files/project/.build/debug/rimectl`。
+- Swift 工程：`swift test` 跑全部单元测试（只用临时目录）；`RIMEKIT_ONLINE=1 swift test --filter OnlineTests` 联网检查上游；手动试 `rimectl fetch` 一律加 `--data-dir`，别写进真实的 `~/Library/Application Support/squirrel-macos`。测试机里可以直接运行 `/Volumes/My Shared Files/project/.build/debug/rimectl`。联网的端到端测试（真实上游包生成、编译、打字）：`RIMEKIT_ONLINE=1 swift test --filter OnlineGenerateTests`；生成配置的测试要先运行 `./tools/vm/build-probes.sh` 编译打字检查工具。
 
 ## 测试虚拟机
 

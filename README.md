@@ -6,7 +6,7 @@
 
 ## 现在在哪个阶段
 
-**第一版设计已确认，阶段 0（待验证项）、阶段 1（方案清单和下载缓存）已完成。** 下一步是阶段 2（生成配置）。还没有图形界面。
+**第一版设计已确认，阶段 0–2 已完成（方案清单、下载缓存、生成配置）。** 下一步是阶段 3（写入真实配置、部署、备份还原）。还没有图形界面。
 
 这些调研来自上一个项目 [squirrel-wubi86](../squirrel-wubi86)。那个项目只为我自己的“极点五笔 + 拼音混输”做配置，所有步骤都是手动在终端里完成的。这里的结论都在虚拟机或真机上实际验证过。
 
@@ -34,3 +34,4 @@ Swift Package（需要 Xcode 27）：`RimeKit` 是全部逻辑，`rimectl` 是�
 - 跑测试（只用临时目录，不碰真实配置）：`swift test`
 - 联网检查上游结构有没有变：`RIMEKIT_ONLINE=1 swift test --filter OnlineTests`
 - 试用命令行：`swift build && .build/debug/rimectl catalog`；下载时请加 `--data-dir 某个临时目录`
+- 试生成配置：`rimectl settings init wubi-pinyin --data-dir D`，再 `rimectl generate --data-dir D --out D/rime`（生成的测试要先运行 `./tools/vm/build-probes.sh`）

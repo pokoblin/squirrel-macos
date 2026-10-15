@@ -122,6 +122,9 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | 第一次部署时，WARNING 日志里出现 `nonexistent config file '…/build/xxx.schema.yaml'` 是正常的 | 实测 |
 | 部署约 90 万条的雾凇词库：宿主机几十秒，虚拟机 20 秒内完成；生成 `pinyin_ext.table.bin` 约 29 MB | 实测 |
 | `user.yaml` 里的 `previously_selected_schema` 记录用户上次用的方案，比 `schema_list` 第一位的“默认方案”优先 | 实测 |
+| 补丁按顺序生效：同一个 `patch` 里先整体替换 `preset_color_schemes`，后面再写 `"preset_color_schemes/<配色>/font_point": 24`，最终是 24；整体替换会删掉原来的其它配色 | 实测（rime_deployer --compile，2026-10-15） |
+| `rime_deployer --build` 只编译方案和 `default.yaml`，**不编译 `squirrel.yaml`**；`--compile` 也只接受方案文件。外观补丁有没有生效，宿主机上只能看生成的补丁，真实效果要在测试机里看 | 实测（2026-10-15） |
+| 雾凇的小鹤双拼方案用 `custom_phrase_double.txt` 当短语文件（全拼用 `custom_phrase.txt`），上游不提供这个文件；应用生成后，`tstx` 这类短语在小鹤双拼里也能打出来 | 查看 double_pinyin_flypy.schema.yaml + 实测（阶段 2 联网测试） |
 
 ### 外观（`squirrel.custom.yaml`）
 
