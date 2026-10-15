@@ -60,17 +60,20 @@ public struct TakeoverSurvey: Sendable, Equatable {
         return TakeoverSurvey(isEmpty: false, schemas: schemas, unknownSchemas: unknown, packages: packages)
     }
 
-    /// 方案列表：default.custom.yaml 补丁里的 schema_list 优先，没有就看 default.yaml
+    /// 方案列表：default.custom.yaml 补丁里的 schema_list 优先，没有就看 default.yaml；
+    /// 补丁里只有 schema_list/+（往后追加）时，接在 default.yaml 的列表后面（和 Rime 一样）
     static func schemaList(_ dir: URL) throws -> [String] {
-        if let text = try TakeoverFiles.read(dir, "default.custom.yaml"),
-           let list = PatchLeaves(try TakeoverFiles.patch(text, file: "default.custom.yaml"))["schema_list"] {
-            return ids(list)
+        var leaves = PatchLeaves()
+        if let text = try TakeoverFiles.read(dir, "default.custom.yaml") {
+            leaves = PatchLeaves(try TakeoverFiles.patch(text, file: "default.custom.yaml"))
         }
+        if let list = leaves["schema_list"] { return ids(list) }
+        var base: [String] = []
         if let text = try TakeoverFiles.read(dir, "default.yaml"),
            let list = try TakeoverFiles.yaml(text, file: "default.yaml")?["schema_list"] {
-            return ids(list)
+            base = ids(list)
         }
-        return []
+        return base + (leaves["schema_list/+"].map(ids) ?? [])
     }
 
     static func ids(_ list: Node) -> [String] {

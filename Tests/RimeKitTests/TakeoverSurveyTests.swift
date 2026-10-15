@@ -63,4 +63,14 @@ import Testing
         #expect(TakeoverFiles.importTables(text) == ["py_user", "cn/a"])
         #expect(TakeoverFiles.importTables("---\nname: x\n...\n") == [])
     }
+
+    @Test func 只追加方案时接在default_yaml的列表后面() throws {
+        // 终审：只写 schema_list/+（Rime 文档里常见的写法）时，追加的方案不能丢
+        let dir = try TempDir(); defer { dir.remove() }
+        let rime = dir.url.appending(path: "Rime", directoryHint: .isDirectory)
+        try write("patch:\n  schema_list/+:\n    - schema: sp\n", "default.custom.yaml", in: rime)
+        try write("schema_list:\n  - schema: py\n", "default.yaml", in: rime)
+        let survey = try TakeoverSurvey.scan(rime, catalog: try GenFixtures.catalog())
+        #expect(survey.schemas == ["py", "sp"])
+    }
 }
