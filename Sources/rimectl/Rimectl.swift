@@ -17,6 +17,13 @@ struct Rimectl {
         var squirrel: (any SquirrelControlling)? = nil
         var deployTimeout: Duration = .seconds(120)
         var sleep: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+        /// 空就用真的 TIS
+        var inputSource: (any InputSourceControlling)? = nil
+        /// 空就按 --gui-auth 选系统授权框或免密 sudo
+        var privileged: (any PrivilegedInstalling)? = nil
+        /// 空就用真的三道检查
+        var verifier: (any PackageVerifying)? = nil
+        var activationTimeout: Double = 600
     }
 
     static let usage = """
@@ -32,6 +39,9 @@ struct Rimectl {
       rimectl apply [--cache-only] [--overwrite] [--adopt-personal]   把设置应用到 Rime 目录并通知鼠须管部署
       rimectl status                                           查看鼠须管、Rime 目录、外部改动、备份
       rimectl restore --list | <备份 id>                        列出备份 / 还原到某个备份
+      rimectl install [--force] [--gui-auth]                   下载、检查、安装鼠须管（--gui-auth 弹系统授权框，否则用免密 sudo）
+      rimectl activate [--timeout 秒]                           打开系统设置等你添加鼠须管，然后切换过去并启动它
+      rimectl doctor [--offline]                               检查环境，告诉你下一步做什么
     通用参数：--data-dir 目录（应用数据目录）  --rime-dir 目录（Rime 用户目录，默认 ~/Library/Rime）
     """
 
@@ -55,6 +65,9 @@ struct Rimectl {
         var overwrite = false
         var adoptPersonal = false
         var listOnly = false
+        var guiAuth = false
+        var offline = false
+        var timeout: Double?
         var positional: [String] = []
         var i = 0
         while i < args.count {
@@ -77,6 +90,16 @@ struct Rimectl {
             case "--adopt-personal":
                 adoptPersonal = true
                 i += 1
+            case "--gui-auth":
+                guiAuth = true
+                i += 1
+            case "--offline":
+                offline = true
+                i += 1
+            case "--timeout":
+                guard i + 1 < args.count, let seconds = Double(args[i + 1]) else { out.error(usage); return 2 }
+                timeout = seconds
+                i += 2
             case "--list":
                 listOnly = true
                 i += 1
@@ -119,6 +142,12 @@ struct Rimectl {
             case "restore":
                 return try await restore(Array(positional.dropFirst()), listOnly: listOnly,
                                          paths: paths, locations: locations, context)
+            case "install":
+                return try await install(force: force, guiAuth: guiAuth, paths: paths, locations: locations, context)
+            case "activate":
+                return try await activate(timeout: timeout ?? context.activationTimeout, locations: locations, context)
+            case "doctor":
+                return await doctor(offline: offline, paths: paths, locations: locations, context)
             case "fetch":
                 let ids = Array(positional.dropFirst())
                 guard !ids.isEmpty else { out.error(usage); return 2 }
@@ -369,6 +398,70 @@ struct Rimectl {
             return false
         }
         return true
+    }
+
+    private static func install(force: Bool, guiAuth: Bool, paths: AppPaths, locations: RimeLocations,
+                                _ context: Context) async throws -> Int32 {
+        let out = context.output
+        let privileged: any PrivilegedInstalling = context.privileged
+            ?? (guiAuth ? AuthorizationPromptInstaller() : SudoPackageInstaller())
+        let installer = SquirrelInstaller(paths: paths, locations: locations, http: context.http, retry: context.retry,
+                                          verifier: context.verifier ?? SquirrelPackageVerifier(), privileged: privileged)
+        out.line("正在检查鼠须管的最新版本……")
+        switch try await installer.install(force: force) {
+        case .alreadyInstalled(let version):
+            out.line("已经装了鼠须管 \(version)，是最新的，不用装")
+        case let .installed(version, previous):
+            out.line(previous.map { "已安装鼠须管 \(version)（原来是 \($0)）" } ?? "已安装鼠须管 \(version)")
+            out.line("下一步：运行 rimectl activate，在系统设置里添加鼠须管")
+        }
+        return 0
+    }
+
+    private static func activate(timeout: Double, locations: RimeLocations, _ context: Context) async throws -> Int32 {
+        let out = context.output
+        let activator = SquirrelActivator(
+            locations: locations,
+            inputSource: context.inputSource ?? TISInputSourceService(),
+            squirrel: context.squirrel ?? SquirrelControl(locations: locations),
+            watcher: DeployWatcher(locations: locations, timeout: context.deployTimeout, sleep: context.sleep),
+            timeout: timeout)
+        let outcome = try await activator.activate(onWaiting: {
+            out.line("已打开系统设置的键盘页。请在「文字输入 → 输入法 → 编辑… → + → 简体中文 → 鼠须管」里添加，")
+            out.line("添加好后这里会自动继续（最多等 \(Int(timeout)) 秒）……")
+        })
+        switch outcome {
+        case let .ready(_, launched):
+            if launched { out.line("已启动鼠须管") }
+            out.line("鼠须管可以用了")
+            return 0
+        case .timedOut:
+            out.error("等了 \(Int(timeout)) 秒，还没看到鼠须管被添加。添加好后再运行一次 rimectl activate")
+            return 1
+        case .notRegistered:
+            out.error("系统里没有鼠须管的输入源，可能没装好。请运行 rimectl install --force 重新安装")
+            return 1
+        }
+    }
+
+    private static func doctor(offline: Bool, paths: AppPaths, locations: RimeLocations, _ context: Context) async -> Int32 {
+        let out = context.output
+        let doctor = Doctor(
+            paths: paths, locations: locations,
+            inputSource: context.inputSource ?? TISInputSourceService(),
+            squirrel: context.squirrel ?? SquirrelControl(locations: locations),
+            releaseSource: offline ? nil : SquirrelReleaseSource(http: context.http, retry: context.retry))
+        let checks = await doctor.run()
+        for check in checks {
+            let mark = switch check.level {
+            case .ok: "[正常]"
+            case .warning: "[注意]"
+            case .problem: "[问题]"
+            }
+            out.line("\(mark) \(check.name)：\(check.message)")
+            if let hint = check.hint { out.line("       → \(hint)") }
+        }
+        return checks.contains { $0.level == .problem } ? 1 : 0
     }
 
     private static func report(_ pkg: CachedPackage, _ out: Output) {
