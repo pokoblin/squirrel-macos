@@ -63,6 +63,8 @@ public struct ConfigGenerator: Sendable {
         let context = try GenerationContext(input: input, output: output)
         try context.copyPackageFiles()
         try context.collectUpstreamPatches()
+        try context.applyOptions()
+        try context.copyPersonalDicts()
         try context.applyPreservedPatches()
         context.applySchemaList()
         try context.applyAppearance()

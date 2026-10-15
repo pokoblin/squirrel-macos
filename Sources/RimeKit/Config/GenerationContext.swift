@@ -159,6 +159,48 @@ final class GenerationContext {
         return result
     }
 
+    // MARK: 规则 5：包选项
+
+    func applyOptions() throws {
+        let enabled = Set(input.settings.schemas)
+        for spec in required {
+            for option in spec.options {
+                let choice = input.settings.choice(option, of: spec)
+                for (schema, values) in choice.patches.sorted(by: { $0.key < $1.key }) where enabled.contains(schema) {
+                    for (key, value) in values.sorted(by: { $0.key < $1.key }) {
+                        patches[schema, default: Patch()].set(key, YAMLNode.text(value))
+                    }
+                }
+                for dict in choice.generatedDicts {
+                    try write(renderDict(dict), to: "\(dict.name).dict.yaml", origin: .generated)
+                }
+            }
+        }
+    }
+
+    func renderDict(_ dict: GeneratedDict) -> String {
+        let tables = dict.importTables
+            .filter { !$0.onlyIfPersonal || input.personal.hasDict(named: $0.name) }
+            .map { "  - \($0.name)\n" }
+            .joined()
+        return Patch.header
+            + "---\n"
+            + "name: \(dict.name)\n"
+            + "version: \"squirrel-macos\"\n"
+            + "sort: by_weight\n"
+            + "import_tables:\n"
+            + tables
+            + "...\n"
+    }
+
+    // MARK: 规则 6：个人词库（和上游同名时用个人的）
+
+    func copyPersonalDicts() throws {
+        for url in input.personal.dicts {
+            try copy(url, to: url.lastPathComponent, origin: .personal)
+        }
+    }
+
     // MARK: 规则 8：写出补丁文件
 
     func writePatches() throws {
