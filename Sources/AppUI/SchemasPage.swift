@@ -30,7 +30,13 @@ struct SchemasPage: View {
             .frame(height: CGFloat(model.draft.schemas.count) * 30 + 12)
             if let note = model.mixedPackagesNote { Note(text: note) }
 
-            Text("可以启用的方案").font(.title2.bold())
+            HStack(alignment: .firstTextBaseline) {
+                Text("可以启用的方案").font(.title2.bold())
+                Spacer()
+                Button("检查方案清单更新") { Task { await model.checkCatalog() } }
+                    .disabled(model.working != nil)
+            }
+            Text(NetworkUse.catalogCheckNote).font(.caption).foregroundStyle(.secondary)
             ForEach(model.catalogPackages, id: \.id) { package in
                 GroupBox {
                     VStack(alignment: .leading, spacing: 6) {

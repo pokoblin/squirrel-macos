@@ -24,6 +24,28 @@ struct DiagnosticsPage: View {
                     }
                 }
             }
+            Divider().padding(.vertical, 6)
+            Text("应用什么时候会联网").font(.headline)
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                GridRow {
+                    Text("什么时候").bold()
+                    Text("连哪里").bold()
+                    Text("下载什么").bold()
+                }
+                ForEach(NetworkUse.rows, id: \.when) { row in
+                    GridRow {
+                        Text(row.when)
+                        Text(row.host)
+                        Text(row.what)
+                    }
+                }
+            }
+            .font(.callout)
+            Text(NetworkUse.footer).font(.caption).foregroundStyle(.secondary)
+            Text(NetworkUse.catalogSource(model.catalogStatus)).font(.caption).foregroundStyle(.secondary)
+            if let problem = model.catalogStatus.cacheProblem {
+                Text("缓存的在线方案清单用不了（\(problem)），先用内置的").font(.caption).foregroundStyle(.orange)
+            }
         }
         .task { await model.runDiagnostics() }
     }

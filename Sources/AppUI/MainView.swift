@@ -70,11 +70,11 @@ struct ApplyBar: View {
             }
             .padding(12)
             .background(.bar)
-        } else if model.isDirty {
+        } else if model.hasPendingChanges {
             HStack(spacing: 10) {
-                Label("有改动还没应用", systemImage: "pencil.circle")
+                Label(model.isDirty ? "有改动还没应用" : "方案清单更新了，还没应用", systemImage: "pencil.circle")
                 Spacer()
-                Button("撤销") { model.revert() }
+                if model.isDirty { Button("撤销") { model.revert() } }
                 Button("应用改动") { Task { await model.apply() } }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
