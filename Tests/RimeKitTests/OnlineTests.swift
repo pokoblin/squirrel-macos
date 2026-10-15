@@ -6,7 +6,7 @@ import Testing
 /// RIMEKIT_ONLINE=1 swift test --filter OnlineTests
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["RIMEKIT_ONLINE"] == "1"))
 struct OnlineTests {
-    @Test(arguments: ["rime-ice", "rime-ice-dicts", "wubi86-jidian"])
+    @Test(arguments: (try? Catalog.builtIn().packages.map(\.id)) ?? [])
     func 真实下载内置清单里的包(id: String) async throws {
         let dir = try TempDir(); defer { dir.remove() }
         let catalog = try Catalog.builtIn()
@@ -17,5 +17,13 @@ struct OnlineTests {
             #expect(pkg.info.files.contains(file), "缺少 \(file)")
         }
         #expect(!pkg.info.version.isEmpty)
+    }
+
+    @Test func 在线方案清单签名正确而且不比内置的旧() async throws {
+        let http = URLSessionHTTPClient()
+        let data = try await http.get(CatalogStore.defaultRemote)
+        let signature = try await http.get(CatalogStore.signatureURL(CatalogStore.defaultRemote))
+        #expect(CatalogSignature.verify(data, signature: signature, keys: CatalogSignature.trustedKeys))
+        #expect(try Catalog.decode(data).serial >= Catalog.builtIn().serial)
     }
 }
