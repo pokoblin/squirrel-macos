@@ -66,6 +66,45 @@ import Testing
         }
     }
 
+    @Test func 目录是符号链接时不读链接指向的外面() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let fm = FileManager.default
+        let outside = m.dir.url.appending(path: "outside", directoryHint: .isDirectory)
+        try fm.createDirectory(at: outside.appending(path: "dicts"), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: outside.appending(path: "rime_ice.userdb.txt"))
+        try Data(T.pyUser.utf8).write(to: outside.appending(path: "dicts/evil.dict.yaml"))
+        try Data("外面的\twm\t1\n".utf8).write(to: outside.appending(path: "phrases.txt"))
+        let good = m.dir.url.appending(path: "good", directoryHint: .isDirectory)
+        try Unzipper().unzip(try await exported(m), into: good)
+        try fm.removeItem(at: good.appending(path: "userdb"))
+        try fm.removeItem(at: good.appending(path: "personal"))
+        try fm.createSymbolicLink(atPath: good.appending(path: "userdb").path, withDestinationPath: outside.path)
+        try fm.createSymbolicLink(atPath: good.appending(path: "personal").path, withDestinationPath: outside.path)
+        let file = m.dir.url.appending(path: "linked.zip")
+        try Zipper().zip(good, to: file)
+        let a = try open(file, m)
+        #expect(a.userDB.isEmpty)
+        #expect(a.personalDicts.isEmpty)
+        #expect(a.phrases.isEmpty)
+        #expect(a.warnings.contains { $0.contains("userdb") })
+        #expect(a.warnings.contains { $0.contains("personal") })
+    }
+
+    @Test func 路径里的点点斜杠写不到外面() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let good = m.dir.url.appending(path: "good/inner", directoryHint: .isDirectory)
+        try Unzipper().unzip(try await exported(m), into: good)
+        try Data("evil".utf8).write(to: m.dir.url.appending(path: "good/escape.txt"))
+        let file = m.dir.url.appending(path: "dotdot.zip")
+        // 在 inner 里把 ../escape.txt 也打进 zip（条目路径带 ../）
+        let r = try Shell.run("/usr/bin/zip", ["-q", "-r", file.path, ".", "../escape.txt"], currentDirectory: good)
+        try #require(r.status == 0, "\(r.stderr)")
+        let into = m.dir.url.appending(path: "import-dotdot", directoryHint: .isDirectory)
+        _ = try ImportArchive.open(file, catalog: m.catalog, into: into)
+        #expect(!FileManager.default.fileExists(atPath: m.dir.url.appending(path: "escape.txt").path))
+        #expect(FileManager.default.fileExists(atPath: into.appending(path: "escape.txt").path))
+    }
+
     @Test func 奇怪的文件跳过() async throws {
         let m = try T.machine(); defer { m.dir.remove() }
         let good = m.dir.url.appending(path: "good", directoryHint: .isDirectory)

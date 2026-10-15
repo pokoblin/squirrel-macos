@@ -36,29 +36,46 @@ public struct ImportArchive: Sendable, Equatable {
         }
 
         var warnings: [String] = []
+        // personal、personal/dicts、userdb 本身必须是真的文件夹：是符号链接的话会读到解压目录外面
+        func folder(_ path: String) -> URL? {
+            let url = dir.appending(path: path, directoryHint: .isDirectory)
+            guard let type = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType else { return nil }
+            guard type == .typeDirectory else {
+                warnings.append("导出文件里的 \(path) 不是普通文件夹，跳过")
+                return nil
+            }
+            return url
+        }
+        let personalDir = folder("personal")
         var dicts: [URL] = []
-        for (name, url) in entries(dir.appending(path: "personal/dicts", directoryHint: .isDirectory)) {
-            if name.hasSuffix(".dict.yaml"), isRegular(url) {
-                dicts.append(url)
-            } else {
-                warnings.append("导出文件里的 personal/dicts/\(name) 不是个人词库，跳过")
+        if personalDir != nil, let dictsDir = folder("personal/dicts") {
+            for (name, url) in entries(dictsDir) {
+                if name.hasSuffix(".dict.yaml"), isRegular(url) {
+                    dicts.append(url)
+                } else {
+                    warnings.append("导出文件里的 personal/dicts/\(name) 不是个人词库，跳过")
+                }
             }
         }
         var phrases: [Phrase] = []
-        let phrasesURL = dir.appending(path: "personal/phrases.txt")
-        if FileManager.default.fileExists(atPath: phrasesURL.path) {
-            guard isRegular(phrasesURL), let text = try? String(contentsOf: phrasesURL, encoding: .utf8) else {
-                throw TransferError.badContent("personal/phrases.txt 读不了")
+        if let personalDir {
+            let phrasesURL = personalDir.appending(path: "phrases.txt")
+            if FileManager.default.fileExists(atPath: phrasesURL.path) {
+                guard isRegular(phrasesURL), let text = try? String(contentsOf: phrasesURL, encoding: .utf8) else {
+                    throw TransferError.badContent("personal/phrases.txt 读不了")
+                }
+                phrases = PhraseFile.parse(text)
             }
-            phrases = PhraseFile.parse(text)
         }
         var userDB: [String: URL] = [:]
-        for (name, url) in entries(dir.appending(path: "userdb", directoryHint: .isDirectory)) {
-            let dict = name.hasSuffix(".userdb.txt") ? String(name.dropLast(".userdb.txt".count)) : ""
-            if RimeDictManager.isValidName(dict), isRegular(url) {
-                userDB[dict] = url
-            } else {
-                warnings.append("导出文件里的 userdb/\(name) 不是输入习惯快照，跳过")
+        if let userDBDir = folder("userdb") {
+            for (name, url) in entries(userDBDir) {
+                let dict = name.hasSuffix(".userdb.txt") ? String(name.dropLast(".userdb.txt".count)) : ""
+                if RimeDictManager.isValidName(dict), isRegular(url) {
+                    userDB[dict] = url
+                } else {
+                    warnings.append("导出文件里的 userdb/\(name) 不是输入习惯快照，跳过")
+                }
             }
         }
         return ImportArchive(manifest: manifest, personalDicts: dicts, phrases: phrases, userDB: userDB, warnings: warnings)
