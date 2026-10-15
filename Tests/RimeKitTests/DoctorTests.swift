@@ -86,4 +86,48 @@ import Testing
         #expect(check?.level == .warning)
         #expect(check?.message == "有 1 个文件在应用外被改过或删了")
     }
+
+    func textReplacementDoctor(_ dir: TempDir, synced: [Phrase]?, current: [Phrase], failing: Bool = false) throws -> Doctor {
+        let l = try DeployFixtures.locations(dir)
+        try InstallFixtures.writeInfoPlist(app: l.squirrelApp, version: "1.1.2")
+        let paths = Fixtures.paths(dir)
+        var settings = Settings(schemas: ["py"])
+        settings.textReplacement.sync = synced != nil
+        if let synced { settings = settings.recordingTextReplacement(synced) }
+        try SettingsStore(paths: paths).save(settings)
+        struct Unreadable: Error, CustomStringConvertible { var description: String { "数据库打不开" } }
+        return Doctor(paths: paths, locations: l,
+                      inputSource: FakeInputSource(InputSourceState(registered: true, enabled: true, selected: true)),
+                      squirrel: FakeSquirrel(locations: l, running: true), releaseSource: nil,
+                      textReplacements: { if failing { throw Unreadable() }; return current })
+    }
+
+    let ta = Phrase(text: "替换甲", code: "tha", weight: 1)
+    let tb = Phrase(text: "替换乙", code: "thb", weight: 1)
+
+    @Test func 文本替换和上次一样() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let checks = try await textReplacementDoctor(dir, synced: [ta], current: [ta]).run()
+        #expect(checks.first { $0.name == "文本替换" } == DoctorCheck(name: "文本替换", level: .ok, message: "1 条，和上次同步时一样"))
+    }
+
+    @Test func 文本替换有变化没同步() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let checks = try await textReplacementDoctor(dir, synced: [ta], current: [ta, tb]).run()
+        #expect(checks.first { $0.name == "文本替换" } == DoctorCheck(
+            name: "文本替换", level: .warning, message: "有变化没同步：新增 1 条，删掉 0 条", hint: "运行 rimectl textreplacement sync"))
+    }
+
+    @Test func 文本替换读不了() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let check = try await textReplacementDoctor(dir, synced: [ta], current: [], failing: true).run().first { $0.name == "文本替换" }
+        #expect(check?.level == .warning)
+        #expect(check?.message.contains("数据库打不开") == true)
+    }
+
+    @Test func 同步没打开就不看文本替换() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let checks = try await textReplacementDoctor(dir, synced: nil, current: [ta]).run()
+        #expect(!checks.contains { $0.name == "文本替换" })
+    }
 }

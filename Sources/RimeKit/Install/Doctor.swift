@@ -27,14 +27,18 @@ public struct Doctor: Sendable {
     let squirrel: any SquirrelControlling
     /// 为空表示不联网查最新版本
     let releaseSource: SquirrelReleaseSource?
+    /// 读 macOS 文本替换；为空就不检查文本替换
+    let textReplacements: (@Sendable () throws -> [Phrase])?
 
     public init(paths: AppPaths, locations: RimeLocations, inputSource: any InputSourceControlling,
-                squirrel: any SquirrelControlling, releaseSource: SquirrelReleaseSource?) {
+                squirrel: any SquirrelControlling, releaseSource: SquirrelReleaseSource?,
+                textReplacements: (@Sendable () throws -> [Phrase])? = nil) {
         self.paths = paths
         self.locations = locations
         self.inputSource = inputSource
         self.squirrel = squirrel
         self.releaseSource = releaseSource
+        self.textReplacements = textReplacements
     }
 
     public func run() async -> [DoctorCheck] {
@@ -51,6 +55,7 @@ public struct Doctor: Sendable {
             : DoctorCheck(name: "鼠须管进程", level: .warning, message: "没在运行", hint: "运行 rimectl activate"))
         checks.append(rimeDirectoryCheck())
         checks.append(settingsCheck())
+        if let check = textReplacementCheck() { checks.append(check) }
         checks.append(managedCheck())
         return checks
     }
@@ -110,5 +115,27 @@ public struct Doctor: Sendable {
         }
         return DoctorCheck(name: "应用管理的配置", level: .warning, message: "有 \(changes.count) 个文件在应用外被改过或删了",
                            hint: "运行 rimectl status 看是哪些；rimectl apply 会先问你")
+    }
+
+    /// 同步开着时：文本替换和上次同步时比有没有变化（设计 6.5）
+    private func textReplacementCheck() -> DoctorCheck? {
+        guard let textReplacements, let settings = try? SettingsStore(paths: paths).load(), settings.textReplacement.sync else {
+            return nil
+        }
+        let name = "文本替换"
+        let current: [Phrase]
+        do {
+            current = try textReplacements()
+        } catch {
+            return DoctorCheck(name: name, level: .warning, message: "读不了：\(error)")
+        }
+        guard let changes = TextReplacementSync.changes(current, since: settings.textReplacement) else {
+            return DoctorCheck(name: name, level: .warning, message: "打开了同步，但还没同步过", hint: "运行 rimectl textreplacement sync")
+        }
+        if changes.isEmpty {
+            return DoctorCheck(name: name, level: .ok, message: "\(current.count) 条，和上次同步时一样")
+        }
+        return DoctorCheck(name: name, level: .warning, message: "有变化没同步：新增 \(changes.added) 条，删掉 \(changes.removed) 条",
+                           hint: "运行 rimectl textreplacement sync")
     }
 }

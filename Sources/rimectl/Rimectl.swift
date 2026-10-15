@@ -719,7 +719,8 @@ struct Rimectl {
             paths: paths, locations: locations,
             inputSource: context.inputSource ?? TISInputSourceService(),
             squirrel: context.squirrel ?? SquirrelControl(locations: locations),
-            releaseSource: offline ? nil : SquirrelReleaseSource(http: context.http, retry: context.retry))
+            releaseSource: offline ? nil : SquirrelReleaseSource(http: context.http, retry: context.retry),
+            textReplacements: { try context.textReplacements() })
         let checks = await doctor.run()
         for check in checks {
             let mark = switch check.level {
