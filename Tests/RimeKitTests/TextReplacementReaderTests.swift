@@ -40,4 +40,26 @@ import Testing
     @Test func 默认读系统的数据库() {
         #expect(TextReplacementReader.defaultDatabase.path.hasSuffix("/Library/KeyboardServices/TextReplacements.db"))
     }
+
+    @Test func 数出跳过的条目() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let db = dir.url.appending(path: "TextReplacements.db")
+        try TextReplacementFixtures.makeDatabase(db, [
+            ("ok", "好", 0),
+            ("a1", "带数字", 0),        // 快捷码不只是字母
+            ("x-y", "带符号", 0),
+            ("hh", "换\n行", 0),        // 内容放不进短语文件
+            ("jh", "#开头", 0),
+            ("kk", "", 0),
+            ("sc", "删掉了", 1),        // 删掉的不算
+        ])
+        let s = try TextReplacementReader(database: db).snapshot()
+        #expect(s == TextReplacementSnapshot(usable: [Phrase(text: "好", code: "ok", weight: 1)], badShortcut: 2, badPhrase: 3))
+    }
+
+    @Test func 没有数据库时是空的() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        #expect(try TextReplacementReader(database: dir.url.appending(path: "none.db")).snapshot()
+                == TextReplacementSnapshot(usable: [], badShortcut: 0, badPhrase: 0))
+    }
 }

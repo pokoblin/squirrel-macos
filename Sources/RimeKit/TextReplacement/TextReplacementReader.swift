@@ -15,6 +15,22 @@ public enum TextReplacementError: Error, Equatable, Sendable, CustomStringConver
     }
 }
 
+/// 一次读到的文本替换：能用的条目，和跳过的条数（只记条数，不记内容）
+public struct TextReplacementSnapshot: Sendable, Equatable {
+    /// 能在 Rime 里打出来的，按快捷码排序；编码是小写的快捷码，权重都是 1
+    public let usable: [Phrase]
+    /// 快捷码里有数字、符号等（Rime 里打不出来）
+    public let badShortcut: Int
+    /// 内容是空的、有换行或 Tab、以 # 开头（短语文件里放不下）
+    public let badPhrase: Int
+
+    public init(usable: [Phrase], badShortcut: Int, badPhrase: Int) {
+        self.usable = usable
+        self.badShortcut = badShortcut
+        self.badPhrase = badPhrase
+    }
+}
+
 /// 读 macOS「文本替换」（~/Library/KeyboardServices/TextReplacements.db），只读打开。
 /// 只要能在 Rime 里直接打出来的条目：快捷码只有字母（转成小写），内容不含换行和 Tab（verified-facts 第 5 节）。
 public struct TextReplacementReader: Sendable {
@@ -23,12 +39,10 @@ public struct TextReplacementReader: Sendable {
     }
 
     static let query = """
-        SELECT ZPHRASE, lower(ZSHORTCUT)
+        SELECT ZPHRASE, ZSHORTCUT
         FROM ZTEXTREPLACEMENTENTRY
         WHERE (ZWASDELETED = 0 OR ZWASDELETED IS NULL)
           AND ZSHORTCUT IS NOT NULL AND ZPHRASE IS NOT NULL AND ZSHORTCUT <> ''
-          AND ZSHORTCUT NOT GLOB '*[^A-Za-z]*'
-          AND instr(ZPHRASE, char(9)) = 0 AND instr(ZPHRASE, char(10)) = 0 AND instr(ZPHRASE, char(13)) = 0
         ORDER BY lower(ZSHORTCUT), ZPHRASE
         """
 
@@ -38,9 +52,16 @@ public struct TextReplacementReader: Sendable {
         self.database = database
     }
 
-    /// 没有数据库文件时返回空（当作没有文本替换）
+    /// 能用的条目（没有数据库文件时为空）
     public func read() throws -> [Phrase] {
-        guard FileManager.default.fileExists(atPath: database.path) else { return [] }
+        try snapshot().usable
+    }
+
+    /// 没有数据库文件时为空（当作没有文本替换）
+    public func snapshot() throws -> TextReplacementSnapshot {
+        guard FileManager.default.fileExists(atPath: database.path) else {
+            return TextReplacementSnapshot(usable: [], badShortcut: 0, badPhrase: 0)
+        }
         var db: OpaquePointer?
         guard sqlite3_open_v2(database.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
             let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "打不开"
@@ -53,14 +74,27 @@ public struct TextReplacementReader: Sendable {
             throw TextReplacementError.queryFailed(String(cString: sqlite3_errmsg(db)))
         }
         defer { sqlite3_finalize(statement) }
-        var phrases: [Phrase] = []
+        var usable: [Phrase] = []
+        var badShortcut = 0
+        var badPhrase = 0
         while true {
             let step = sqlite3_step(statement)
             if step == SQLITE_DONE { break }
             guard step == SQLITE_ROW else { throw TextReplacementError.queryFailed(String(cString: sqlite3_errmsg(db))) }
             guard let text = sqlite3_column_text(statement, 0), let code = sqlite3_column_text(statement, 1) else { continue }
-            phrases.append(Phrase(text: String(cString: text), code: String(cString: code), weight: 1))
+            let shortcut = String(cString: code)
+            // 快捷码只有字母才能在 Rime 里打出来（verified-facts 第 5 节）
+            guard shortcut.allSatisfy({ $0.isASCII && $0.isLetter }) else {
+                badShortcut += 1
+                continue
+            }
+            let phrase = Phrase(text: String(cString: text), code: shortcut.lowercased(), weight: 1)
+            guard phrase.isValid else {
+                badPhrase += 1
+                continue
+            }
+            usable.append(phrase)
         }
-        return phrases
+        return TextReplacementSnapshot(usable: usable, badShortcut: badShortcut, badPhrase: badPhrase)
     }
 }
