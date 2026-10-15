@@ -21,7 +21,7 @@ codesign --verify --deep --strict --verbose=2 "$APP" >&2
 if [ "${SKIP_NOTARIZE:-}" = "1" ]; then
   echo "注意：没有公证（SKIP_NOTARIZE=1），这个包不能发布" >&2
 else
-  ditto -c -k --keepParent "$APP" "$OUT/upload.zip"
+  ditto -c -k --norsrc --noextattr --keepParent "$APP" "$OUT/upload.zip"
   result="$(xcrun notarytool submit "$OUT/upload.zip" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json)"
   status="$(printf '%s' "$result" | plutil -extract status raw -o - -)"
   id="$(printf '%s' "$result" | plutil -extract id raw -o - -)"
@@ -36,6 +36,8 @@ else
   spctl --assess --type execute --verbose=4 "$APP" >&2
 fi
 
-ditto -c -k --keepParent "$APP" "$ZIP"
+ditto -c -k --norsrc --noextattr --keepParent "$APP" "$ZIP"
+# 不带扩展属性：否则 zip 里会有 ._ 文件，用命令行 unzip 等工具解开后签名失效、被当成「已损坏」
+[ "${SKIP_NOTARIZE:-}" = "1" ] || ./tools/release/check-zip.sh "$ZIP" >&2
 (cd "$OUT" && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256")
 echo "$ZIP"
