@@ -62,6 +62,17 @@ import Testing
         #expect(input.calls.contains("open"))
     }
 
+    @Test func 已经添加但没选中时切换过去() async throws {
+        // 测试机实测：设置好了但输入法还是英文，因为没切换过去（设计 6.2：好了自动切换过去）
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        let input = FakeInputSource(InputSourceState(registered: true, enabled: true, selected: false))
+        let flow = SetupFlow(env: m.environment(input: input))
+        await flow.start()
+        #expect(flow.step == .chooseStart(.empty))
+        #expect(input.calls.contains("select"))
+        #expect(input.state().selected)
+    }
+
     @Test func 等添加输入法超时() async throws {
         let m = try T.machine(withSettings: false); defer { m.dir.remove() }
         let flow = SetupFlow(env: m.environment(input: FakeInputSource(InputSourceState(registered: true, enabled: false, selected: false))))

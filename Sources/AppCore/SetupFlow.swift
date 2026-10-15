@@ -58,6 +58,8 @@ public final class SetupFlow {
             step = .needInputMethod(nil)
             return
         }
+        // 已经添加了但没选中：切换过去（设计 6.2）；切换失败不要紧，用户可以按切换键
+        if !state.selected { try? env.inputSource.selectSquirrel() }
         await prepareStart()
     }
 
