@@ -64,6 +64,22 @@ import Testing
         #expect(try SettingsStore(paths: e.paths).load()?.schemas == ["wb_py", "wb"])
     }
 
+    struct Unreadable: Error, CustomStringConvertible { var description: String { "数据库打不开" } }
+
+    @Test func 读不了文本替换时只预览不接管() async throws {
+        // 读不到就分不出哪些是文本替换的短语：接管会把它们存成手动短语（以后还会被导出）
+        var e = try env(); defer { e.dir.remove() }
+        var context = e.context
+        context.textReplacements = { throw Unreadable() }
+        e = Env(dir: e.dir, paths: e.paths, locations: e.locations, output: e.output, context: context)
+        #expect(await e.run(["takeover", "--cache-only"]) == 0)
+        #expect(e.output.text.contains("数据库打不开"))
+        #expect(await e.run(["takeover", "--confirm", "--cache-only"]) == 1)
+        #expect(e.output.text.contains("没有接管"))
+        #expect(!FileManager.default.fileExists(atPath: e.paths.settingsFile.path))
+        #expect(try Ledger.load(e.paths).entries.isEmpty)
+    }
+
     @Test func 已经有设置时要加force() async throws {
         let e = try env(); defer { e.dir.remove() }
         try SettingsStore(paths: e.paths).save(Settings(schemas: ["wb"]))

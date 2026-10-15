@@ -350,10 +350,12 @@ struct Rimectl {
             packages[spec.id] = pkg
         }
         var textReplacement: [Phrase] = []
+        var textReplacementError: (any Error)?
         do {
             textReplacement = try context.textReplacements()
         } catch {
-            out.line("注意：\(error)。短语都按手动短语处理")
+            textReplacementError = error
+            out.line("注意：\(error)。下面的短语都算成了手动短语，里面可能有文本替换的内容")
         }
         let proposal = try TakeoverAnalyzer.analyze(rime, catalog: catalog, survey: survey, packages: packages,
                                                     textReplacement: textReplacement)
@@ -367,6 +369,11 @@ struct Rimectl {
         guard confirm else {
             out.line("这只是预览，什么都没改。确认接管：rimectl takeover --confirm（会先完整备份 Rime 目录，这份备份永久保留）")
             return 0
+        }
+        if let textReplacementError {
+            // 分不出哪些短语来自文本替换：接管会把它们存成手动短语，以后还会被导出（设计：文本替换默认不导出）
+            out.error("读不了 macOS 文本替换（\(textReplacementError)），分不出哪些短语来自文本替换，没有接管。解决后再运行 rimectl takeover --confirm")
+            return 1
         }
         let outcome = try await TakeoverApplier(deployer: deployer(paths: paths, locations: locations, context))
             .confirm(proposal, catalog: catalog, packages: packages, textReplacement: textReplacement, force: force)
