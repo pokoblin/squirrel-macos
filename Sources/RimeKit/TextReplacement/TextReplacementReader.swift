@@ -59,8 +59,13 @@ public struct TextReplacementReader: Sendable {
 
     /// 没有数据库文件时为空（当作没有文本替换）
     public func snapshot() throws -> TextReplacementSnapshot {
-        guard FileManager.default.fileExists(atPath: database.path) else {
-            return TextReplacementSnapshot(usable: [], badShortcut: 0, badPhrase: 0)
+        // 只有文件确实不存在才当成没有文本替换；没权限等「看不见」的情况要报错，
+        // 不然同步开着时会悄悄去掉已经同步的短语（例如以后开了沙盒）
+        var info = stat()
+        if stat(database.path, &info) != 0 {
+            let code = errno
+            if code == ENOENT { return TextReplacementSnapshot(usable: [], badShortcut: 0, badPhrase: 0) }
+            throw TextReplacementError.cannotOpen(String(cString: strerror(code)))
         }
         var db: OpaquePointer?
         guard sqlite3_open_v2(database.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {

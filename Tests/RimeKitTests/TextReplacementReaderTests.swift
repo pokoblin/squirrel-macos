@@ -57,6 +57,19 @@ import Testing
         #expect(s == TextReplacementSnapshot(usable: [Phrase(text: "好", code: "ok", weight: 1)], badShortcut: 2, badPhrase: 3))
     }
 
+    @Test func 看不见数据库时报错_不当成没有() throws {
+        // 上级目录没有权限时 fileExists 也是 false：不能当成「没有文本替换」，不然会悄悄去掉已经同步的短语
+        let dir = try TempDir(); defer { dir.remove() }
+        let locked = dir.url.appending(path: "locked", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+        try TextReplacementFixtures.makeDatabase(locked.appending(path: "TextReplacements.db"), [("ok", "好", 0)])
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+        #expect(throws: TextReplacementError.self) {
+            try TextReplacementReader(database: locked.appending(path: "TextReplacements.db")).snapshot()
+        }
+    }
+
     @Test func 没有数据库时是空的() throws {
         let dir = try TempDir(); defer { dir.remove() }
         #expect(try TextReplacementReader(database: dir.url.appending(path: "none.db")).snapshot()
