@@ -99,7 +99,7 @@ Windows（小狼毫）、直接编辑 YAML 的高级模式、App Store 版本。
 
 ### 两个技术细节
 
-- **管理员权限**：`Installer` 接受一个「怎么提权」的参数。应用用系统授权弹窗（`NSAppleScript` 执行 `do shell script "installer -pkg … -target /" with administrator privileges`）；`rimectl` 在测试机里用 `sudo`（测试机已配好免密 sudo）。第一版不做 `SMAppService` 特权辅助程序。安装前三道检查：sha256 等于 GitHub 接口的 `digest`、`pkgutil` 确认签名和公证且团队 ID 是 `28HU5A7B46`、`spctl` 通过（只靠 `spctl` 不够，改过的包它也放行，已实测）。已经装了同版本或更新版本就不重装。
+- **管理员权限**：`Installer` 接受一个「怎么提权」的参数。应用用系统授权弹窗（`NSAppleScript` 执行 `do shell script "installer -pkg … -target /" with administrator privileges`）；`rimectl` 在测试机里用 `sudo`（测试机已配好免密 sudo）。第一版不做 `SMAppService` 特权辅助程序。安装前三道检查：sha256 等于 GitHub 接口的 `digest`、`pkgutil` 确认签名和公证且团队 ID 是 `28HU5A7B46`、`spctl` 通过（只靠 `spctl` 不够，改过的包它也放行，已实测）。提权以后还要再核对一次：先把安装包复制到只有 root 能写的临时目录，在副本上重新查 sha256、签名公证和团队 ID，再安装这份副本（防止检查完到输密码这段时间里，同一用户的其它程序把暂存目录里的包换掉）。已经装了同版本或更新版本就不重装。
 - **解压**：用系统自带的 `/usr/bin/ditto -x -k`（已验证：干净的 macOS 27 上可用）。各包的目录结构见 [upstream-layouts.md](../../upstream-layouts.md)，路径一律用查找定位，不写死（极点五笔的 zip 带顶层目录 `rime-wubi86-jidian-master/`，雾凇 `full.zip` 没有顶层目录）。
 
 ### 第三方代码依赖

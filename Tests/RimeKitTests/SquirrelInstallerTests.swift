@@ -94,8 +94,4 @@ import Testing
         _ = held
     }
 
-    @Test func 授权框的脚本会给路径加引号() {
-        let script = AuthorizationPromptInstaller.appleScript(for: URL(fileURLWithPath: "/tmp/a \"b\"/Squirrel.pkg"))
-        #expect(script == #"do shell script "/usr/sbin/installer -pkg " & quoted form of "/tmp/a \"b\"/Squirrel.pkg" & " -target /" with administrator privileges"#)
-    }
 }

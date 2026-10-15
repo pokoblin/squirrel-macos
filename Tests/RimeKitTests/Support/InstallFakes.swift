@@ -53,7 +53,7 @@ final class FakePrivileged: PrivilegedInstalling, @unchecked Sendable {
 
     var installedPackages: [String] { lock.withLock { packages } }
 
-    func installPackage(_ pkg: URL) async throws {
+    func installPackage(_ pkg: URL, sha256: String?) async throws {
         try record(pkg)
     }
 

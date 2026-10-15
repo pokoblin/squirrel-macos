@@ -42,7 +42,7 @@ public struct SquirrelInstaller: Sendable {
         let http = self.http
         try await withRetry(retry) { try await http.download(release.downloadURL, to: pkg) }
         try verifier.verify(pkg, sha256: release.sha256)
-        try await privileged.installPackage(pkg)
+        try await privileged.installPackage(pkg, sha256: release.sha256)
 
         let after = locations.installedSquirrelVersion
         guard let after, let installed = SquirrelVersion(after), let expected = SquirrelVersion(release.version), installed == expected else {
