@@ -7,7 +7,7 @@ enum TakeoverFiles {
     static func read(_ dir: URL, _ path: String) throws -> String? {
         let url = dir.appending(path: path)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return try String(contentsOf: url, encoding: .utf8)
+        return try TextFile.read(url)
     }
 
     static func patch(_ text: String, file: String) throws -> Patch {

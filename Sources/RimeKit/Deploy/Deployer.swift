@@ -268,7 +268,8 @@ public struct Deployer: Sendable {
                 launched = true
             }
         } catch {
-            warnings.append("通知鼠须管失败：\(error)")
+            // 没通知到鼠须管就不会部署：不用再等两分钟
+            return (launched, DeployOutcome(finished: false, errors: []), ["通知鼠须管失败：\(error)"])
         }
         let deploy = await watcher.wait(previousBuildTime: previous, since: snapshot)
         return (launched, deploy, warnings)

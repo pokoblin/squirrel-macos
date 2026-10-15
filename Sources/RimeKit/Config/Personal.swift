@@ -72,7 +72,7 @@ public struct PersonalContent: Sendable, Equatable {
             .map { paths.personalDicts.appending(path: $0) }
         var phrases: [Phrase] = []
         if fm.fileExists(atPath: paths.personalPhrases.path) {
-            phrases = PhraseFile.parse(try String(contentsOf: paths.personalPhrases, encoding: .utf8))
+            phrases = PhraseFile.parse(try TextFile.read(paths.personalPhrases))
         }
         return PersonalContent(dicts: dicts, phrases: phrases)
     }

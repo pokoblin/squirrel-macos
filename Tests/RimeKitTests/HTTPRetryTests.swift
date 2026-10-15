@@ -44,4 +44,9 @@ import Testing
         #expect(HTTPError.status(403, url).description.contains("限制"))
         #expect(HTTPError.transport("超时").description == "网络连接失败：超时")
     }
+
+    @Test func 请求太频繁时说过一会儿再试() {
+        #expect(HTTPError.status(429, URL(string: "https://example.com")!).description.contains("过一会儿再试"))
+    }
+
 }

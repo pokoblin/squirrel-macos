@@ -24,6 +24,8 @@ public enum HTTPError: Error, Equatable, Sendable, CustomStringConvertible {
             return "网络连接失败：\(message)"
         case .status(403, let url):
             return "GitHub 拒绝了请求（403），可能是一小时内访问次数超过了限制，请过一会儿再试：\(url.absoluteString)"
+        case .status(429, let url):
+            return "请求太频繁（429），请过一会儿再试：\(url.absoluteString)"
         case .status(404, let url):
             return "找不到（404）：\(url.absoluteString)"
         case .status(let code, let url):

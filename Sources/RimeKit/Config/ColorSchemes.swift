@@ -17,7 +17,7 @@ public enum ColorSchemes {
         var result: [String: ColorSchemeInfo] = [:]
         for package in packages {
             for file in ["squirrel.yaml", "squirrel.custom.yaml"] where package.info.files.contains(file) {
-                let text = try String(contentsOf: package.filesDirectory.appending(path: file), encoding: .utf8)
+                let text = try TextFile.read(package.filesDirectory.appending(path: file))
                 guard let root = try YAMLNode.parse(text) else { continue }
                 let presets = file == "squirrel.yaml" ? root["preset_color_schemes"] : root["patch"]?["preset_color_schemes"]
                 for (key, value) in presets?.mapping ?? [:] {

@@ -46,8 +46,8 @@ public struct TakeoverPreview: Sendable, Equatable {
     static func editedUpstream(_ replaced: [String], existing: Set<String>, rime: URL, generated: URL) throws -> [String] {
         var warnings: [String] = []
         for path in replaced where path.hasSuffix(".dict.yaml") {
-            let mine = TakeoverFiles.importTables(try String(contentsOf: rime.appending(path: path), encoding: .utf8)) ?? []
-            let theirs = Set(TakeoverFiles.importTables(try String(contentsOf: generated.appending(path: path), encoding: .utf8)) ?? [])
+            let mine = TakeoverFiles.importTables(try TextFile.read(rime.appending(path: path))) ?? []
+            let theirs = Set(TakeoverFiles.importTables(try TextFile.read(generated.appending(path: path))) ?? [])
             let extra = mine.filter { !theirs.contains($0) && existing.contains("\($0).dict.yaml") }
             if !extra.isEmpty {
                 warnings.append("\(path) 现在还导入了 \(extra.joined(separator: "、"))；接管后换成上游版本，就不再导入了（这些词库文件原样保留，原来的 \(path) 在备份里）")

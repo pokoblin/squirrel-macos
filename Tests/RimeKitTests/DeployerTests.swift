@@ -208,4 +208,20 @@ import Testing
         guard case .applied(let third) = try await m.deployer().apply(input) else { Issue.record("没有写入"); return }
         #expect(!third.backup.permanent)
     }
+
+    @Test func 通知鼠须管失败时不再等部署() async throws {
+        let e = try env(running: true); defer { e.dir.remove() }
+        e.squirrel.reloadError = .commandFailed("reload", "测试")
+        final class Count: @unchecked Sendable { var n = 0 }
+        let sleeps = Count()
+        let watcher = DeployWatcher(locations: e.locations, pollInterval: .milliseconds(1), timeout: .seconds(120),
+                                    sleep: { _ in sleeps.n += 1 })
+        let deployer = Deployer(paths: e.paths, locations: e.locations, compiler: FakeCompiler(), squirrel: e.squirrel,
+                                watcher: watcher, now: { Date(timeIntervalSince1970: 1_000) })
+        let report = try applied(try await deployer.apply(try e.input(Settings(schemas: ["wb"])), options: ApplyOptions()))
+        #expect(report.warnings.contains { $0.contains("通知鼠须管失败") })
+        #expect(!report.deploy.finished)
+        #expect(sleeps.n == 0)
+    }
+
 }

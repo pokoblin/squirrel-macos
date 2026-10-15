@@ -116,7 +116,7 @@ final class TakeoverAnalysis {
             let package = packages[spec.id]!
             for name in upstreamPatchNames(spec) {
                 let path = "\(name).custom.yaml"
-                let text = try String(contentsOf: package.filesDirectory.appending(path: path), encoding: .utf8)
+                let text = try TextFile.read(package.filesDirectory.appending(path: path))
                 expected[name, default: Patch()].merge(try TakeoverFiles.patch(text, file: "\(spec.id)/\(path)"))
             }
         }
@@ -137,7 +137,7 @@ final class TakeoverAnalysis {
 
     func upstreamYAML(_ path: String) throws -> Node? {
         guard let url = upstreamURL(path) else { return nil }
-        return try TakeoverFiles.yaml(try String(contentsOf: url, encoding: .utf8), file: path)
+        return try TakeoverFiles.yaml(try TextFile.read(url), file: path)
     }
 
     // MARK: 选项（规则 2）
@@ -404,7 +404,7 @@ final class TakeoverAnalysis {
             guard files.contains(file), let text = try TakeoverFiles.read(rime, file) else { continue }
             var upstream = Set<String>()
             if let url = upstreamURL(file) {
-                upstream = Set(PhraseFile.parse(try String(contentsOf: url, encoding: .utf8)).map { $0.text + "\t" + $0.code })
+                upstream = Set(PhraseFile.parse(try TextFile.read(url)).map { $0.text + "\t" + $0.code })
             }
             for phrase in PhraseFile.parse(text) {
                 let key = phrase.text + "\t" + phrase.code

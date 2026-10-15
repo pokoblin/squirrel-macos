@@ -54,7 +54,7 @@ final class GenerationContext {
         let url = output.appending(path: path)
         guard fm.fileExists(atPath: url.path) else { return nil }
         do {
-            return try YAMLNode.parse(try String(contentsOf: url, encoding: .utf8))
+            return try YAMLNode.parse(try TextFile.read(url))
         } catch {
             throw GenerationError.badYAML(file: label, message: String(describing: error))
         }
@@ -87,7 +87,7 @@ final class GenerationContext {
             let package = input.packages[spec.id]!
             for path in package.info.files where Self.isUpstreamPatch(path) {
                 let name = String(path.dropLast(".custom.yaml".count))
-                let text = try String(contentsOf: package.filesDirectory.appending(path: path), encoding: .utf8)
+                let text = try TextFile.read(package.filesDirectory.appending(path: path))
                 do {
                     patches[name, default: Patch()].merge(try Patch.parse(customYAML: text))
                 } catch {
@@ -246,7 +246,7 @@ final class GenerationContext {
         }
         for file in targets {
             let url = output.appending(path: file)
-            var text = fm.fileExists(atPath: url.path) ? try String(contentsOf: url, encoding: .utf8) : PhraseFile.header
+            var text = fm.fileExists(atPath: url.path) ? try TextFile.read(url) : PhraseFile.header
             if !text.isEmpty, !text.hasSuffix("\n") { text += "\n" }
             try write(text + PhraseFile.render(phrases), to: file, origin: .generated)
         }
