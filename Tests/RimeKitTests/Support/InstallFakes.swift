@@ -63,3 +63,45 @@ final class FakePrivileged: PrivilegedInstalling, @unchecked Sendable {
         if let version { try InstallFixtures.writeInfoPlist(app: app, version: version) }
     }
 }
+/// 假的输入法服务
+final class FakeInputSource: InputSourceControlling, @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: InputSourceState
+    private var pumps = 0
+    private var log: [String] = []
+    /// 等了这么多次之后，变成用户已经添加好
+    var enableAfterPumps: Int?
+    var selectError: InputSourceError?
+
+    init(_ state: InputSourceState) {
+        current = state
+    }
+
+    var calls: [String] { lock.withLock { log } }
+    var pumpCount: Int { lock.withLock { pumps } }
+
+    func state() -> InputSourceState { lock.withLock { current } }
+
+    func selectSquirrel() throws {
+        try lock.withLock {
+            log.append("select")
+            if let selectError { throw selectError }
+            current.selected = true
+        }
+    }
+
+    func openKeyboardSettings() throws {
+        lock.withLock { log.append("open") }
+    }
+
+    func pump(_ seconds: Double) async {
+        recordPump()
+    }
+
+    private func recordPump() {
+        lock.withLock {
+            pumps += 1
+            if let n = enableAfterPumps, pumps >= n { current.enabled = true }
+        }
+    }
+}
