@@ -11,92 +11,98 @@
 
 位置按核对时的代码写，以后行号会变。
 
+**0.1.1 修了 40 条**，「本计划修」里的都已修。修复时测试机实测和终审又发现了几条，记在最后两处：「以后再说」开头的「新 1–4」，以及最后一节。
+
 ## 本计划修（应用用户会碰到的，加上几条顺手的开发工具）
 
 ### 第一次打开的引导
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 2 | 接管页「改用起步方案」点了就写，不确认，认出的个人词库、短语也不带过去 | `RootView.swift:118-121` | 修（任务 1） |
-| 10 | 接管时读不了文本替换：没指到「隐私与安全性」，也没有「重新检查」按钮 | `SetupFlow.swift:141`、`RootView.swift:110-125` | 修（任务 1） |
-| 14 | 应用一打开就出错时，吞掉了真实原因，只说「找不到方案清单」 | `SquirrelMacOSApp.swift:8`、`RootView.swift:28-35` | 修（任务 1） |
-| 16 | 加好输入法后，启动鼠须管、第一次部署（最长 120 秒）期间仍显示「请添加」；等的时候没有「重新打开系统设置」按钮 | `SquirrelActivator.swift:71-78`、`RootView.swift:79-80` | 修（任务 1） |
-| 22 | 取消授权也显示「出了点问题」 | `SetupFlow.swift:84-85`、`RootView.swift:92-95` | 修（任务 1） |
-| 30 | 下载失败用旧版本的提醒，中途失败后会留到下一次完成页 | `SetupFlow.swift:41,176,299` | 修（任务 1） |
-| 35 | 安装失败提示「安装鼠须管失败：安装鼠须管失败：…」 | `SetupFlow.swift:87`、`PrivilegedInstaller.swift:17` | 修（任务 1） |
-| 59 | 授权框输错密码等情况，显示系统的英文消息（-60005 / -60007） | `PrivilegedInstaller.swift:60-69` | 修（任务 1） |
+| 2 | 接管页「改用起步方案」点了就写，不确认，认出的个人词库、短语也不带过去 | `RootView.swift:118-121` | 已修（0.1.1） |
+| 10 | 接管时读不了文本替换：没指到「隐私与安全性」，也没有「重新检查」按钮 | `SetupFlow.swift:141`、`RootView.swift:110-125` | 已修（0.1.1） |
+| 14 | 应用一打开就出错时，吞掉了真实原因，只说「找不到方案清单」 | `SquirrelMacOSApp.swift:8`、`RootView.swift:28-35` | 已修（0.1.1） |
+| 16 | 加好输入法后，启动鼠须管、第一次部署（最长 120 秒）期间仍显示「请添加」；等的时候没有「重新打开系统设置」按钮 | `SquirrelActivator.swift:71-78`、`RootView.swift:79-80` | 已修（0.1.1） |
+| 22 | 取消授权也显示「出了点问题」 | `SetupFlow.swift:84-85`、`RootView.swift:92-95` | 已修（0.1.1） |
+| 30 | 下载失败用旧版本的提醒，中途失败后会留到下一次完成页 | `SetupFlow.swift:41,176,299` | 已修（0.1.1） |
+| 35 | 安装失败提示「安装鼠须管失败：安装鼠须管失败：…」 | `SetupFlow.swift:87`、`PrivilegedInstaller.swift:17` | 已修（0.1.1） |
+| 59 | 授权框输错密码等情况，显示系统的英文消息（-60005 / -60007） | `PrivilegedInstaller.swift:60-69` | 已修（0.1.1） |
 
 ### 主窗口
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 1 | 文本替换里 ABC 和 abc 转小写后重复，显示的条数比实际生成的多 | `TextReplacementReader.swift:82-103` | 修（任务 2） |
-| 71 | 同步开着、读不了文本替换时，「没能应用改动」，没说可以先关同步 | `MainModel+Actions.swift:41` | 修（任务 2） |
-| 74 | 外部改动弹窗：关弹窗的绑定是空操作；改动只有「目录在 Rime 外面」时也给「覆盖」，点了又报不能写 | `MainView.swift:34`、`MainModel+Actions.swift:65-75` | 修（任务 2） |
-| 75 | 导入成功但重新读设置失败时，提示「没能导入」 | `MainModel+Actions.swift:284-300` | 修（任务 2） |
-| 77 | 包选项改回默认值后，底部仍显示「有改动还没应用」 | `MainModel.swift:43,130` | 修（任务 2） |
+| 1 | 文本替换里 ABC 和 abc 转小写后重复，显示的条数比实际生成的多 | `TextReplacementReader.swift:82-103` | 已修（0.1.1） |
+| 71 | 同步开着、读不了文本替换时，「没能应用改动」，没说可以先关同步 | `MainModel+Actions.swift:41` | 已修（0.1.1） |
+| 74 | 外部改动弹窗：关弹窗的绑定是空操作；改动只有「目录在 Rime 外面」时也给「覆盖」，点了又报不能写 | `MainView.swift:34`、`MainModel+Actions.swift:65-75` | 已修（0.1.1） |
+| 75 | 导入成功但重新读设置失败时，提示「没能导入」 | `MainModel+Actions.swift:284-300` | 已修（0.1.1） |
+| 77 | 包选项改回默认值后，底部仍显示「有改动还没应用」 | `MainModel.swift:43,130` | 已修（0.1.1） |
 
 ### 备份、还原、暂存区
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 6 | 备份中途失败留下 `.partial` 目录，报错是英文 | `BackupStore.swift:37-53` | 修（任务 3） |
-| 52 | 备份超过 10 份时，还原最旧的那份后，它会被自动清理删掉 | `BackupStore.swift:72`、`Deployer.swift:222` | 修（任务 3） |
-| 60 | 下载、导入中途进程被杀，暂存区留下几十 MB，以后也不清理 | `PackageStore.swift:118-120` | 修（任务 3） |
+| 6 | 备份中途失败留下 `.partial` 目录，报错是英文 | `BackupStore.swift:37-53` | 已修（0.1.1） |
+| 52 | 备份超过 10 份时，还原最旧的那份后，它会被自动清理删掉 | `BackupStore.swift:72`、`Deployer.swift:222` | 已修（0.1.1） |
+| 60 | 下载、导入中途进程被杀，暂存区留下几十 MB，以后也不清理 | `PackageStore.swift:118-120` | 已修（0.1.1） |
 
 ### 导入导出
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 27 | 每次导入都新增一份永久备份和一份另存的 zip，越积越多（测试机里看到） | `Importer.swift:30-35,53` | 修（任务 4，做法见计划决定 2） |
-| 31 | 导出、合并输入习惯都成功了，最后重新启动鼠须管失败时，整件事被当成失败 | `UserDBTransfer.swift:33,49` | 修（任务 4） |
-| 37 | 退出鼠须管时完全不看 killall 的结果 | `SquirrelControl.swift:55-57` | 修（任务 4） |
-| 42 | 部署还没完成（等超时）也照样退出鼠须管合并输入习惯 | `Importer.swift:62-70` | 修（任务 4） |
-| 44 | 解压没有大小限制，恶意或损坏的 zip 能把磁盘塞满 | `Unzipper.swift:17-24` | 修（任务 4） |
-| 67 | 一秒内导入两次，另存的 zip 会互相覆盖 | `Importer.swift:33` | 修（任务 4） |
+| 27 | 每次导入都新增一份永久备份和一份另存的 zip，越积越多（测试机里看到） | `Importer.swift:30-35,53` | 已修（0.1.1） |
+| 31 | 导出、合并输入习惯都成功了，最后重新启动鼠须管失败时，整件事被当成失败 | `UserDBTransfer.swift:33,49` | 已修（0.1.1） |
+| 37 | 退出鼠须管时完全不看 killall 的结果 | `SquirrelControl.swift:55-57` | 已修（0.1.1） |
+| 42 | 部署还没完成（等超时）也照样退出鼠须管合并输入习惯 | `Importer.swift:62-70` | 已修（0.1.1） |
+| 44 | 解压没有大小限制，恶意或损坏的 zip 能把磁盘塞满 | `Unzipper.swift:17-24` | 已修（0.1.1） |
+| 67 | 一秒内导入两次，另存的 zip 会互相覆盖 | `Importer.swift:33` | 已修（0.1.1） |
 
 ### 出错提示
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 3 | GitHub 返回 429（请求太频繁）时没有「过一会儿再试」的提示 | `HTTPClient.swift:22-32` | 修（任务 5） |
-| 5 | 打不开锁文件（权限、磁盘满）也报「正在应用改动，请稍等」 | `ApplyLock.swift:46-49` | 修（任务 5） |
-| 7 | 通知鼠须管失败了，还照样等满 120 秒 | `Deployer.swift:255-270` | 修（任务 5） |
-| 46 | 配置文件、短语文件不是 UTF-8 时，报英文错误，不说是哪个文件 | `TakeoverFiles.swift:10`、`GenerationContext.swift:57,249`、`Personal.swift:75`、`TakeoverAnalyzer.swift:119,140` | 修（任务 5） |
+| 3 | GitHub 返回 429（请求太频繁）时没有「过一会儿再试」的提示 | `HTTPClient.swift:22-32` | 已修（0.1.1） |
+| 5 | 打不开锁文件（权限、磁盘满）也报「正在应用改动，请稍等」 | `ApplyLock.swift:46-49` | 已修（0.1.1） |
+| 7 | 通知鼠须管失败了，还照样等满 120 秒 | `Deployer.swift:255-270` | 已修（0.1.1） |
+| 46 | 配置文件、短语文件不是 UTF-8 时，报英文错误，不说是哪个文件 | `TakeoverFiles.swift:10`、`GenerationContext.swift:57,249`、`Personal.swift:75`、`TakeoverAnalyzer.swift:119,140` | 已修（0.1.1） |
 
 ### 接管已有配置时的边角写法
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 18 | `schema_list/+`（追加方案）和方案自己的 `menu/page_size` 被当成要原样保留的补丁，会和应用里的设置打架 | `TakeoverAnalyzer.swift:313-326` | 修（任务 6） |
-| 39 | 没用短语的方案（例如五笔）也去读残留的 `custom_phrase.txt`，把别的方案的默认短语当成手动短语 | `TakeoverAnalyzer.swift:388-396` | 修（任务 6） |
-| 51 | 补丁里值是空的项（`key:`）接管后悄悄丢掉 | `TakeoverAnalyzer.swift:341-372` | 修（任务 6，加提示） |
-| 57 | `schema_list` 条目里 `schema` 以外的写法（如 `case:`）悄悄丢掉 | `TakeoverSurvey.swift:73-75` | 修（任务 6，加提示） |
-| 62 | Rime 目录里是符号链接的配置文件，接管后会被换成普通文件，预览里没说 | `Deployer.swift:308-318` | 修（任务 6，加提示） |
-| 65 | `*.custom.yaml` 顶层的 `__patch` / `__include` 被忽略，没有提示 | `Patch.swift:58-66` | 修（任务 6，加提示） |
+| 18 | `schema_list/+`（追加方案）和方案自己的 `menu/page_size` 被当成要原样保留的补丁，会和应用里的设置打架 | `TakeoverAnalyzer.swift:313-326` | 已修（0.1.1） |
+| 39 | 没用短语的方案（例如五笔）也去读残留的 `custom_phrase.txt`，把别的方案的默认短语当成手动短语 | `TakeoverAnalyzer.swift:388-396` | 已修（0.1.1） |
+| 51 | 补丁里值是空的项（`key:`）接管后悄悄丢掉 | `TakeoverAnalyzer.swift:341-372` | 已修（0.1.1） |
+| 57 | `schema_list` 条目里 `schema` 以外的写法（如 `case:`）悄悄丢掉 | `TakeoverSurvey.swift:73-75` | 已修（0.1.1） |
+| 62 | Rime 目录里是符号链接的配置文件，接管后会被换成普通文件，预览里没说 | `Deployer.swift:308-318` | 已修（0.1.1） |
+| 65 | `*.custom.yaml` 顶层的 `__patch` / `__include` 被忽略，没有提示 | `Patch.swift:58-66` | 已修（0.1.1） |
 
 ### 下载鼠须管和方案包
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 40 | 找方案包根目录时按字符数比「最浅」，不是按目录层数 | `PackageStore.swift:176-181` | 修（任务 7） |
-| 47 | 鼠须管发布 rc、beta 这类版本号时：每次都重装，装完还报版本不对；版本号里带 `/` 会弄坏文件名 | `SquirrelInstaller.swift:31-50`、`SquirrelVersion.swift` | 修（任务 7） |
+| 40 | 找方案包根目录时按字符数比「最浅」，不是按目录层数 | `PackageStore.swift:176-181` | 已修（0.1.1） |
+| 47 | 鼠须管发布 rc、beta 这类版本号时：每次都重装，装完还报版本不对；版本号里带 `/` 会弄坏文件名 | `SquirrelInstaller.swift:31-50`、`SquirrelVersion.swift` | 已修（0.1.1） |
 
 ### 开发工具和文档（顺手）
 
 | # | 问题 | 位置 | 处理 |
 |---|---|---|---|
-| 4 | `AppInfo.englishName` 没有地方用，和 Info.plist、`en.lproj` 重复 | `AppInfo.swift:5` | 修（任务 8） |
-| 20 | 打发布包不检查 git 状态，可能带着没提交的改动 | `tools/release/build-release.sh` | 修（任务 8） |
-| 24 | `registerInputSource` 的注释压在了 `quit()` 上 | `SquirrelControl.swift:51-57` | 修（任务 8） |
-| 36 | `install-app.sh` 不删测试机里旧名字的应用（同一个 bundle ID 有两个） | `tools/vm/install-app.sh` | 修（任务 8） |
-| 70 | verified-facts 写「进程里用 NSAppleScript」，实际测的是 osascript 子进程；`PrivilegedInstaller.swift:85` 的注释也过时 | `docs/verified-facts.md:29-30` | 修（任务 8） |
-| 72 | 公证失败时脚本直接退出，看不到 submission id 和苹果的日志 | `tools/release/build-release.sh:25` | 修（任务 8） |
+| 4 | `AppInfo.englishName` 没有地方用，和 Info.plist、`en.lproj` 重复 | `AppInfo.swift:5` | 已修（0.1.1） |
+| 20 | 打发布包不检查 git 状态，可能带着没提交的改动 | `tools/release/build-release.sh` | 已修（0.1.1） |
+| 24 | `registerInputSource` 的注释压在了 `quit()` 上 | `SquirrelControl.swift:51-57` | 已修（0.1.1） |
+| 36 | `install-app.sh` 不删测试机里旧名字的应用（同一个 bundle ID 有两个） | `tools/vm/install-app.sh` | 已修（0.1.1） |
+| 70 | verified-facts 写「进程里用 NSAppleScript」，实际测的是 osascript 子进程；`PrivilegedInstaller.swift:85` 的注释也过时 | `docs/verified-facts.md:29-30` | 已修（0.1.1） |
+| 72 | 公证失败时脚本直接退出，看不到 submission id 和苹果的日志 | `tools/release/build-release.sh:25` | 已修（0.1.1） |
 
 ## 以后再说
 
 | # | 问题 | 为什么先不修 |
 |---|---|---|
+| 新 1 | 太大的导出文件（超过 2 GB）导入时被说成「不是导出文件」 | 很少见；只是说法不对 |
+| 新 2 | 引导里安装失败时，「安装前再次核对失败」「版本不对」两种说明不带「安装鼠须管失败：」前缀，措辞不统一 | 只影响措辞 |
+| 新 3 | 同一个包里选项 id 重复时，主窗口判断「有没有改动」会崩溃 | 方案清单随应用打包，由开发者保证；以后加清单检查 |
+| 新 4 | 写在 `patch:` 下面的 `__include` 接管时不提醒（只看顶层） | 很少见 |
 | 12 | `rimectl --timeout inf/nan` 会崩溃或一直等 | 只有 rimectl；发布包里没有 rimectl |
 | 13 | `rimectl settings set schemas -` 得到 `["-"]`，没有清空 | 同上 |
 | 21 | `rimectl install` 取消授权时报错、退出码 1 | 同上 |
@@ -146,3 +152,12 @@
 | 64 | 打字检查工具认不出软链接的 Rime 目录 | 已修 |
 | 34 | 测试机里手动卸载重装后，输入法菜单里没有鼠须管 | 说不准：多半是测试时留下的系统缓存，复现不了 |
 | 79 | 写设置整份写回 | 和 19 重复 |
+
+## 修复 0.1.1 时新发现、已经修了的
+
+| 问题 | 怎么发现的 | 处理 |
+|---|---|---|
+| 只写 `schema_list/+`（在上游方案列表后面追加）时，接管后追加的方案消失 | 终审（这次改 `schema_list/+` 带出来的退步） | 已修（0.1.1）：接在 `default.yaml` 的列表后面 |
+| 没通知到鼠须管时，提示却说「等了很久还没看到部署完成」 | 终审 | 已修（0.1.1）：说「没通知到鼠须管」和怎么办 |
+| 在应用里装好鼠须管后，误报「系统里没有鼠须管的输入源，请重新安装」 | 测试机实测：同一个进程里看不到刚装好的输入法 | 已修（0.1.1）：装好后「重新打开应用」 |
+| 刚装好鼠须管时，有时输入法菜单里没有它、打出来是英文，注销再登录才好 | 测试机实测（阶段 8a 也见过） | 已修（0.1.1）：完成页提醒注销再登录；README 也写了 |
