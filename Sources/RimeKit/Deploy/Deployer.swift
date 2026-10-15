@@ -32,6 +32,25 @@ public enum ApplyOutcome: Sendable, Equatable {
     case compileFailed([String])
 }
 
+public struct RestoreReport: Sendable, Equatable {
+    public let restored: BackupInfo
+    /// 还原前给当时的状态做的备份，还原也能撤销
+    public let safetyBackup: BackupInfo
+    public let launched: Bool
+    public let deploy: DeployOutcome
+    public let warnings: [String]
+}
+
+public struct DeployStatus: Sendable, Equatable {
+    public let squirrelInstalled: Bool
+    public let squirrelRunning: Bool
+    public let rimeDirectory: URL
+    public let managedFiles: Int
+    public let appliedAt: Date?
+    public let externalChanges: [ExternalChange]
+    public let backups: [BackupInfo]
+}
+
 /// 把设置应用到真实的 ~/Library/Rime（设计 6.1）
 public struct Deployer: Sendable {
     public let paths: AppPaths
@@ -144,6 +163,33 @@ public struct Deployer: Sendable {
         let (launched, deploy, notifyWarnings) = await notifySquirrel()
         return .applied(ApplyReport(backup: backup, written: written, unchanged: unchanged, removed: removed,
                                     launched: launched, deploy: deploy, warnings: result.warnings + notifyWarnings))
+    }
+
+    /// 还原到某个备份：先备份当前状态（「还原前」），再还原文件和 ledger，然后通知鼠须管
+    public func restore(_ id: String) async throws -> RestoreReport {
+        let lock = try ApplyLock.acquire(paths)
+        defer { withExtendedLifetime(lock) {} }
+        let backups = BackupStore(paths: paths, now: now)
+        guard let target = backups.info(id) else { throw BackupError.notFound(id) }
+        let safety = try backups.create(from: locations.rimeDirectory, reason: "还原前", permanent: false,
+                                        ledger: try Ledger.load(paths))
+        let restored = try backups.restore(target.id, to: locations.rimeDirectory)
+        try restored.ledger.save(paths)
+        _ = try? backups.prune()
+        let (launched, deploy, warnings) = await notifySquirrel()
+        return RestoreReport(restored: restored, safetyBackup: safety, launched: launched, deploy: deploy, warnings: warnings)
+    }
+
+    public func status() throws -> DeployStatus {
+        let ledger = try Ledger.load(paths)
+        return DeployStatus(
+            squirrelInstalled: locations.squirrelInstalled,
+            squirrelRunning: squirrel.isRunning(),
+            rimeDirectory: locations.rimeDirectory,
+            managedFiles: ledger.entries.count,
+            appliedAt: ledger.appliedAt,
+            externalChanges: ledger.externalChanges(in: locations.rimeDirectory),
+            backups: BackupStore(paths: paths).list())
     }
 
     // MARK: 内部
