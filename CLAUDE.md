@@ -1,6 +1,6 @@
 # squirrel-macos 项目约定
 
-鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0、1、2 已完成（待验证项；方案清单和下载缓存；设置和生成配置），下一步写阶段 3 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
+鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–3 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原），下一步写阶段 4 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
 
 ## 先读这些
 
@@ -31,3 +31,4 @@
 - 测试小工具：`./tools/vm/build-probes.sh` 编译出 `rime-type-probe`（在配置副本上模拟打字）和 `TRProbe.app`（检查能否读文本替换），测试机里在 `/Volumes/My Shared Files/vm/`。测试机的远程 shell 是 zsh，通配符没匹配到会报错。
 - 测试机要在窗口里登录桌面后，输入法相关的检查才有意义；登录需要用户本人输入密码。
 - 在测试机里查输入法状态要用桌面会话运行：`sudo launchctl asuser $(id -u) sudo -u tester <命令>`。
+- 在测试机里跑 `rimectl apply/restore` 要用桌面会话（`open` 和 `--reload` 需要）：`sudo launchctl asuser $(id -u) sudo -u tester '/Volumes/My Shared Files/project/.build/debug/rimectl' … --data-dir /tmp/rk`。测试机的 `/tmp/rk` 是阶段 3 实测用的应用数据目录。

@@ -67,6 +67,11 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 
 前端可以用它在副本上先编译、校验，再应用到真实配置。
 
+| 事实 | 验证 |
+|---|---|
+| `rime_deployer --build`：正常时退出码 0；方案或词库出错（找不到词库、方案 YAML 写坏）时退出码 1，输出 `E…` 开头的错误行 | 实测（宿主机临时目录，2026-10-15） |
+| **`*.custom.yaml` 补丁写坏时退出码仍是 0**，补丁被悄悄忽略，只有一行 `E… Error parsing YAML "…"`。所以判断编译成功要同时看退出码和有没有 `E` 行 | 实测（同上） |
+
 ### 输入习惯：`rime_dict_manager`（实测，squirrel-dev，2026-10-15）
 
 | 事实 | 验证 |
@@ -118,13 +123,16 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | 部署结果在 `~/Library/Rime/build/`（自动生成，别往里放东西）；第一次部署会生成 `installation.yaml`、`user.yaml` | 实测 |
 | 改配置的正确方式：**写 `xxx.custom.yaml` 补丁**，不改原文件。部署时 Rime 自动把补丁合并进去 | 实测 |
 | 日志在 `$TMPDIR/rime.squirrel/`（也就是 `$(getconf DARWIN_USER_TEMP_DIR)rime.squirrel`），文件名带 `INFO`、`WARNING`、`ERROR` | 实测 |
-| 部署成功的标志：INFO 日志里有 `dictionary 'xxx' is ready.` 和 `finished updating schemas: N success, 0 failure` | 实测（宿主机）。注意：虚拟机里那行“finished”过了一会儿还没写进日志（INFO 日志有缓冲），**不能只靠这一行判断**；也可以检查 `build/xxx.table.bin` 是否生成、修改时间是否更新 |
+| 部署成功的标志：INFO 日志里有 `dictionary 'xxx' is ready.` 和 `finished updating schemas: N success, 0 failure`。但 INFO 日志有缓冲，不能只靠这一行；**应用用 `user.yaml` 的 `var/last_build_time` 判断**（见下面） | 实测（宿主机、squirrel-dev） |
 | 第一次部署时，WARNING 日志里出现 `nonexistent config file '…/build/xxx.schema.yaml'` 是正常的 | 实测 |
 | 部署约 90 万条的雾凇词库：宿主机几十秒，虚拟机 20 秒内完成；生成 `pinyin_ext.table.bin` 约 29 MB | 实测 |
 | `user.yaml` 里的 `previously_selected_schema` 记录用户上次用的方案，比 `schema_list` 第一位的“默认方案”优先 | 实测 |
 | 补丁按顺序生效：同一个 `patch` 里先整体替换 `preset_color_schemes`，后面再写 `"preset_color_schemes/<配色>/font_point": 24`，最终是 24；整体替换会删掉原来的其它配色 | 实测（rime_deployer --compile，2026-10-15） |
 | `rime_deployer --build` 只编译方案和 `default.yaml`，**不编译 `squirrel.yaml`**；`--compile` 也只接受方案文件。外观补丁有没有生效，宿主机上只能看生成的补丁，真实效果要在测试机里看 | 实测（2026-10-15） |
 | 雾凇的小鹤双拼方案用 `custom_phrase_double.txt` 当短语文件（全拼用 `custom_phrase.txt`），上游不提供这个文件；应用生成后，`tstx` 这类短语在小鹤双拼里也能打出来 | 查看 double_pinyin_flypy.schema.yaml + 实测（阶段 2 联网测试） |
+| 每次 `Squirrel --reload`（配置没变也一样）都会更新 `user.yaml` 的 `var/last_build_time`，可以当「部署跑完了」的信号；只改 `squirrel.custom.yaml` 时 `build/` 里方案文件的修改时间不变 | 实测（squirrel-dev，2026-10-15） |
+| 鼠须管部署时会编译 `build/squirrel.yaml`（`rime_deployer` 不会），外观补丁的效果可以在这里查：改字号后 `style` 和配色里的 `font_point` 都变了，用户实际看到候选字变大 | 实测（squirrel-dev，阶段 3） |
+| 日志按鼠须管进程分文件：`rime.squirrel.<主机>.<用户>.log.<INFO\|WARNING\|ERROR>.<日期>-<时间>.<进程号>`，有出错才会有 ERROR 文件 | 实测（squirrel-dev） |
 
 ### 外观（`squirrel.custom.yaml`）
 
