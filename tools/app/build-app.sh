@@ -19,6 +19,8 @@ cp "$BIN/SquirrelMacOSApp" "$APP/Contents/MacOS/"
 cp -R "$BIN/SquirrelMacOS_RimeKit.bundle" "$APP/Contents/Resources/"
 cp tools/app/Info.plist "$APP/Contents/Info.plist"
 cp -R tools/app/*.lproj "$APP/Contents/Resources/"
+# 应用图标（由 tools/app/make-icon.sh 生成）
+cp tools/app/AppIcon.icns "$APP/Contents/Resources/"
 cp LICENSE THIRD-PARTY-NOTICES.md "$APP/Contents/Resources/"
 if [ "$SIGN_IDENTITY" = "-" ]; then
   codesign --force --sign - "$APP" >&2

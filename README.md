@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/app-icon.png" width="128" height="128" alt="鼠须管助手图标">
+</p>
+
 # 鼠须管助手（SquirrelHelper）
 
 [![Release](https://img.shields.io/github/v/release/pokoblin/squirrel-macos?include_prereleases&label=release)](https://github.com/pokoblin/squirrel-macos/releases)
@@ -177,7 +181,7 @@ Sources/
   SquirrelMacOSApp/  应用入口
 Tests/RimeKitTests/  单元测试和联网测试
 tools/
-  app/               打包应用
+  app/               打包应用、应用图标（换图标见 make-icon.sh）
   release/           构建发布包
   vm/                测试虚拟机和测试小工具
 docs/                设计、实测记录、已验证的事实

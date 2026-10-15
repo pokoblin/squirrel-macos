@@ -20,6 +20,8 @@
     <string>SquirrelHelper</string>
     <key>CFBundleDisplayName</key>
     <string>SquirrelHelper</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
