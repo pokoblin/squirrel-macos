@@ -1,6 +1,6 @@
 # squirrel-macos 项目约定
 
-鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–7 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查；接管已有配置；一键导出导入；文本替换同步），下一步写阶段 8（SwiftUI 应用）的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
+鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–7、8a 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查；接管已有配置；一键导出导入；文本替换同步；应用骨架和第一次打开的引导），下一步写阶段 8b（主窗口）的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
 
 ## 先读这些
 
@@ -16,6 +16,7 @@
 
 - 用简单直白的中文写文档和说明；代码、命令、标识符保持原样。
 - 提交、推送前先问用户，用户同意了再做。
+- 应用（SquirrelMacOSApp）不在宿主机上运行，只编译和跑单元测试；用 `./tools/vm/install-app.sh <测试机>` 放进测试机打开。测试机里 SSH 会话进不了 `~/Downloads` 等隐私保护目录，要给应用的文件放在 `/Users/Shared`。
 - **不要碰宿主机的真实配置**：`~/Library/Rime`、`/Library/Input Methods`、输入法启用状态都不要改。需要验证时：
   - 配置和打字效果：复制一份 `~/Library/Rime` 到临时目录，用 librime 模拟（方法见 `docs/verified-facts.md`「用 librime 模拟打字」）。
   - 安装、启用输入法这类系统级操作：在测试虚拟机里做（`tools/vm/`）。
