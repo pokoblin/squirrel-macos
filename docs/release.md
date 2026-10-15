@@ -18,10 +18,10 @@
 方案清单和应用是分开发布的：改清单不用发新版应用（在线方案清单设计 5.1）。
 
 1. 改正本 `Sources/RimeKit/Resources/catalog.json`，`serial` 改大（日期加两位序号，例如 `2026102001`）。已经发布过的包 id、方案 id 不能删、不能改；要下架就标 `"deprecated": true`。要新代码才能用的包写 `"minAppVersion"`。
-2. `swift test`；`RIMEKIT_ONLINE=1 swift test --filter OnlineTests`（会真的下载清单里的每个包）。加了新方案时，在 `OnlineGenerateTests` 里补一条打字检查，再跑 `RIMEKIT_ONLINE=1 swift test --filter OnlineGenerateTests`；并在测试机里走一遍（见 `docs/superpowers/plans/2026-10-15-online-catalog.md` 任务 12）。
+2. `swift test`；`RIMEKIT_ONLINE=1 swift test --filter 真实下载内置清单里的包`（会真的下载清单里的每个包；这时先别跑整个 `OnlineTests`，里面检查在线清单的那条要等推送以后才会过）。加了新方案时，在 `OnlineGenerateTests` 里补一条打字检查，再跑 `RIMEKIT_ONLINE=1 swift test --filter OnlineGenerateTests`；并在测试机里走一遍（见 `docs/superpowers/plans/2026-10-15-online-catalog.md` 任务 12）。
 3. `./tools/catalog/publish.sh`：校验（serial 变大、id 没删）→ 复制到 `catalog/v1/` → 用钥匙串里的私钥签名。钥匙串问能不能用时点「始终允许」。
 4. 问过以后提交、推送 `main`。
-5. `./tools/catalog/publish.sh --verify-remote`：从 GitHub 拉回来再验一次（GitHub 的 raw 文件有几分钟缓存）。
+5. `./tools/catalog/publish.sh --verify-remote`：从 GitHub 拉回来再验一次（GitHub 的 raw 文件有几分钟缓存）。然后再跑 `RIMEKIT_ONLINE=1 swift test --filter OnlineTests`（这时在线清单的新鲜度检查才会过）。
 
 发应用新版前，先确认正本已经发布（`catalog/v1/catalog.json` 和正本一样）。不然内置清单比在线的新，在线那份就不起作用了——不会出错，但说明漏了一步。
 
