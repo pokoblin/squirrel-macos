@@ -155,7 +155,7 @@ import Testing
         let error = await #expect(throws: ApplyError.self) {
             try await e.deployer().apply(try e.input(Settings(schemas: ["wb"])), options: ApplyOptions(overwriteExternalChanges: true))
         }
-        guard case .writeFailed(_, let restored) = error else {
+        guard case .writeFailed(_, let restored, _) = error else {
             Issue.record("应该是 writeFailed，实际是 \(String(describing: error))")
             return
         }

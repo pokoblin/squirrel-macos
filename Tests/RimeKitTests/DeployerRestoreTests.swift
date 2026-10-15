@@ -57,3 +57,28 @@ import Testing
         #expect(try e.read("my_new_schema.schema.yaml") == "mine")
     }
 }
+
+@Suite struct DeployErrorMessageTests {
+    @Test func 写入失败的提示里带备份id() {
+        #expect(ApplyError.writeFailed("x", restored: false, backupID: "20261015-1").description.contains("rimectl restore 20261015-1"))
+        #expect(ApplyError.writeFailed("x", restored: true, backupID: "20261015-1").description.contains("已经自动还原"))
+    }
+
+    @Test func 还原失败时自动回到还原前() async throws {
+        let (e, deployer) = try await DeployerRestoreTests().setup(); defer { e.dir.remove() }
+        let before = try e.read("squirrel.custom.yaml")
+        let target = try #require(BackupStore(paths: e.paths).list().first { $0.reason == "应用改动前" })
+        // 让备份里的 cn/a.dict.yaml 放不回去：把 cn 目录换成一个同名文件
+        try FileManager.default.removeItem(at: e.rime.appending(path: "cn"))
+        try Data("blocker".utf8).write(to: e.rime.appending(path: "cn"))
+        let error = await #expect(throws: RestoreError.self) { try await deployer.restore(target.id) }
+        guard case .failed(_, let safetyID, let rolledBack) = error else {
+            Issue.record("应该是 RestoreError.failed，实际是 \(String(describing: error))")
+            return
+        }
+        #expect(rolledBack)
+        #expect(BackupStore(paths: e.paths).info(safetyID)?.reason == "还原前")
+        #expect(try e.read("squirrel.custom.yaml") == before)
+        #expect(error?.description.contains(safetyID) == true)
+    }
+}

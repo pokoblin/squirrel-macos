@@ -4,7 +4,7 @@ import Foundation
 public enum ApplyError: Error, Equatable, Sendable, CustomStringConvertible {
     case busy
     case squirrelNotInstalled
-    case writeFailed(String, restored: Bool)
+    case writeFailed(String, restored: Bool, backupID: String)
 
     public var description: String {
         switch self {
@@ -12,15 +12,29 @@ public enum ApplyError: Error, Equatable, Sendable, CustomStringConvertible {
             return "正在应用改动，请稍等再试"
         case .squirrelNotInstalled:
             return "还没有安装鼠须管"
-        case let .writeFailed(message, restored):
+        case let .writeFailed(message, restored, backupID):
             return restored
                 ? "写入配置时出错，已经自动还原成写入前的样子：\(message)"
-                : "写入配置时出错，自动还原也失败了，请用 rimectl restore 手动还原：\(message)"
+                : "写入配置时出错，自动还原也失败了。写入前的备份是 \(backupID)，请用 rimectl restore \(backupID) 手动还原：\(message)"
         }
     }
 }
 
 /// 锁文件：同一时间只允许一个应用改动（应用和 rimectl 共用）。对象释放时解锁。
+/// 还原到某个备份时出错
+public enum RestoreError: Error, Equatable, Sendable, CustomStringConvertible {
+    case failed(String, safetyBackupID: String, rolledBack: Bool)
+
+    public var description: String {
+        switch self {
+        case let .failed(message, safetyBackupID, rolledBack):
+            return rolledBack
+                ? "还原时出错，已经回到还原前的样子（还原前的备份是 \(safetyBackupID)）：\(message)"
+                : "还原时出错，回到还原前的样子也失败了。请用 rimectl restore \(safetyBackupID) 再试：\(message)"
+        }
+    }
+}
+
 public final class ApplyLock {
     private let descriptor: Int32
 

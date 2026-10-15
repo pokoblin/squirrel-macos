@@ -160,7 +160,7 @@ public struct Deployer: Sendable {
         } catch {
             let restored = (try? backups.restore(backup.id, to: rime, managed: Set(written))) != nil
             if restored { try? ledger.save(paths) }
-            throw ApplyError.writeFailed(String(describing: error), restored: restored)
+            throw ApplyError.writeFailed(String(describing: error), restored: restored, backupID: backup.id)
         }
         _ = try? backups.prune()
 
@@ -179,7 +179,18 @@ public struct Deployer: Sendable {
         let safety = try backups.create(from: locations.rimeDirectory, reason: "还原前", permanent: false,
                                         ledger: try Ledger.load(paths))
         let current = try Ledger.load(paths)
-        let restored = try backups.restore(target.id, to: locations.rimeDirectory, managed: Set(current.entries.keys))
+        let restored: BackupInfo
+        do {
+            restored = try backups.restore(target.id, to: locations.rimeDirectory, managed: Set(current.entries.keys))
+        } catch let error as BackupError {
+            throw error   // 找不到、不完整：还没动任何文件
+        } catch {
+            // 放到一半失败：用还原前的备份回去
+            let managed = Set(target.files).union(current.entries.keys)
+            let rolledBack = (try? backups.restore(safety.id, to: locations.rimeDirectory, managed: managed)) != nil
+            if rolledBack { try? current.save(paths) }
+            throw RestoreError.failed(String(describing: error), safetyBackupID: safety.id, rolledBack: rolledBack)
+        }
         try restored.ledger.save(paths)
         _ = try? backups.prune()
         let (launched, deploy, warnings) = await notifySquirrel()
