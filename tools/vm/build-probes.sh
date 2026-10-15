@@ -5,3 +5,25 @@ cd "$(dirname "$0")"
 
 clang -O2 -Wall -o rime-type-probe rime-type-probe.c
 echo "已编译 tools/vm/rime-type-probe"
+
+APP=TRProbe.app
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS"
+swiftc -O tr-probe.swift -o "$APP/Contents/MacOS/TRProbe"
+cat > "$APP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>dev.squirrel-macos.tr-probe</string>
+  <key>CFBundleName</key><string>TRProbe</string>
+  <key>CFBundleExecutable</key><string>TRProbe</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>27.0</string>
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+codesign --force -s - "$APP"
+echo "已编译 tools/vm/$APP"
