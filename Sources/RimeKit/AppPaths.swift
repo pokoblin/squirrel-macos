@@ -27,4 +27,13 @@ public struct AppPaths: Sendable, Equatable {
     public var personal: URL { root.appending(path: "personal", directoryHint: .isDirectory) }
     public var personalDicts: URL { personal.appending(path: "dicts", directoryHint: .isDirectory) }
     public var personalPhrases: URL { personal.appending(path: "phrases.txt") }
+
+    /// 应用写进 ~/Library/Rime 的文件和哈希
+    public var ledgerFile: URL { root.appending(path: "ledger.json") }
+
+    /// 每次写入前对 ~/Library/Rime 的备份
+    public var backups: URL { root.appending(path: "backups", directoryHint: .isDirectory) }
+
+    /// 防止应用和 rimectl 同时改
+    public var lockFile: URL { root.appending(path: "lock") }
 }

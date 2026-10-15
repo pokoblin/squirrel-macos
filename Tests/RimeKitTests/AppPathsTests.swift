@@ -15,5 +15,8 @@ import Testing
         #expect(paths.settingsFile.path == "/tmp/x/settings.json")
         #expect(paths.personalDicts.path == "/tmp/x/personal/dicts")
         #expect(paths.personalPhrases.path == "/tmp/x/personal/phrases.txt")
+        #expect(paths.ledgerFile.path == "/tmp/x/ledger.json")
+        #expect(paths.backups.path == "/tmp/x/backups")
+        #expect(paths.lockFile.path == "/tmp/x/lock")
     }
 }
