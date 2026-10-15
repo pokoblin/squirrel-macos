@@ -142,10 +142,13 @@ public struct TextReplacementSettings: Sendable, Equatable, Codable {
     public var sync: Bool
     /// 上次同步时文本替换内容的哈希（只存哈希，不存内容）
     public var lastSyncedHash: String?
+    /// 上次同步时每一条的哈希（排好序），用来数有几条变化；旧的设置文件里没有
+    public var syncedEntries: [String]?
 
-    public init(sync: Bool = false, lastSyncedHash: String? = nil) {
+    public init(sync: Bool = false, lastSyncedHash: String? = nil, syncedEntries: [String]? = nil) {
         self.sync = sync
         self.lastSyncedHash = lastSyncedHash
+        self.syncedEntries = syncedEntries
     }
 }
 
