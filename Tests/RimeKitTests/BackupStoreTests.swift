@@ -113,4 +113,22 @@ import Testing
         }
         #expect(try String(contentsOf: rime.appending(path: "a.yaml"), encoding: .utf8) == "now")
     }
+
+    @Test func 备份失败时不留半截目录_报中文() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let paths = Fixtures.paths(dir)
+        let rime = dir.url.appending(path: "Rime", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: rime, withIntermediateDirectories: true)
+        let file = rime.appending(path: "default.custom.yaml")
+        try Data("x".utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)   // 复制时读不了
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path) }
+        #expect {
+            try BackupStore(paths: paths).create(from: rime, reason: "测试", permanent: false, ledger: Ledger())
+        } throws: { error in
+            "\(error)".hasPrefix("备份失败")
+        }
+        let left = (try? FileManager.default.contentsOfDirectory(atPath: paths.backups.path)) ?? []
+        #expect(left.isEmpty, "\(left)")
+    }
 }

@@ -14,12 +14,15 @@ public struct BackupInfo: Sendable, Equatable, Codable {
 public enum BackupError: Error, Equatable, Sendable, CustomStringConvertible {
     case notFound(String)
     case incomplete(String, missing: [String])
+    case createFailed(String)
 
     public var description: String {
         switch self {
         case .notFound(let id): return "找不到备份 \(id)"
         case let .incomplete(id, missing):
             return "备份 \(id) 不完整，缺少 \(missing.count) 个文件（例如 \(missing[0])），没有还原"
+        case .createFailed(let message):
+            return "备份失败（没有写入任何东西）：\(message)"
         }
     }
 }
@@ -40,16 +43,23 @@ public struct BackupStore: Sendable {
         let id = Self.idFormatter.string(from: date) + "-" + String(UUID().uuidString.prefix(4)).lowercased()
         let partial = paths.backups.appending(path: "\(id).partial", directoryHint: .isDirectory)
         let filesDir = partial.appending(path: "files", directoryHint: .isDirectory)
-        try fm.createDirectory(at: filesDir, withIntermediateDirectories: true)
-        let files = try RimeFiles.configFiles(in: rimeDirectory)
-        for path in files {
-            let target = filesDir.appending(path: path)
-            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try fm.copyItem(at: rimeDirectory.appending(path: path), to: target)
+        let info: BackupInfo
+        do {
+            try fm.createDirectory(at: filesDir, withIntermediateDirectories: true)
+            let files = try RimeFiles.configFiles(in: rimeDirectory)
+            for path in files {
+                let target = filesDir.appending(path: path)
+                try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: rimeDirectory.appending(path: path), to: target)
+            }
+            info = BackupInfo(id: id, createdAt: date, reason: reason, permanent: permanent, files: files, ledger: ledger)
+            try JSONCoding.encoder.encode(info).write(to: partial.appending(path: "meta.json"))
+            try fm.moveItem(at: partial, to: paths.backups.appending(path: id, directoryHint: .isDirectory))
+        } catch {
+            // 半截的备份没用：删掉，报中文
+            try? fm.removeItem(at: partial)
+            throw BackupError.createFailed(String(describing: error))
         }
-        let info = BackupInfo(id: id, createdAt: date, reason: reason, permanent: permanent, files: files, ledger: ledger)
-        try JSONCoding.encoder.encode(info).write(to: partial.appending(path: "meta.json"))
-        try fm.moveItem(at: partial, to: paths.backups.appending(path: id, directoryHint: .isDirectory))
         // 从磁盘再读一次：JSON 里的时间只精确到秒，这样和以后读出来的一样
         return self.info(id) ?? info
     }
@@ -68,9 +78,9 @@ public struct BackupStore: Sendable {
         return try? JSONCoding.decoder.decode(BackupInfo.self, from: data)
     }
 
-    /// 普通备份只留最近 keep 份；永久的都留。返回删掉的 id。
-    public func prune(keep: Int = 10) throws -> [String] {
-        let removable = list().filter { !$0.permanent }.dropFirst(keep).map(\.id)
+    /// 普通备份只留最近 keep 份；永久的、protecting 里的都留。返回删掉的 id。
+    public func prune(keep: Int = 10, protecting: Set<String> = []) throws -> [String] {
+        let removable = list().filter { !$0.permanent && !protecting.contains($0.id) }.dropFirst(keep).map(\.id)
         for id in removable {
             try FileManager.default.removeItem(at: paths.backups.appending(path: id, directoryHint: .isDirectory))
         }

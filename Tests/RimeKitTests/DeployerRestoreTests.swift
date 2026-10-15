@@ -81,4 +81,18 @@ import Testing
         #expect(try e.read("squirrel.custom.yaml") == before)
         #expect(error?.description.contains(safetyID) == true)
     }
+
+    @Test func 还原最旧的那份后它不会被清理掉() async throws {
+        let e = try DeployerTests().env(); defer { e.dir.remove() }
+        try e.write("default.custom.yaml", "patch: {}\n")
+        // 先放 10 份旧的普通备份（时间从旧到新）
+        var ids: [String] = []
+        for day in 0..<10 {
+            let store = BackupStore(paths: e.paths, now: { Date(timeIntervalSince1970: Double(day * 60)) })   // 比测试环境里 Deployer 的固定时间（1000 秒）早
+            ids.append(try store.create(from: e.rime, reason: "应用改动前", permanent: false, ledger: Ledger()).id)
+        }
+        let oldest = ids[0]
+        _ = try await e.deployer().restore(oldest)   // 还原前会再备份一份，一共 11 份普通备份
+        #expect(BackupStore(paths: e.paths).info(oldest) != nil)
+    }
 }

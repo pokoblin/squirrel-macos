@@ -219,7 +219,7 @@ public struct Deployer: Sendable {
         }
         try restored.ledger.save(paths)
         let forgot = try forgetTextReplacementRecord()
-        _ = try? backups.prune()
+        _ = try? backups.prune(protecting: [id])   // 刚还原的这份不清理（它可能正好是最旧的第 11 份）
         let (launched, deploy, warnings) = await notifySquirrel()
         return RestoreReport(restored: restored, safetyBackup: safety, launched: launched, deploy: deploy,
                              warnings: (forgot ? ["文本替换的短语也回到了备份时的样子；需要的话重新同步（rimectl textreplacement sync）"] : []) + warnings)

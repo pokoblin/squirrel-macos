@@ -19,4 +19,19 @@ import Testing
         #expect(paths.backups.path == "/tmp/x/backups")
         #expect(paths.lockFile.path == "/tmp/x/lock")
     }
+
+    @Test func 打开应用时清理暂存区里的旧东西() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let paths = Fixtures.paths(dir)
+        let fm = FileManager.default
+        let old = paths.staging.appending(path: "fetch-old", directoryHint: .isDirectory)
+        let fresh = paths.staging.appending(path: "fetch-new", directoryHint: .isDirectory)
+        try fm.createDirectory(at: old, withIntermediateDirectories: true)
+        try fm.createDirectory(at: fresh, withIntermediateDirectories: true)
+        let now = Date()
+        try fm.setAttributes([.modificationDate: now.addingTimeInterval(-7_200)], ofItemAtPath: old.path)
+        paths.cleanStaleStaging(olderThan: 3_600, now: now)
+        #expect(!fm.fileExists(atPath: old.path))
+        #expect(fm.fileExists(atPath: fresh.path))
+    }
 }
