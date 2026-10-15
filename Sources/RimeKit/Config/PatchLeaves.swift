@@ -18,8 +18,13 @@ public struct PatchLeaves: Equatable {
 
     public subscript(path: String) -> Node? { values[path] }
 
-    /// 写入一项：整段写入时先清掉这一段下面原来的叶子；写下层路径时清掉上层原来的值
+    /// 写入一项：整段写入时先清掉这一段下面原来的叶子；写下层路径时清掉上层原来的值。
+    /// 「列表/+」是往列表后面追加（Rime 的写法）：前面已经有这个列表时接在后面，不清掉它
     public mutating func set(_ key: String, _ value: Node) {
+        if key.hasSuffix("/+"), let old = values[String(key.dropLast(2))]?.sequence, let more = value.sequence {
+            values[String(key.dropLast(2))] = Node(Array(old) + Array(more))
+            return
+        }
         let stale = paths.filter { $0 == key || $0.hasPrefix(key + "/") || key.hasPrefix($0 + "/") }
         for path in stale { values[path] = nil }
         paths.removeAll { stale.contains($0) }

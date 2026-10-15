@@ -79,6 +79,7 @@ final class TakeoverAnalysis {
 
     func run() throws -> TakeoverProposal {
         try loadPatches()
+        noteUnsupported()
         let options = detectOptions()
         let personalDicts = detectPersonalDicts()
         try checkGeneratedDicts(personal: personalDicts)
@@ -119,6 +120,23 @@ final class TakeoverAnalysis {
                 let text = try TextFile.read(package.filesDirectory.appending(path: path))
                 expected[name, default: Patch()].merge(try TakeoverFiles.patch(text, file: "\(spec.id)/\(path)"))
             }
+        }
+    }
+
+    /// 这个应用认不出、接管后不保留的写法：在预览里告诉用户
+    func noteUnsupported() {
+        let list = PatchLeaves(existing["default"] ?? Patch())["schema_list"]?.sequence ?? []
+        if list.contains(where: { item in (item.mapping.map { Array($0.keys) } ?? []).contains { $0.string != "schema" } }) {
+            notes.append("default.custom.yaml 的 schema_list 里有 schema 以外的写法（例如 case:），接管后不保留，方案顺序照旧")
+        }
+        for file in files.sorted() where file.hasSuffix(".custom.yaml") {
+            guard let text = try? TakeoverFiles.read(rime, file), let root = try? YAMLNode.parse(text),
+                  let keys = root.mapping?.keys.compactMap(\.string),
+                  keys.contains("__patch") || keys.contains("__include") else { continue }
+            notes.append("\(file) 用了 __patch / __include，这个应用认不出，接管后不保留")
+        }
+        for file in files.sorted() where (try? FileManager.default.destinationOfSymbolicLink(atPath: rime.appending(path: file).path)) != nil {
+            notes.append("\(file) 是符号链接：接管后应用要写这个文件的话，会换成普通文件（原来的链接在备份里）")
         }
     }
 
@@ -315,7 +333,7 @@ final class TakeoverAnalysis {
     func managedPaths(_ name: String) -> [String] {
         switch name {
         case "default":
-            return ["schema_list", "menu/page_size"]
+            return ["schema_list", "schema_list/+", "menu/page_size"]
         case "squirrel":
             var paths = ["style/color_scheme", "style/color_scheme_dark"] + Self.appearanceKeys.map { "style/\($0)" }
             for scheme in [schemes.light, schemes.dark].compactMap({ $0 }) {
@@ -323,7 +341,8 @@ final class TakeoverAnalysis {
             }
             return paths
         default:
-            return []
+            // 方案自己的每页候选数会盖过应用里的设置（写在 default 里）：接管后改用应用的
+            return survey.schemas.contains(name) ? ["menu/page_size"] : []
         }
     }
 
@@ -344,7 +363,15 @@ final class TakeoverAnalysis {
         let base = expected[name] ?? Patch()
         let baseLeaves = PatchLeaves(base)
         let managed = managedPaths(name)
-        let entries = mine.entries.filter { !isPhraseInjection($0, in: mine) }
+        var entries = mine.entries.filter { !isPhraseInjection($0, in: mine) }
+        // 值是空的项（「key:」）保存后读回来就没了：不保留，告诉用户
+        for entry in entries where entry.value.null != nil {
+            notes.append("\(name).custom.yaml 里 \(entry.key) 的值是空的，接管后不保留")
+        }
+        entries.removeAll { $0.value.null != nil }
+        if survey.schemas.contains(name), PatchLeaves(mine)["menu/page_size"] != nil {
+            notes.append("\(name).custom.yaml 里方案自己的每页候选数（menu/page_size）接管后改用应用里的设置")
+        }
 
         // 和默认补丁、应用管理的键有上下级关系的项（以及和这些项有关系的项）逐个叶子比；其余整项原样保留
         var anchors = base.entries.map(\.key) + managed
@@ -390,6 +417,13 @@ final class TakeoverAnalysis {
         for schema in survey.schemas {
             guard let root = try upstreamYAML("\(schema).schema.yaml") else { continue }
             let translators = root["engine"]?["translators"]?.sequence?.compactMap(\.string) ?? []
+            // 方案本身没有短语翻译器、用户补丁里也没加：这个方案不用短语文件（目录里的多半是别的方案留下的）
+            let injected = (existing[schema]?.entries ?? []).contains { entry in
+                entry.key.hasPrefix("engine/translators")
+                    && (entry.value.string == Self.phraseTranslator
+                        || entry.value.sequence?.contains { $0.string == Self.phraseTranslator } == true)
+            }
+            guard translators.contains(Self.phraseTranslator) || injected else { continue }
             let file = translators.contains(Self.phraseTranslator)
                 ? (root["custom_phrase"]?["user_dict"]?.string ?? "custom_phrase") + ".txt"
                 // 用户补丁里可能指定了别的短语文件

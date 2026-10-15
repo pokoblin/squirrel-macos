@@ -177,4 +177,47 @@ import Testing
             try TakeoverAnalyzer.analyze(e.rime, catalog: e.catalog, survey: survey, packages: [:], textReplacement: [])
         }
     }
+
+    @Test func 追加方案和方案自己的每页候选数算应用管理的() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.install(["pinyin"], from: e.packages, into: e.rime)
+        try F.put("patch:\n  schema_list:\n    - schema: py\n  schema_list/+:\n    - schema: sp\n", "default.custom.yaml", in: e.rime)
+        try F.put("patch:\n  menu/page_size: 9\n", "py.custom.yaml", in: e.rime)
+        let p = try F.analyze(e)
+        #expect(p.settings.preservedPatches["default"]?.map(\.key).contains("schema_list/+") != true)
+        #expect(p.settings.schemas == ["py", "sp"])   // 追加的方案也认出来了
+        #expect(p.settings.preservedPatches["py"] == nil)
+        #expect(p.notes.contains { $0.contains("py.custom.yaml") && $0.contains("每页候选数") })
+    }
+
+    @Test func 没用短语的方案不读残留的短语文件() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.install(["wubi"], from: e.packages, into: e.rime)
+        try F.put("patch:\n  schema_list:\n    - schema: wb\n", "default.custom.yaml", in: e.rime)
+        try F.put("# Rime table\n别的方案的默认短语\tmrdy\t1\n", "custom_phrase.txt", in: e.rime)   // 残留的，五笔没有注入短语
+        let p = try F.analyze(e)
+        #expect(p.manualPhrases.isEmpty)
+    }
+
+    @Test func 认不出的写法在预览里提醒() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.install(["pinyin"], from: e.packages, into: e.rime)
+        try F.put("patch:\n  schema_list:\n    - schema: py\n      case: [mode/full]\n", "default.custom.yaml", in: e.rime)
+        try F.put("__include: other.yaml\npatch:\n  app_options:\n", "squirrel.custom.yaml", in: e.rime)
+        let p = try F.analyze(e)
+        #expect(p.notes.contains { $0.contains("schema_list") && $0.contains("case") })
+        #expect(p.notes.contains { $0.contains("squirrel.custom.yaml") && $0.contains("__include") })
+        #expect(p.notes.contains { $0.contains("app_options") && $0.contains("空") })
+    }
+
+    @Test func 符号链接的配置文件在预览里提醒() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.install(["pinyin"], from: e.packages, into: e.rime)
+        let real = e.dir.url.appending(path: "dotfiles/default.custom.yaml")
+        try FileManager.default.createDirectory(at: real.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("patch:\n  schema_list:\n    - schema: py\n".utf8).write(to: real)
+        try FileManager.default.createSymbolicLink(at: e.rime.appending(path: "default.custom.yaml"), withDestinationURL: real)
+        let p = try F.analyze(e)
+        #expect(p.notes.contains { $0.contains("default.custom.yaml") && $0.contains("符号链接") })
+    }
 }
