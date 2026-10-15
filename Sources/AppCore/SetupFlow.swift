@@ -309,6 +309,11 @@ public final class SetupFlow {
             if !report.deploy.finished { lines.append(report.deploy.notFinishedNote) }
             lines += report.deploy.errors.map { "部署时有错误：\($0)" }
             lines += report.warnings + notes + fallbackNotes
+            // 测试机实测：刚装好鼠须管时，系统有时要注销再登录才认得出它（输入法菜单里没有、打出来是英文）
+            if !env.inputSource.state().selected { try? env.inputSource.selectSquirrel() }
+            if !env.inputSource.state().selected {
+                lines.append("如果输入法菜单里看不到鼠须管、或者打出来还是英文：请注销再登录一次（刚装好鼠须管时，macOS 有时要这样才认得出它）")
+            }
             step = .done(lines)
         case .compileFailed(let errors):
             step = .failed((["新配置编译不过，没有写入："] + errors).joined(separator: "\n"))

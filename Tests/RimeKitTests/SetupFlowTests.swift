@@ -264,4 +264,23 @@ import Testing
         flow.reopenSettings()
         #expect(input.calls == ["open"])
     }
+
+    @Test func 设置好了但没切换到鼠须管时_提醒注销再登录() async throws {
+        // 测试机实测：刚装好鼠须管时，系统有时要注销再登录才认得出它（菜单里没有、打出来是英文）
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        let input = FakeInputSource(InputSourceState(registered: true, enabled: true, selected: false))
+        input.selectError = .selectFailed(-50)
+        let flow = SetupFlow(env: m.environment(input: input))
+        await flow.useSettings(Settings(schemas: ["py"]))
+        guard case .done(let lines) = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(lines.contains { $0.contains("注销") })
+    }
+
+    @Test func 已经切换到鼠须管时不提醒注销() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        let flow = SetupFlow(env: m.environment())
+        await flow.useSettings(Settings(schemas: ["py"]))
+        guard case .done(let lines) = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(!lines.contains { $0.contains("注销") })
+    }
 }
