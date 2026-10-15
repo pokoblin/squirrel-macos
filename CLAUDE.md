@@ -1,6 +1,6 @@
 # squirrel-macos 项目约定
 
-鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–4 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查），下一步写阶段 5 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
+鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–5 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查；接管已有配置），下一步写阶段 6 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
 
 ## 先读这些
 
@@ -32,3 +32,4 @@
 - 测试机要在窗口里登录桌面后，输入法相关的检查才有意义；登录需要用户本人输入密码。
 - 在测试机里查输入法状态要用桌面会话运行：`sudo launchctl asuser $(id -u) sudo -u tester <命令>`。
 - 在测试机里跑 `rimectl apply/restore` 要用桌面会话（`open` 和 `--reload` 需要）：`sudo launchctl asuser $(id -u) sudo -u tester '/Volumes/My Shared Files/project/.build/debug/rimectl' … --data-dir /tmp/rk`。测试机的 `/tmp/rk` 是阶段 3 实测用的应用数据目录。
+- `rimectl takeover` 也要用桌面会话（`--confirm` 会通知鼠须管）。测试机里试接管时用新的数据目录（如 `/tmp/rk5`），别动 `/tmp/rk`。
