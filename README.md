@@ -37,4 +37,5 @@ Swift Package（需要 Xcode 27）：`RimeKit` 是全部逻辑，`rimectl` 是�
 - 试生成配置：`rimectl settings init wubi-pinyin --data-dir D`，再 `rimectl generate --data-dir D --out D/rime`（生成的测试要先运行 `./tools/vm/build-probes.sh`）
 - 宿主机上试 `rimectl apply` 只用 `--rime-dir` 指向临时目录；写真实配置只在测试机里做
 - 接管已有配置：`rimectl takeover --rime-dir 临时目录 --data-dir D` 只预览、不改文件；加 `--confirm` 才真的接管（会通知鼠须管，只在测试机里做）
+- 导出导入：`rimectl export 文件`、`rimectl import 文件`（会暂时退出鼠须管合并输入习惯，只在测试机里做）
 - 安装、启用鼠须管只在测试机里试：`rimectl install --gui-auth`、`rimectl activate`、`rimectl doctor`

@@ -188,9 +188,11 @@ Windows（小狼毫）、直接编辑 YAML 的高级模式、App Store 版本。
 一个 zip 包。扩展名等应用名定了再定（见第 11 节）。
 
 ```
-manifest.json     # 格式版本号 + settings 的内容 + 用到的包和导出时的版本
-personal/         # 个人词库、手动短语
-userdb/           # 输入习惯的文本快照（可选，默认带上）
+manifest.json     # 格式版本、导出时间、settings、导出时的上游版本、各部分条数
+personal/
+  dicts/          # 个人词库 *.dict.yaml
+  phrases.txt     # 手动短语
+userdb/           # 输入习惯快照 <词典名>.userdb.txt（rime_dict_manager --export，可选，默认带上）
 ```
 
 - 不放任何上游方案文件。导入时**总是下载最新版**；manifest 里的版本只用来参考和排查问题。
@@ -269,6 +271,8 @@ userdb/           # 输入习惯的文本快照（可选，默认带上）
 
 退出后如果用户正好在打字，系统可能马上又把鼠须管拉起来、重新锁住数据库。所以要看 `rime_dict_manager` 的退出码：失败就再退出一次鼠须管重试；重试几次还不行，就报错，说明「请先别打字，再点一次」。导入时的合并也一样。
 
+做法（阶段 6 定下）：zip 用系统自带的 `ditto -c -k --norsrc --noextattr --noqtn` 打包（不会多出 `__MACOSX/`）。输入习惯用 `rime_dict_manager --export`，在 Rime 目录里运行；被占着就再退出一次鼠须管重试，最多 3 次；鼠须管原来在运行的，导完再启动。命令行是 `rimectl export 文件 [--no-userdb]`。
+
 ### 6.4 导入
 
 1. 用户选择导出文件，检查格式版本号。
@@ -280,6 +284,13 @@ userdb/           # 输入习惯的文本快照（可选，默认带上）
 7. 文本替换同步开着的话，重新生成短语，再走一次 6.1。
 
 导入时如果 `~/Library/Rime` 里已有配置，先完整备份（永久保留）再导入。
+
+做法（阶段 6 定下）：
+- 导出文件当作不可信数据：只认 `manifest.json`、`personal/dicts/*.dict.yaml`、`personal/phrases.txt`、`userdb/<名字>.userdb.txt` 这些普通文件，别的跳过并提示。
+- 应用里原来有设置时，先把原来的设置和个人内容另存成 `before-import/<时间>.zip`（Rime 目录的备份不含这些）。
+- 写入时覆盖应用外的改动和同名文件；这次的备份永久保留，说明「导入前」；写好后、通知鼠须管前保存设置和个人内容。
+- 输入习惯合并不上时，配置照样导入完成，提示再导入一次（配置不会重复写，输入习惯是合并）。
+- 命令行 `rimectl import 文件` 要求先装好鼠须管（`rimectl install`、`rimectl activate`）；应用里把这几步串成一键（阶段 8）。
 
 ### 6.5 文本替换同步
 

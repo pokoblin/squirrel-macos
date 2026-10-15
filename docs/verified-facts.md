@@ -87,6 +87,8 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | 鼠须管刚启动、还没打字时，数据库还没被打开，`--import` 能成功。这种情况靠时机，**不能依赖** | 实测 |
 | `--import` 是**合并**：已有条目不丢；导入已存在的条目，权重不会重复累加 | 实测 |
 | `--export` 的文件：开头几行是 `#` 注释，之后每行 3 列，用 Tab 分隔 | 实测 |
+| 目录里还没有这个输入习惯数据库时，`--import` 能导入，自动新建 `<名字>.userdb`（新电脑上还没打过字也能合并） | 实测（宿主机临时目录，2026-10-15） |
+| 同一个快照导入两次，再导出和第一次完全一样 | 实测（宿主机临时目录，2026-10-15） |
 
 **结论：导出、导入输入习惯前，先退出鼠须管（`killall Squirrel`），做完再 `open` 启动。**
 
@@ -206,6 +208,7 @@ ORDER BY ZSHORTCUT;
 | 工具 | 新 Mac 上 |
 |---|---|
 | `/usr/bin/sqlite3` | ✅ 有，能直接用 |
+| `/usr/bin/ditto` 打包：`ditto -c -k --norsrc --noextattr --noqtn 目录 文件.zip` 打出的包干净（`--sequesterRsrc` 会多出 `__MACOSX/`）；`ditto -x -k` 解压时去掉条目里的 `../`，不会写到目标目录外面；符号链接原样保留为链接 | ✅（宿主机实测，2026-10-15） |
 | `/usr/bin/rsync`、`osascript`、`pkgutil`、`installer` | ✅ 有 |
 | `/usr/bin/python3`、`/usr/bin/git`、`/usr/bin/swift` | ❌ 只是空壳，一运行就弹窗要求安装“命令行开发者工具” |
 | Homebrew | ❌ 没有 |
