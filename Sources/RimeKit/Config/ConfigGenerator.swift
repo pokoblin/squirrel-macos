@@ -65,6 +65,7 @@ public struct ConfigGenerator: Sendable {
         try context.collectUpstreamPatches()
         try context.applyOptions()
         try context.copyPersonalDicts()
+        try context.applyPhrases()
         try context.applyPreservedPatches()
         context.applySchemaList()
         try context.applyAppearance()

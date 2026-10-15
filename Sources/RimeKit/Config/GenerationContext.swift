@@ -201,6 +201,42 @@ final class GenerationContext {
         }
     }
 
+    // MARK: 规则 7：短语
+
+    func applyPhrases() throws {
+        let phrases = input.personal.phrases + input.textReplacementPhrases
+        guard !phrases.isEmpty else { return }
+        var targets: [String] = []
+        for schema in input.settings.schemas {
+            guard let root = try readYAML("\(schema).schema.yaml", label: "\(schema).schema.yaml") else { continue }
+            let translators = root["engine"]?["translators"]?.sequence?.compactMap(\.string) ?? []
+            let file: String
+            if translators.contains("table_translator@custom_phrase") {
+                file = (root["custom_phrase"]?["user_dict"]?.string ?? "custom_phrase") + ".txt"
+            } else {
+                var p = patches[schema] ?? Patch()
+                p.set("engine/translators/@before 0", YAMLNode.text("table_translator@custom_phrase"))
+                p.set("custom_phrase", YAMLNode.map([
+                    ("dictionary", YAMLNode.text("")),
+                    ("user_dict", YAMLNode.text("custom_phrase")),
+                    ("db_class", YAMLNode.text("stabledb")),
+                    ("enable_completion", YAMLNode.bool(false)),
+                    ("enable_sentence", YAMLNode.bool(false)),
+                    ("initial_quality", YAMLNode.int(100)),
+                ]))
+                patches[schema] = p
+                file = "custom_phrase.txt"
+            }
+            if !targets.contains(file) { targets.append(file) }
+        }
+        for file in targets {
+            let url = output.appending(path: file)
+            var text = fm.fileExists(atPath: url.path) ? try String(contentsOf: url, encoding: .utf8) : PhraseFile.header
+            if !text.isEmpty, !text.hasSuffix("\n") { text += "\n" }
+            try write(text + PhraseFile.render(phrases), to: file, origin: .generated)
+        }
+    }
+
     // MARK: 规则 8：写出补丁文件
 
     func writePatches() throws {
