@@ -103,3 +103,18 @@ import Testing
         #expect(file == "wubi/default.custom.yaml")
     }
 }
+
+@Suite struct GeneratorGuardTests {
+    @Test func 生成器自己也拒绝写真实Rime目录() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let packages = try GenFixtures.makePackages(in: dir.url.appending(path: "cache"))
+        let home = dir.url.appending(path: "home", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: home.appending(path: "Library"), withIntermediateDirectories: true)
+        let target = home.appending(path: "Library/Rime")   // 新电脑上还不存在
+        #expect(throws: GenerationError.realRimeDirectory(target.path)) {
+            try ConfigGenerator(homes: [home.path]).generate(
+                try GenFixtures.input(Settings(schemas: ["py"]), packages: packages), into: target)
+        }
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
+}

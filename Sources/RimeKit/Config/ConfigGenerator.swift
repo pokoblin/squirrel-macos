@@ -38,6 +38,7 @@ public struct GenerationResult: Sendable, Equatable {
 
 public enum GenerationError: Error, Equatable, Sendable, CustomStringConvertible {
     case outputNotEmpty(String)
+    case realRimeDirectory(String)
     case missingPackage(String)
     case badYAML(file: String, message: String)
 
@@ -45,6 +46,8 @@ public enum GenerationError: Error, Equatable, Sendable, CustomStringConvertible
         switch self {
         case .outputNotEmpty(let path):
             return "输出目录不是空的：\(path)。生成配置只往空目录里写"
+        case .realRimeDirectory(let path):
+            return "拒绝：\(path) 是真实的 ~/Library/Rime（或在它里面）。生成配置只往别的空目录里写"
         case .missingPackage(let id):
             return "缺少包 \(id)，请先下载"
         case let .badYAML(file, message):
@@ -56,9 +59,17 @@ public enum GenerationError: Error, Equatable, Sendable, CustomStringConvertible
 /// 设置 + 上游包 + 个人内容 → 一份完整的 Rime 用户目录。
 /// 只往一个空目录里写；规则见阶段 2 计划「生成规则」一节和设计文档。
 public struct ConfigGenerator: Sendable {
-    public init() {}
+    /// 用来判断真实 Rime 目录的家目录（测试时可以换成假的）
+    let homes: [String]
+
+    public init(homes: [String] = RimeDirectoryGuard.defaultHomes()) {
+        self.homes = homes
+    }
 
     public func generate(_ input: GenerationInput, into output: URL) throws -> GenerationResult {
+        if RimeDirectoryGuard.isInsideRealRimeDirectory(output, homes: homes) {
+            throw GenerationError.realRimeDirectory(output.path)
+        }
         try input.settings.validate(input.catalog)
         let context = try GenerationContext(input: input, output: output)
         try context.copyPackageFiles()
