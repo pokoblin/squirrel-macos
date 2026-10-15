@@ -49,7 +49,8 @@ struct Rimectl {
       rimectl takeover [--confirm] [--force] [--cache-only]    认出已有的 Rime 配置并预览；加 --confirm 才真的接管（先完整备份）
       rimectl export <文件> [--no-userdb] [--force]           把设置、个人内容、输入习惯打成一个文件（--force 覆盖已有文件）
       rimectl import <文件> [--no-userdb] [--cache-only]      从导出文件还原：下载最新上游包、写入配置、合并输入习惯
-      rimectl textreplacement status|sync|off [--cache-only]  文本替换：看状态 / 打开同步并应用 / 关掉同步并应用
+      rimectl textreplacement status|sync|off [--cache-only] [--overwrite] [--adopt-personal]
+                                                               文本替换：看状态 / 打开同步并应用 / 关掉同步并应用
       rimectl status                                           查看鼠须管、Rime 目录、外部改动、备份
       rimectl restore --list | <备份 id>                        列出备份 / 还原到某个备份
       rimectl install [--force] [--gui-auth]                   下载、检查、安装鼠须管（--gui-auth 弹系统授权框，否则用免密 sudo）
@@ -163,6 +164,7 @@ struct Rimectl {
                                           paths: paths, locations: locations, context)
             case "textreplacement":
                 return try await textReplacementCommand(Array(positional.dropFirst()), cacheOnly: cacheOnly,
+                                                        options: ApplyOptions(overwriteExternalChanges: overwrite, adoptPersonalChanges: adoptPersonal),
                                                         paths: paths, locations: locations, context)
             case "export":
                 return try await export(Array(positional.dropFirst()), includeUserDB: !noUserDB, force: force,
@@ -412,7 +414,7 @@ struct Rimectl {
     }
 
     /// 文本替换：status 只读；sync / off 改开关后走一次应用。只输出条数，不输出内容
-    private static func textReplacementCommand(_ args: [String], cacheOnly: Bool, paths: AppPaths, locations: RimeLocations,
+    private static func textReplacementCommand(_ args: [String], cacheOnly: Bool, options: ApplyOptions, paths: AppPaths, locations: RimeLocations,
                                                _ context: Context) async throws -> Int32 {
         let out = context.output
         guard args.count == 1 else { out.error(usage); return 2 }
@@ -443,11 +445,11 @@ struct Rimectl {
             return 0
         case "sync":
             settings.textReplacement.sync = true
-            return try await apply(cacheOnly: cacheOnly, options: ApplyOptions(), paths: paths, locations: locations,
+            return try await apply(cacheOnly: cacheOnly, options: options, paths: paths, locations: locations,
                                    context, settings: settings)
         case "off":
             settings.textReplacement.sync = false
-            return try await apply(cacheOnly: cacheOnly, options: ApplyOptions(), paths: paths, locations: locations,
+            return try await apply(cacheOnly: cacheOnly, options: options, paths: paths, locations: locations,
                                    context, settings: settings)
         default:
             out.error(usage)

@@ -135,6 +135,20 @@ import Testing
         }
     }
 
+    @Test func 有外部改动时照提示加overwrite能同步() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let r = Replacements([a])
+        #expect(await cli(m, r).run(["apply"]) == 0)
+        let file = m.locations.rimeDirectory.appending(path: "default.custom.yaml")
+        try Data((try String(contentsOf: file, encoding: .utf8) + "# 在应用外改过\n").utf8).write(to: file)
+        let c = cli(m, r)
+        #expect(await c.run(["textreplacement", "sync"]) == 1)
+        #expect(c.output.text.contains("--overwrite"))
+        #expect(await c.run(["textreplacement", "sync", "--overwrite"]) == 0)
+        #expect(c.settings?.textReplacement.sync == true)
+        #expect(c.phraseFile.contains(a.line))
+    }
+
     @Test func 打印设置时不打印同步记录() async throws {
         let m = try T.machine(); defer { m.dir.remove() }
         let r = Replacements([a])
