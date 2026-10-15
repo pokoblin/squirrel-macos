@@ -1,0 +1,47 @@
+import Foundation
+import Testing
+@testable import RimeKit
+
+@Suite struct HTTPRetryTests {
+    let url = URL(string: "https://example.com/x")!
+
+    @Test func 断网两次第三次成功() async throws {
+        let http = FakeHTTPClient()
+        http.stub(url, .failure(.transport("断网")), .failure(.transport("断网")), .success(Data("ok".utf8)))
+        let data = try await withRetry(.immediate) { try await http.get(url) }
+        #expect(String(decoding: data, as: UTF8.self) == "ok")
+        #expect(http.callCount(url) == 3)
+    }
+
+    @Test func 重试次数用完就放弃() async {
+        let http = FakeHTTPClient()
+        http.stub(url, .failure(.status(503, url)))
+        await #expect(throws: HTTPError.status(503, url)) {
+            try await withRetry(.immediate) { try await http.get(url) }
+        }
+        #expect(http.callCount(url) == 3)
+    }
+
+    @Test func 限流和找不到不重试() async {
+        let http = FakeHTTPClient()
+        http.stub(url, .failure(.status(403, url)))
+        await #expect(throws: HTTPError.status(403, url)) {
+            try await withRetry(.immediate) { try await http.get(url) }
+        }
+        #expect(http.callCount(url) == 1)
+    }
+
+    @Test func 哪些错误可以重试() {
+        #expect(HTTPError.transport("x").isRetryable)
+        #expect(HTTPError.status(500, url).isRetryable)
+        #expect(HTTPError.status(429, url).isRetryable)
+        #expect(!HTTPError.status(403, url).isRetryable)
+        #expect(!HTTPError.status(404, url).isRetryable)
+    }
+
+    @Test func 错误信息是中文() {
+        #expect(HTTPError.status(403, url).description.contains("403"))
+        #expect(HTTPError.status(403, url).description.contains("限制"))
+        #expect(HTTPError.transport("超时").description == "网络连接失败：超时")
+    }
+}
