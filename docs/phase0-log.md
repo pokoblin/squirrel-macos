@@ -9,7 +9,7 @@
 | 3 | 独立 .app 读文本替换数据库 | | |
 | 4 | `ditto` 解压 GitHub zip | **能** | 干净测试机里 `/usr/bin/ditto -x -k` 解压三个 zip 全部 `exit=0`。结构见 [upstream-layouts.md](upstream-layouts.md)：极点五笔 zip 带顶层目录 `rime-wubi86-jidian-master/`；雾凇 `full.zip` 没有顶层目录，并自带 `default.yaml`、`squirrel.yaml`、`custom_phrase.txt` |
 | 5 | 鼠须管运行时 `rime_dict_manager` 导出/合并 | | |
-| 6 | 雾凇全拼、小鹤双拼在鼠须管 1.1.2 上部署和打字 | | |
+| 6 | 雾凇全拼、小鹤双拼在鼠须管 1.1.2 上部署和打字 | **能** | 部署约 9 秒，`4 success, 0 failure`，没有 ERROR 日志。用户实际打字和 `rime-type-probe` 结果一致：`nihao` → 你好，`rq`/`sj` 出日期和时间（Lua 正常），`xiaolian` 有 😀（OpenCC 正常），小鹤 `nihc` → 你好。`rime-type-probe` 也能加载 Lua 插件 |
 
 ## 宿主机
 
@@ -42,3 +42,22 @@
 - 目录结构整理在 [upstream-layouts.md](upstream-layouts.md)。对设计有影响的两点：
   - 雾凇 `full.zip` 自带 `custom_phrase.txt`，和应用要生成的同名文件冲突。
   - 雾凇 `full.zip` 自带 `default.yaml`、`squirrel.yaml`，放进用户目录后会覆盖鼠须管自带的默认设置。应用的外观、方案列表仍然通过 `*.custom.yaml` 补丁改，不受影响，但「上游默认值」要从这两个文件读。
+
+### 验证 6：雾凇全拼、小鹤双拼（任务 7）
+
+- 把 `full.zip` 解压后的内容 `rsync` 进测试机的 `~/Library/Rime`，加 `default.custom.yaml` 只启用 `rime_ice`、`double_pinyin_flypy`，然后 `Squirrel --reload`（鼠须管在运行）。
+- 约 10 秒后 `build/` 里生成 `rime_ice.prism.bin`、`rime_ice.table.bin`（约 58 MB）、`rime_ice.reverse.bin`、`double_pinyin_flypy.prism.bin`。INFO 日志：`dictionary 'rime_ice' is ready`、`melt_eng`、`radical_pinyin` 都 ready，`finished updating schemas: 4 success, 0 failure`，耗时约 9 秒（12:16:30 → 12:16:38）。
+- 没有 ERROR 日志（日志目录里没有 `*ERROR*` 文件）。WARNING 里只有上游词库的 `duplicate word definition`（英文词重复）和 `radical_pinyin.schema` 的 `circular dependencies detected`，都是上游自身的问题，不影响使用。
+- `rime-type-probe`（在配置副本上）：
+
+  | 方案 | 编码 | 前几个候选 |
+  |---|---|---|
+  | rime_ice | `nihao` | 你好、👋、拟好 |
+  | rime_ice | `rq` | 2026-10-15、2026/10/15、…（Lua） |
+  | rime_ice | `sj` | 12:17、12:17:14、…（Lua） |
+  | rime_ice | `xiaolian` | 笑脸、😀、小脸（OpenCC emoji） |
+  | double_pinyin_flypy | `nihc` | 你好 |
+  | double_pinyin_flypy | `vsgo` | 中国、🇨🇳 |
+
+  → `rime-type-probe` **能加载 Lua 和 OpenCC**，阶段 2 的打字检查可以测这类方案。
+- 用户在测试机「文本编辑」里实际打字：`nihao` → 你好，`rq` 出日期，`sj` 出时间，`xiaolian` 有 emoji，小鹤 `nihc` → 你好。全部正常。
