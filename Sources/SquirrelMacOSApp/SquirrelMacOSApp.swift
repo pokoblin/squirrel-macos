@@ -7,7 +7,8 @@ struct SquirrelMacOSApp: App {
     @State private var flow: SetupFlow? = try? SetupFlow(env: AppEnvironment.live())
 
     var body: some Scene {
-        WindowGroup("squirrel-macos") {
+        // 只有一个窗口：不会出现两个引导同时在跑
+        Window("squirrel-macos", id: "main") {
             RootView(flow: flow)
         }
         .windowResizability(.contentSize)

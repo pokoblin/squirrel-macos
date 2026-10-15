@@ -35,6 +35,8 @@ public final class SetupFlow {
     let env: AppEnvironment
     /// 预览过、可以接管的结果
     private var pendingTakeover: (proposal: TakeoverProposal, packages: [String: CachedPackage], textReplacement: [Phrase])?
+    /// 正在做一件事：这时再点按钮、关窗再开（又调 start）都不理，免得和正在跑的操作互相覆盖
+    private var busy = false
 
     public init(env: AppEnvironment) {
         self.env = env
@@ -43,6 +45,9 @@ public final class SetupFlow {
     // MARK: 开始
 
     public func start() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
         step = .checking
         let managed = (try? Ledger.load(env.paths))?.entries.isEmpty == false
         if managed, (try? SettingsStore(paths: env.paths).load()) != nil {
@@ -66,6 +71,9 @@ public final class SetupFlow {
     // MARK: 第一步：安装鼠须管
 
     public func install() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
         step = .working("正在下载、检查鼠须管的安装包。之后会弹出系统授权框，请输入这台 Mac 的登录密码……")
         do {
             let install = env.installSquirrel
@@ -81,6 +89,9 @@ public final class SetupFlow {
     // MARK: 第二步：添加输入法
 
     public func addInputMethod() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
         step = .waitingForInputMethod
         let activator = SquirrelActivator(
             locations: env.locations, inputSource: env.inputSource, squirrel: env.squirrel,
@@ -163,6 +174,9 @@ public final class SetupFlow {
     // MARK: 起步方案
 
     public func useSettings(_ settings: Settings) async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
         do {
             let packages = try await fetch(try settings.requiredPackages(env.catalog))
             step = .working("正在生成配置、写入、部署……")
@@ -184,6 +198,9 @@ public final class SetupFlow {
     // MARK: 接管
 
     public func confirmTakeover() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
         guard let pending = pendingTakeover else {
             await prepareStart()
             return
@@ -206,6 +223,9 @@ public final class SetupFlow {
     // MARK: 从导出文件导入
 
     public func importFile(_ file: URL) async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
         step = .working("正在读取导出文件……")
         let work = env.paths.staging.appending(path: "import-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: work) }

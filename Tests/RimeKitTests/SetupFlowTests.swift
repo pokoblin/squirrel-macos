@@ -93,6 +93,32 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: m.locations.rimeDirectory.appending(path: "py.schema.yaml").path))
     }
 
+    @Test func 正在做的时候再点不会重复做() async throws {
+        // 连点按钮、关窗再开（又调一次 start）时，不能和正在跑的操作互相覆盖
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        final class Counter: @unchecked Sendable {
+            let lock = NSLock()
+            var value = 0
+            func add() { lock.withLock { value += 1 } }
+        }
+        let fetches = Counter()
+        var env = m.environment()
+        let fetch = env.fetchPackage
+        env.fetchPackage = { spec in
+            fetches.add()
+            try? await Task.sleep(for: .milliseconds(50))   // 下载要一会儿：这时用户又点了
+            return try await fetch(spec)
+        }
+        let flow = SetupFlow(env: env)
+        async let first: Void = flow.useSettings(Settings(schemas: ["py"]))
+        async let second: Void = flow.useSettings(Settings(schemas: ["py"]))
+        async let restart: Void = flow.start()
+        _ = await (first, second, restart)
+        guard case .done = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(fetches.value == 1)   // 只做了一次
+        #expect(m.squirrel.calls.count == 1)
+    }
+
     @Test func 编译失败时说清楚_什么都不保存() async throws {
         let m = try T.machine(withSettings: false); defer { m.dir.remove() }
         let failing = FakeCompiler(report: CompileReport(succeeded: false, errors: ["E20261015 boom"]))
