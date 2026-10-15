@@ -37,6 +37,8 @@ public final class SetupFlow {
     private var pendingTakeover: (proposal: TakeoverProposal, packages: [String: CachedPackage], textReplacement: [Phrase])?
     /// 正在做一件事：这时再点按钮、关窗再开（又调 start）都不理，免得和正在跑的操作互相覆盖
     private var busy = false
+    /// 这次操作里下载失败、改用本地旧版本的说明，完成页上提醒
+    private var fallbackNotes: [String] = []
 
     public init(env: AppEnvironment) {
         self.env = env
@@ -166,7 +168,14 @@ public final class SetupFlow {
         var result: [String: CachedPackage] = [:]
         for (index, spec) in specs.enumerated() {
             step = .working("正在下载方案：\(spec.name)（\(index + 1)/\(specs.count)）……")
-            result[spec.id] = try await env.fetchPackage(spec)
+            do {
+                result[spec.id] = try await env.fetchPackage(spec)
+            } catch where PackageStore.isDownloadFailure(error) {
+                // 下载不了时先用本地缓存的旧版本（设计第 7 节），完成页上提醒
+                guard let old = env.cachedPackage(spec) else { throw error }
+                fallbackNotes.append("\(spec.name) 没下载成（\(error)），先用了本地以前下载的版本")
+                result[spec.id] = old
+            }
         }
         return result
     }
@@ -275,12 +284,13 @@ public final class SetupFlow {
             var lines = ["鼠须管已经设置好了，可以打字了"]
             if !report.deploy.finished { lines.append("等了很久还没看到部署完成，可能还在部署；过一会儿再试试打字") }
             lines += report.deploy.errors.map { "部署时有错误：\($0)" }
-            lines += report.warnings + notes
+            lines += report.warnings + notes + fallbackNotes
             step = .done(lines)
         case .compileFailed(let errors):
             step = .failed((["新配置编译不过，没有写入："] + errors).joined(separator: "\n"))
         case .externalChanges(let changes):
             step = .failed((["这些文件不能写，没有写入："] + changes.map(\.description)).joined(separator: "\n"))
         }
+        fallbackNotes = []
     }
 }

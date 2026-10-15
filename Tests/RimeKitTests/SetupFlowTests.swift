@@ -187,4 +187,25 @@ import Testing
         guard case .failed(let message) = flow.step else { Issue.record("\(flow.step)"); return }
         #expect(message.contains("不是 squirrel-macos 的导出文件"))
     }
+
+    @Test func 下载失败时先用本地旧版本_完成页提醒() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        var env = m.environment()
+        env.fetchPackage = { _ in throw HTTPError.transport("断网了") }
+        let flow = SetupFlow(env: env)
+        await flow.useSettings(Settings(schemas: ["py"]))
+        guard case .done(let lines) = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(lines.contains { $0.contains("没下载成") && $0.contains("测试拼音") })
+    }
+
+    @Test func 下载失败又没有缓存时报错() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        var env = m.environment()
+        env.fetchPackage = { _ in throw HTTPError.transport("断网了") }
+        env.cachedPackage = { _ in nil }
+        let flow = SetupFlow(env: env)
+        await flow.useSettings(Settings(schemas: ["py"]))
+        guard case .failed(let message) = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(message.contains("断网了"))
+    }
 }

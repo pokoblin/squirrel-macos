@@ -20,6 +20,7 @@ extension TransferFixtures.Machine {
                 guard let package = packages[spec.id] else { throw TakeoverError.missingPackage(spec.id) }
                 return package
             },
+            cachedPackage: { packages[$0.id] },
             installSquirrel: install, deployTimeout: .milliseconds(20), activationTimeout: 5, sleep: { _ in })
     }
 }

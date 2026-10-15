@@ -12,8 +12,10 @@ public struct AppEnvironment: Sendable {
     public var userDBTool: any UserDBTool
     /// 读 macOS 文本替换
     public var textReplacements: @Sendable () throws -> TextReplacementSnapshot
-    /// 取一个上游包（下载或用缓存）
+    /// 下载一个上游包（已经是最新的就直接用缓存；下载失败就抛错）
     public var fetchPackage: @Sendable (PackageSpec) async throws -> CachedPackage
+    /// 本地缓存里最新的这个包（下载失败时可以先用它）
+    public var cachedPackage: @Sendable (PackageSpec) -> CachedPackage?
     /// 下载、检查、安装鼠须管（会弹系统授权框）
     public var installSquirrel: @Sendable () async throws -> InstallOutcome
     public var deployTimeout: Duration
@@ -38,15 +40,8 @@ public struct AppEnvironment: Sendable {
             inputSource: AppInputSource(),
             userDBTool: RimeDictManager(locations: locations),
             textReplacements: { try TextReplacementReader().snapshot() },
-            fetchPackage: { spec in
-                do {
-                    return try await store.fetch(spec)
-                } catch where PackageStore.isDownloadFailure(error) {
-                    // 下载不了时先用本地缓存的旧版本（设计第 7 节）
-                    if let old = store.latestCached(for: spec) { return old }
-                    throw error
-                }
-            },
+            fetchPackage: { try await store.fetch($0) },
+            cachedPackage: { store.latestCached(for: $0) },
             installSquirrel: {
                 try await SquirrelInstaller(paths: paths, locations: locations, http: http,
                                             privileged: OsascriptPrivilegedInstaller()).install()
