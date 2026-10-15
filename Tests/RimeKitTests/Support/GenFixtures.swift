@@ -34,8 +34,8 @@ enum GenFixtures {
 
     static func pinyinSchema(id: String, name: String, dictionary: String, phraseFile: String?) -> String {
         let translators = phraseFile == nil
-            ? "    - table_translator"
-            : "    - table_translator@custom_phrase\n    - table_translator"
+            ? "    - script_translator"
+            : "    - table_translator@custom_phrase\n    - script_translator"
         let phrase = phraseFile.map {
             "custom_phrase:\n  dictionary: \"\"\n  user_dict: \($0)\n  db_class: stabledb\n  enable_completion: false\n  enable_sentence: false\n  initial_quality: 99\n"
         } ?? ""
