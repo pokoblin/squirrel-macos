@@ -1,0 +1,109 @@
+{
+  "formatVersion": 1,
+  "serial": 2026101501,
+  "packages": [
+    {
+      "id": "rime-ice",
+      "name": "雾凇拼音",
+      "summary": "雾凇拼音完整方案：全拼、小鹤双拼等，带大词库、英文词库、Lua 脚本和 emoji",
+      "license": "GPL-3.0",
+      "homepage": "https://github.com/iDvel/rime-ice",
+      "source": { "type": "githubReleaseAsset", "repo": "iDvel/rime-ice", "tag": "nightly", "asset": "full.zip" },
+      "anchor": "rime_ice.schema.yaml",
+      "include": [
+        "*.schema.yaml", "*.dict.yaml", "cn_dicts/*.dict.yaml", "en_dicts/*", "lua/**", "opencc/*",
+        "default.yaml", "squirrel.yaml", "symbols_v.yaml", "symbols_caps_v.yaml", "custom_phrase.txt", "LICENSE"
+      ],
+      "exclude": [],
+      "requiredFiles": [
+        "rime_ice.schema.yaml", "double_pinyin_flypy.schema.yaml", "rime_ice.dict.yaml",
+        "cn_dicts/8105.dict.yaml", "cn_dicts/base.dict.yaml", "cn_dicts/ext.dict.yaml",
+        "lua/date_translator.lua", "opencc/emoji.json", "default.yaml"
+      ],
+      "schemas": [
+        { "id": "rime_ice", "name": "雾凇拼音（全拼）", "category": "pinyin" },
+        { "id": "double_pinyin_flypy", "name": "小鹤双拼", "category": "shuangpin" }
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "rime-ice-dicts",
+      "name": "雾凇词库",
+      "summary": "雾凇拼音的中文词库（字表、基础词库、扩展词库），给别的方案当拼音词库用",
+      "license": "GPL-3.0",
+      "homepage": "https://github.com/iDvel/rime-ice",
+      "source": { "type": "githubReleaseAsset", "repo": "iDvel/rime-ice", "tag": "nightly", "asset": "cn_dicts.zip" },
+      "anchor": "cn_dicts/8105.dict.yaml",
+      "include": ["cn_dicts/8105.dict.yaml", "cn_dicts/base.dict.yaml", "cn_dicts/ext.dict.yaml"],
+      "exclude": [],
+      "requiredFiles": ["cn_dicts/8105.dict.yaml", "cn_dicts/base.dict.yaml", "cn_dicts/ext.dict.yaml"],
+      "schemas": [],
+      "dependencies": []
+    },
+    {
+      "id": "wubi86-jidian",
+      "name": "极点五笔 86",
+      "summary": "极点五笔 86 版：五笔、五笔拼音混输、简入繁出，带拼音和大写数字方案",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/KyleBing/rime-wubi86-jidian",
+      "source": { "type": "githubBranch", "repo": "KyleBing/rime-wubi86-jidian", "branch": "master" },
+      "anchor": "wubi86_jidian.schema.yaml",
+      "include": ["*.schema.yaml", "*.dict.yaml", "default.custom.yaml", "squirrel.custom.yaml", "LICENSE"],
+      "exclude": [],
+      "requiredFiles": [
+        "wubi86_jidian.schema.yaml", "wubi86_jidian_pinyin.schema.yaml", "wubi86_jidian_trad.schema.yaml",
+        "wubi86_jidian_trad_pinyin.schema.yaml", "pinyin_simp.schema.yaml", "numbers.schema.yaml",
+        "wubi86_jidian.dict.yaml", "pinyin_simp.dict.yaml"
+      ],
+      "schemas": [
+        { "id": "wubi86_jidian_pinyin", "name": "五笔拼音混输", "category": "wubi" },
+        { "id": "wubi86_jidian", "name": "五笔", "category": "wubi" },
+        { "id": "wubi86_jidian_trad", "name": "五笔（简入繁出）", "category": "wubi" },
+        { "id": "wubi86_jidian_trad_pinyin", "name": "五笔拼音混输（简入繁出）", "category": "wubi" },
+        { "id": "pinyin_simp", "name": "拼音", "category": "pinyin" },
+        { "id": "numbers", "name": "大写数字", "category": "other" }
+      ],
+      "dependencies": [],
+      "userDicts": ["wubi86_jidian_user.dict.yaml", "wubi86_jidian_user_hamster.dict.yaml"],
+      "options": [
+        {
+          "id": "pinyinDictionary",
+          "name": "拼音词库（拼音混输、拼音反查用）",
+          "defaultChoice": "rime-ice",
+          "choices": [
+            {
+              "id": "builtin",
+              "name": "自带拼音词库（约 10 万词，词比较旧）",
+              "dependencies": [],
+              "generatedDicts": [],
+              "patches": {}
+            },
+            {
+              "id": "rime-ice",
+              "name": "雾凇大词库（约 90 万词，新词多，多下载约 15 MB）",
+              "dependencies": ["rime-ice-dicts"],
+              "generatedDicts": [
+                {
+                  "name": "pinyin_ext",
+                  "importTables": [
+                    { "name": "pinyin_user", "onlyIfPersonal": true },
+                    { "name": "cn_dicts/8105" },
+                    { "name": "cn_dicts/base" },
+                    { "name": "cn_dicts/ext" }
+                  ]
+                }
+              ],
+              "patches": {
+                "pinyin_simp": { "translator/dictionary": "pinyin_ext" },
+                "wubi86_jidian": { "reverse_lookup/dictionary": "pinyin_ext" },
+                "wubi86_jidian_pinyin": { "reverse_lookup/dictionary": "pinyin_ext" },
+                "wubi86_jidian_trad": { "reverse_lookup/dictionary": "pinyin_ext" },
+                "wubi86_jidian_trad_pinyin": { "reverse_lookup/dictionary": "pinyin_ext" }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

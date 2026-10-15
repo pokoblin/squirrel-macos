@@ -5,7 +5,7 @@ import Foundation
 public enum CatalogSignature {
     /// 正式公钥（base64，32 字节）。私钥在宿主机登录钥匙串里，用 tools/catalog/keygen.sh 生成。
     /// 空的时候任何在线清单都验不过，应用只用内置清单
-    static let publicKeys: [String] = []
+    static let publicKeys: [String] = ["FECL3c69BT5jDCg9Lu7Ul1+gs+nLQ4dZlkEYre2VJJE="]
 
     /// 认哪些公钥。debug 编译时多认环境变量 RIMEKIT_CATALOG_TEST_PUBKEY 里的测试公钥（测试机实测用）；release 编译没有这段
     public static var trustedKeys: [Data] {

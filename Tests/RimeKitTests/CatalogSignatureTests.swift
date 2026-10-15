@@ -46,4 +46,9 @@ import Testing
     @Test func 私钥不对时报错() {
         #expect(throws: (any Error).self) { try CatalogSignature.sign(data, privateKey: Data("短".utf8)) }
     }
+
+    @Test func 正式公钥能解析() {
+        #expect(CatalogSignature.publicKeys.count == 1)
+        #expect(CatalogSignature.publicKeys.allSatisfy { Data(base64Encoded: $0)?.count == 32 })
+    }
 }
