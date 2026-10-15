@@ -71,6 +71,25 @@ import Testing
         }
     }
 
+    @Test func 个人词库模板要在包根目录而且在安装规则里() {
+        let notIncluded = Fixtures.catalogData(
+            replacing: #""requiredFiles":["app.schema.yaml"],"#,
+            with: #""requiredFiles":["app.schema.yaml"],"userDicts":["app_user.dict.yaml"],"#)
+        #expect(throws: CatalogError.badUserDict(package: "app", file: "app_user.dict.yaml")) {
+            try Catalog.decode(notIncluded)
+        }
+        let inSubdirectory = Fixtures.catalogData(
+            replacing: #""requiredFiles":["base.schema.yaml","dicts/a.dict.yaml"],"#,
+            with: #""requiredFiles":["base.schema.yaml","dicts/a.dict.yaml"],"userDicts":["dicts/a.dict.yaml"],"#)
+        #expect(throws: CatalogError.badUserDict(package: "base", file: "dicts/a.dict.yaml")) {
+            try Catalog.decode(inSubdirectory)
+        }
+    }
+
+    @Test func 没写个人词库模板时是空的() throws {
+        #expect(try Fixtures.catalog().package("app")?.userDicts == [])
+    }
+
     @Test func 安装顺序依赖在前而且不重复() throws {
         let catalog = try Fixtures.catalog()
         #expect(try catalog.installOrder(for: ["app"]).map(\.id) == ["base", "app"])

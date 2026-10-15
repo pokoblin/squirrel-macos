@@ -18,7 +18,7 @@ enum GenFixtures {
       "source":{"type":"githubBranch","repo":"o/wb","branch":"main"},
       "anchor":"wb.schema.yaml","include":["*"],"exclude":[],"requiredFiles":["wb.schema.yaml"],
       "schemas":[{"id":"wb","name":"五笔","category":"wubi"},{"id":"wb_py","name":"五笔拼音","category":"wubi"},{"id":"wpy","name":"五笔里的拼音","category":"pinyin"}],
-      "dependencies":[],
+      "dependencies":[],"userDicts":["wb_user.dict.yaml"],
       "options":[{"id":"pinyinDictionary","name":"拼音词库","defaultChoice":"ext","choices":[
         {"id":"builtin","name":"自带","dependencies":[],"generatedDicts":[],"patches":{}},
         {"id":"ext","name":"大词库","dependencies":["words"],

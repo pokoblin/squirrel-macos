@@ -35,6 +35,12 @@ import Testing
         #expect(option.choice("builtin")?.dependencies == [])
     }
 
+    @Test func 极点五笔标出了个人词库模板() throws {
+        let catalog = try Catalog.builtIn()
+        #expect(catalog.package("wubi86-jidian")?.userDicts == ["wubi86_jidian_user.dict.yaml", "wubi86_jidian_user_hamster.dict.yaml"])
+        #expect(catalog.package("rime-ice")?.userDicts == [])
+    }
+
     @Test func GPL的包都标了许可证() throws {
         let catalog = try Catalog.builtIn()
         #expect(catalog.package("rime-ice")?.license == "GPL-3.0")

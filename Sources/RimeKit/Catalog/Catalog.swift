@@ -58,6 +58,14 @@ public struct Catalog: Sendable, Equatable, Codable {
             }
         }
         for p in packages {
+            for file in p.userDicts {
+                let included = p.include.contains { $0.matches(file) } && !p.exclude.contains { $0.matches(file) }
+                guard included, !file.contains("/"), file.hasSuffix(".dict.yaml") else {
+                    throw CatalogError.badUserDict(package: p.id, file: file)
+                }
+            }
+        }
+        for p in packages {
             for option in p.options {
                 guard option.choice(option.defaultChoice) != nil else {
                     throw CatalogError.unknownDefaultChoice(package: p.id, option: option.id)
@@ -126,9 +134,12 @@ public struct PackageSpec: Sendable, Equatable, Codable {
     public let dependencies: [String]
     /// 包的可选项；JSON 里可以不写
     public let options: [PackageOption]
+    /// 上游自带的个人词库模板（包根目录下的 .dict.yaml）：用户会往里加词。
+    /// 接管已有配置时，和上游不一样的就当个人词库收进 personal/；JSON 里可以不写
+    public let userDicts: [String]
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, summary, license, homepage, source, anchor, include, exclude, requiredFiles, schemas, dependencies, options
+        case id, name, summary, license, homepage, source, anchor, include, exclude, requiredFiles, schemas, dependencies, options, userDicts
     }
 
     public init(from decoder: any Decoder) throws {
@@ -146,6 +157,7 @@ public struct PackageSpec: Sendable, Equatable, Codable {
         schemas = try c.decode([SchemaSpec].self, forKey: .schemas)
         dependencies = try c.decode([String].self, forKey: .dependencies)
         options = try c.decodeIfPresent([PackageOption].self, forKey: .options) ?? []
+        userDicts = try c.decodeIfPresent([String].self, forKey: .userDicts) ?? []
     }
 }
 

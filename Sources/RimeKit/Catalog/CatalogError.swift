@@ -11,6 +11,7 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
     case builtInMissing
     case unknownDefaultChoice(package: String, option: String)
     case patchForUnknownSchema(package: String, schema: String)
+    case badUserDict(package: String, file: String)
 
     public var description: String {
         switch self {
@@ -34,6 +35,8 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
             return "包 \(package) 的选项 \(option) 的默认值不在可选项里"
         case let .patchForUnknownSchema(package, schema):
             return "包 \(package) 的选项要改方案 \(schema)，但这个方案不属于这个包"
+        case let .badUserDict(package, file):
+            return "包 \(package) 的个人词库模板 \(file) 必须是包根目录下、安装规则里有的 .dict.yaml"
         }
     }
 }

@@ -63,6 +63,7 @@
         { "id": "numbers", "name": "大写数字", "category": "other" }
       ],
       "dependencies": [],
+      "userDicts": ["wubi86_jidian_user.dict.yaml", "wubi86_jidian_user_hamster.dict.yaml"],
       "options": [
         {
           "id": "pinyinDictionary",

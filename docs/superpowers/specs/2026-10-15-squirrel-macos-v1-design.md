@@ -127,6 +127,7 @@ Windows（小狼毫）、直接编辑 YAML 的高级模式、App Store 版本。
 | 自定义短语 | 这个方案自带短语功能，还是要由应用注入 `table_translator@custom_phrase` |
 | 上游自带、会和应用生成文件同名的文件 | 例如雾凇 `full.zip` 自带 `custom_phrase.txt`（还有会覆盖鼠须管默认值的 `default.yaml`、`squirrel.yaml`）。应用生成同名文件时，要把上游的内容当默认值合并进来，不能直接覆盖丢掉。具体规则在阶段 2 定 |
 | 字号写在哪里 | 全局 `style`，还是每个配色方案里面（极点五笔是后者） |
+| 个人词库模板 | 上游自带、用户会往里加词的词库（极点五笔的 `wubi86_jidian_user.dict.yaml`、`wubi86_jidian_user_hamster.dict.yaml`）。接管已有配置时，和上游不一样的就收进 `personal/` |
 
 第一版的包：
 
