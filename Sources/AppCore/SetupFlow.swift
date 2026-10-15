@@ -102,7 +102,7 @@ public final class SetupFlow {
             case .ready:
                 await prepareStart()
             case .timedOut:
-                step = .needInputMethod("等了很久还没看到鼠须管被添加。添加好后再点一次「打开系统设置」")
+                step = .needInputMethod("等了很久还没看到鼠须管被添加。还没加的话，加好后再点一次「打开系统设置」；已经加好了的话，请退出应用再打开（刚装好鼠须管时，这个应用有时看不到最新的状态）")
             case .reregistered:
                 step = .needRestart
             case .notRegistered:

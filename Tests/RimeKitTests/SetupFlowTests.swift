@@ -79,6 +79,7 @@ import Testing
         await flow.addInputMethod()
         guard case .needInputMethod(let note) = flow.step else { Issue.record("\(flow.step)"); return }
         #expect(note?.contains("还没看到") == true)
+        #expect(note?.contains("退出应用再打开") == true)   // 已经加好却一直没继续时的解法
     }
 
     @Test func 选起步方案后写好配置() async throws {

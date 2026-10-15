@@ -66,7 +66,7 @@ struct SetupView: View {
             Button("打开系统设置") { Task { await flow.addInputMethod() } }
                 .buttonStyle(.borderedProminent)
         case .waitingForInputMethod:
-            Working(text: "请在系统设置里添加「鼠须管」（简体中文下面）。加好后这里会自动继续……")
+            Working(text: "请在系统设置里添加「鼠须管」（简体中文下面）。加好后这里会自动继续……\n加好了很久还没继续的话，请退出应用再打开。")
         case .needRestart:
             Message(symbol: "arrow.clockwise", title: "请退出应用再打开",
                     lines: ["系统里鼠须管的输入源丢了，已经重新注册。要退出这个应用再重新打开，才能看到最新的状态。"])
