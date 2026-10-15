@@ -1,0 +1,165 @@
+import Foundation
+
+/// 方案清单：有哪些包、从哪下载、装哪些文件、依赖谁（设计第 4 节）
+public struct Catalog: Sendable, Equatable, Codable {
+    public static let supportedFormatVersion = 1
+
+    public let formatVersion: Int
+    public let packages: [PackageSpec]
+
+    public func package(_ id: String) -> PackageSpec? {
+        packages.first { $0.id == id }
+    }
+
+    /// 读取并校验。先只读格式版本号，版本不对就不往下解析。
+    public static func decode(_ data: Data) throws -> Catalog {
+        struct Header: Decodable { let formatVersion: Int }
+        let header = try JSONCoding.decoder.decode(Header.self, from: data)
+        guard header.formatVersion == supportedFormatVersion else {
+            throw CatalogError.unsupportedFormat(header.formatVersion)
+        }
+        let catalog = try JSONCoding.decoder.decode(Catalog.self, from: data)
+        try catalog.validate()
+        return catalog
+    }
+
+    /// 打包在应用里的清单
+    public static func builtIn() throws -> Catalog {
+        guard let url = Bundle.module.url(forResource: "catalog", withExtension: "json") else {
+            throw CatalogError.builtInMissing
+        }
+        return try decode(Data(contentsOf: url))
+    }
+
+    public func validate() throws {
+        var packageIDs = Set<String>()
+        for p in packages where !packageIDs.insert(p.id).inserted {
+            throw CatalogError.duplicatePackageID(p.id)
+        }
+        var schemaIDs = Set<String>()
+        for s in packages.flatMap(\.schemas) where !schemaIDs.insert(s.id).inserted {
+            throw CatalogError.duplicateSchemaID(s.id)
+        }
+        for p in packages {
+            for d in p.dependencies where !packageIDs.contains(d) {
+                throw CatalogError.unknownDependency(package: p.id, dependency: d)
+            }
+        }
+        try checkCycles()
+        for p in packages {
+            for file in p.requiredFiles {
+                let included = p.include.contains { $0.matches(file) } && !p.exclude.contains { $0.matches(file) }
+                if !included { throw CatalogError.requiredFileNotIncluded(package: p.id, file: file) }
+            }
+        }
+    }
+
+    /// 要装这些包时的顺序：依赖在前，每个包只出现一次
+    public func installOrder(for ids: [String]) throws -> [PackageSpec] {
+        var result: [PackageSpec] = []
+        var seen = Set<String>()
+        func visit(_ id: String) throws {
+            if seen.contains(id) { return }
+            guard let p = package(id) else { throw CatalogError.unknownPackage(id) }
+            seen.insert(id)
+            for d in p.dependencies { try visit(d) }
+            result.append(p)
+        }
+        for id in ids { try visit(id) }
+        return result
+    }
+
+    private func checkCycles() throws {
+        enum State { case visiting, done }
+        var state: [String: State] = [:]
+        var stack: [String] = []
+        func visit(_ id: String) throws {
+            if state[id] == .done { return }
+            if state[id] == .visiting {
+                let start = stack.firstIndex(of: id) ?? 0
+                throw CatalogError.dependencyCycle(Array(stack[start...]) + [id])
+            }
+            state[id] = .visiting
+            stack.append(id)
+            for d in package(id)?.dependencies ?? [] { try visit(d) }
+            stack.removeLast()
+            state[id] = .done
+        }
+        for p in packages { try visit(p.id) }
+    }
+}
+
+public struct PackageSpec: Sendable, Equatable, Codable {
+    public let id: String
+    public let name: String
+    public let summary: String
+    public let license: String
+    public let homepage: URL
+    public let source: PackageSource
+    /// 用来找包根目录的文件（相对包根目录）。zip 里顶层目录名不固定，靠它定位。
+    public let anchor: String
+    public let include: [FileGlob]
+    public let exclude: [FileGlob]
+    /// 解压后必须存在的文件；缺了说明上游结构变了
+    public let requiredFiles: [String]
+    public let schemas: [SchemaSpec]
+    public let dependencies: [String]
+}
+
+public struct SchemaSpec: Sendable, Equatable, Codable {
+    public let id: String
+    public let name: String
+    public let category: SchemaCategory
+
+    public init(id: String, name: String, category: SchemaCategory) {
+        self.id = id
+        self.name = name
+        self.category = category
+    }
+}
+
+public enum SchemaCategory: String, Sendable, Equatable, Codable {
+    case pinyin, shuangpin, wubi, other
+}
+
+public enum PackageSource: Sendable, Equatable, Codable {
+    /// GitHub Release 的附件，版本用附件的 updated_at
+    case githubReleaseAsset(repo: String, tag: String, asset: String)
+    /// GitHub 某个分支的最新提交，版本用提交号，并按提交号下载
+    case githubBranch(repo: String, branch: String)
+
+    private enum CodingKeys: String, CodingKey { case type, repo, tag, asset, branch }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try c.decode(String.self, forKey: .type)
+        switch type {
+        case "githubReleaseAsset":
+            self = .githubReleaseAsset(
+                repo: try c.decode(String.self, forKey: .repo),
+                tag: try c.decode(String.self, forKey: .tag),
+                asset: try c.decode(String.self, forKey: .asset))
+        case "githubBranch":
+            self = .githubBranch(
+                repo: try c.decode(String.self, forKey: .repo),
+                branch: try c.decode(String.self, forKey: .branch))
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "不认识的下载来源类型：\(type)")
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case let .githubReleaseAsset(repo, tag, asset):
+            try c.encode("githubReleaseAsset", forKey: .type)
+            try c.encode(repo, forKey: .repo)
+            try c.encode(tag, forKey: .tag)
+            try c.encode(asset, forKey: .asset)
+        case let .githubBranch(repo, branch):
+            try c.encode("githubBranch", forKey: .type)
+            try c.encode(repo, forKey: .repo)
+            try c.encode(branch, forKey: .branch)
+        }
+    }
+}
