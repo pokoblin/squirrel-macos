@@ -86,4 +86,16 @@ import Testing
         _ = try await m.exporter().export(to: m.dir.url.appending(path: "e.zip"), packages: [])
         #expect(try FileManager.default.contentsOfDirectory(atPath: m.paths.staging.path).isEmpty)
     }
+
+    @Test func 导出文件里没有文本替换的同步记录() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        var settings = T.settings
+        settings.textReplacement.sync = true
+        try SettingsStore(paths: m.paths).save(settings.recordingTextReplacement([Phrase(text: "替换", code: "th", weight: 1)]))
+        let report = try await m.exporter().export(to: m.dir.url.appending(path: "e.zip"), packages: [])
+        #expect(report.manifest.settings.textReplacement == TextReplacementSettings(sync: true))
+        let text = try String(contentsOf: try unzip(m.dir.url.appending(path: "e.zip"), m).appending(path: "manifest.json"), encoding: .utf8)
+        #expect(!text.contains("syncedEntries"))
+        #expect(!text.contains("lastSyncedHash"))
+    }
 }

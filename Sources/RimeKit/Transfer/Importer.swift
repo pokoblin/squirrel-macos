@@ -38,12 +38,15 @@ public struct Importer: Sendable {
 
         // 2. 走 6.1。导入就是要换成导出文件里的配置：应用外的改动、同名文件都覆盖（先备份，永久保留）。
         //    写好后、通知鼠须管前保存设置和个人内容
-        let settings = archive.manifest.settings
+        let imported = archive.manifest.settings
         let dicts = archive.personalDicts
         let phrases = archive.phrases
+        let replacements = imported.textReplacement.sync ? textReplacement : []
+        // 记下这次用的文本替换（同步关着时清掉记录）
+        let settings = imported.recordingTextReplacement(replacements)
         let input = GenerationInput(settings: settings, catalog: catalog, packages: packages,
                                     personal: PersonalContent(dicts: dicts, phrases: phrases),
-                                    textReplacementPhrases: settings.textReplacement.sync ? textReplacement : [])
+                                    textReplacementPhrases: replacements)
         let outcome: ApplyOutcome
         do {
             outcome = try await deployer.apply(

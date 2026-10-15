@@ -58,7 +58,7 @@ public struct Exporter: Sendable {
         }
 
         let userDBNames = try await userDB?.exportAll(into: content.appending(path: "userdb", directoryHint: .isDirectory)) ?? []
-        let manifest = ExportManifest(formatVersion: ExportManifest.currentFormatVersion, exportedAt: now(), settings: settings,
+        let manifest = ExportManifest(formatVersion: ExportManifest.currentFormatVersion, exportedAt: now(), settings: settings.withoutTextReplacementRecord,
                                       packages: packages, personalDicts: personal.dicts.map(\.lastPathComponent),
                                       phrases: personal.phrases.count, userDB: userDBNames)
         try JSONCoding.encoder.encode(manifest).write(to: content.appending(path: "manifest.json"))

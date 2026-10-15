@@ -32,10 +32,12 @@ public struct TakeoverApplier: Sendable {
 
         // 用户在预览里确认的就是这些覆盖；第一次的备份永久保留（Deployer.apply 负责）。
         // 文件写好后、通知鼠须管之前就保存设置和个人内容（还在锁里）：等部署最多两分钟，这时被中断也不会留下半截状态
-        let settings = proposal.settings
+        let input = staged.generationInput(catalog: catalog, packages: packages, textReplacement: textReplacement)
+        // 记下这次用的文本替换（只存哈希）
+        let settings = proposal.settings.recordingTextReplacement(input.textReplacementPhrases)
         let phrases = proposal.manualPhrases
         return try await deployer.apply(
-            staged.generationInput(catalog: catalog, packages: packages, textReplacement: textReplacement),
+            input,
             options: ApplyOptions(overwriteExternalChanges: true),
             afterWrite: { try AppDataWriter.replace(settings: settings, dicts: dictFiles, phrases: phrases, paths: paths) })
     }

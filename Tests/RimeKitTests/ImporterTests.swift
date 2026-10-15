@@ -102,5 +102,7 @@ import Testing
         _ = try await importer(b).run(a, catalog: b.catalog, packages: b.packages, textReplacement: [tr])
         let phrases = try String(contentsOf: b.locations.rimeDirectory.appending(path: "custom_phrase.txt"), encoding: .utf8)
         #expect(phrases.contains(tr.line))
+        let saved = try #require(try SettingsStore(paths: b.paths).load())
+        #expect(saved.textReplacement.syncedEntries == TextReplacementSync.entryHashes([tr]))
     }
 }

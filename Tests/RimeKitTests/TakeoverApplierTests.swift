@@ -45,7 +45,9 @@ import Testing
         let expected = try e.proposal()
         guard case .applied(let report) = try await e.confirm() else { Issue.record("没有写入"); return }
         #expect(report.backup.permanent)
-        #expect(try SettingsStore(paths: e.paths).load() == expected.settings)
+        // 文本替换同步打开了：保存的设置里记下了这次用的文本替换（只有哈希）
+        #expect(try SettingsStore(paths: e.paths).load() == expected.settings.recordingTextReplacement([F.fromTR]))
+        #expect(try SettingsStore(paths: e.paths).load()?.textReplacement.syncedEntries?.count == 1)
         let personal = try PersonalContent.load(from: e.paths)
         #expect(personal.dicts.map(\.lastPathComponent) == ["py_user.dict.yaml", "wb_user.dict.yaml"])
         #expect(personal.phrases == [F.manual])
