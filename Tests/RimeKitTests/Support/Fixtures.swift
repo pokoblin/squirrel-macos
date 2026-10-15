@@ -27,4 +27,26 @@ enum Fixtures {
         precondition(catalogJSON.components(separatedBy: old).count == 2, "要替换的文字必须正好出现一次：\(old)")
         return Data(catalogJSON.replacingOccurrences(of: old, with: new).utf8)
     }
+
+    // MARK: GitHub 接口
+
+    static let baseReleaseURL = URL(string: "https://api.github.com/repos/o/base/releases/tags/t")!
+    static let baseZipURL = URL(string: "https://example.com/dl/base.zip")!
+    static let appCommitURL = URL(string: "https://api.github.com/repos/o/app/commits/main")!
+
+    static func appZipURL(_ sha: String) -> URL {
+        URL(string: "https://codeload.github.com/o/app/zip/\(sha)")!
+    }
+
+    /// assets: (附件名, 下载地址, 更新时间)
+    static func releaseJSON(assets: [(String, URL, String)]) -> Data {
+        let items = assets.map { name, url, updated in
+            #"{"name":"\#(name)","browser_download_url":"\#(url.absoluteString)","updated_at":"\#(updated)","size":1}"#
+        }
+        return Data(#"{"tag_name":"t","assets":[\#(items.joined(separator: ","))]}"#.utf8)
+    }
+
+    static func commitJSON(sha: String) -> Data {
+        Data(#"{"sha":"\#(sha)","commit":{"message":"x"}}"#.utf8)
+    }
 }
