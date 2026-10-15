@@ -24,6 +24,8 @@ struct Rimectl {
         /// 空就用真的三道检查
         var verifier: (any PackageVerifying)? = nil
         var activationTimeout: Double = 600
+        /// 读 macOS 文本替换；测试时换成假的
+        var textReplacements: @Sendable () throws -> [Phrase] = { try TextReplacementReader().read() }
     }
 
     static let usage = """
@@ -37,6 +39,7 @@ struct Rimectl {
                                                                color-scheme、color-scheme-dark、option；值写 - 表示清空）
       rimectl generate --out 目录 [--cache-only]                按设置生成一份 Rime 配置（只往空目录写）
       rimectl apply [--cache-only] [--overwrite] [--adopt-personal]   把设置应用到 Rime 目录并通知鼠须管部署
+      rimectl takeover [--confirm] [--force] [--cache-only]    认出已有的 Rime 配置并预览；加 --confirm 才真的接管（先完整备份）
       rimectl status                                           查看鼠须管、Rime 目录、外部改动、备份
       rimectl restore --list | <备份 id>                        列出备份 / 还原到某个备份
       rimectl install [--force] [--gui-auth]                   下载、检查、安装鼠须管（--gui-auth 弹系统授权框，否则用免密 sudo）
@@ -68,6 +71,7 @@ struct Rimectl {
         var guiAuth = false
         var offline = false
         var timeout: Double?
+        var confirm = false
         var positional: [String] = []
         var i = 0
         while i < args.count {
@@ -100,6 +104,9 @@ struct Rimectl {
                 guard i + 1 < args.count, let seconds = Double(args[i + 1]) else { out.error(usage); return 2 }
                 timeout = seconds
                 i += 2
+            case "--confirm":
+                confirm = true
+                i += 1
             case "--list":
                 listOnly = true
                 i += 1
@@ -137,6 +144,9 @@ struct Rimectl {
                 return try await apply(cacheOnly: cacheOnly,
                                        options: ApplyOptions(overwriteExternalChanges: overwrite, adoptPersonalChanges: adoptPersonal),
                                        paths: paths, locations: locations, context)
+            case "takeover":
+                return try await takeover(confirm: confirm, force: force, cacheOnly: cacheOnly,
+                                          paths: paths, locations: locations, context)
             case "status":
                 return try status(paths: paths, locations: locations, context)
             case "restore":
@@ -257,8 +267,9 @@ struct Rimectl {
             guard let pkg = try await obtain(spec, cacheOnly: cacheOnly, store: store, out) else { return nil }
             packages[spec.id] = pkg
         }
+        let textReplacement = settings.textReplacement.sync ? try context.textReplacements() : []
         return GenerationInput(settings: settings, catalog: catalog, packages: packages,
-                               personal: try PersonalContent.load(from: paths), textReplacementPhrases: [])
+                               personal: try PersonalContent.load(from: paths), textReplacementPhrases: textReplacement)
     }
 
     private static func generate(out target: URL, cacheOnly: Bool, paths: AppPaths, _ context: Context) async throws -> Int32 {
@@ -287,7 +298,11 @@ struct Rimectl {
                               _ context: Context) async throws -> Int32 {
         let out = context.output
         guard let input = try await prepareInput(cacheOnly: cacheOnly, paths: paths, context) else { return 1 }
-        switch try await deployer(paths: paths, locations: locations, context).apply(input, options: options) {
+        return printApplyOutcome(try await deployer(paths: paths, locations: locations, context).apply(input, options: options), out)
+    }
+
+    private static func printApplyOutcome(_ outcome: ApplyOutcome, _ out: Output) -> Int32 {
+        switch outcome {
         case .externalChanges(let changes):
             out.error("这些文件和应用记录的不一样，没有写入：")
             for change in changes { out.error("  \(change)") }
@@ -298,12 +313,107 @@ struct Rimectl {
             for error in errors { out.error("  \(error)") }
             return 1
         case .applied(let report):
-            out.line("已备份：\(report.backup.id)（\(report.backup.reason)）")
+            out.line("已备份：\(report.backup.id)（\(report.backup.reason)\(report.backup.permanent ? "，这份永久保留" : "")）")
             out.line("写入 \(report.written.count) 个文件，没变 \(report.unchanged) 个，删掉 \(report.removed.count) 个")
             for warning in report.warnings { out.line("注意：\(warning)") }
             out.line(report.launched ? "已启动鼠须管" : "已通知鼠须管重新部署")
             return reportDeploy(report.deploy, backupID: report.backup.id, out)
         }
+    }
+
+    private static func takeover(confirm: Bool, force: Bool, cacheOnly: Bool, paths: AppPaths, locations: RimeLocations,
+                                 _ context: Context) async throws -> Int32 {
+        let out = context.output
+        guard try Ledger.load(paths).entries.isEmpty else {
+            out.error(TakeoverError.alreadyManaged.description)
+            return 1
+        }
+        if FileManager.default.fileExists(atPath: paths.settingsFile.path), !force {
+            out.error(TakeoverError.settingsExist(paths.settingsFile.path).description)
+            return 1
+        }
+        let catalog = try context.catalog()
+        let rime = locations.rimeDirectory
+        let survey = try TakeoverSurvey.scan(rime, catalog: catalog)
+        if survey.isEmpty {
+            out.line("Rime 目录里没有配置，不用接管。先选一个起步方案：rimectl settings init rime-ice|flypy|wubi-pinyin，再 rimectl apply")
+            return 0
+        }
+        guard !survey.schemas.isEmpty else {
+            out.error(TakeoverError.nothingRecognized.description)
+            return 1
+        }
+        let store = PackageStore(paths: paths, http: context.http, retry: context.retry)
+        var packages: [String: CachedPackage] = [:]
+        for spec in try catalog.installOrder(for: survey.packages) {
+            guard let pkg = try await obtain(spec, cacheOnly: cacheOnly, store: store, out) else { return 1 }
+            packages[spec.id] = pkg
+        }
+        var textReplacement: [Phrase] = []
+        do {
+            textReplacement = try context.textReplacements()
+        } catch {
+            out.line("注意：\(error)。短语都按手动短语处理")
+        }
+        let proposal = try TakeoverAnalyzer.analyze(rime, catalog: catalog, survey: survey, packages: packages,
+                                                    textReplacement: textReplacement)
+        for spec in try proposal.settings.requiredPackages(catalog) where packages[spec.id] == nil {
+            guard let pkg = try await obtain(spec, cacheOnly: cacheOnly, store: store, out) else { return 1 }
+            packages[spec.id] = pkg
+        }
+        let preview = try TakeoverPreview.make(proposal, rime: rime, catalog: catalog, packages: packages,
+                                               textReplacement: textReplacement, staging: paths.staging)
+        printTakeover(proposal, preview, catalog: catalog, rime: rime, out)
+        guard confirm else {
+            out.line("这只是预览，什么都没改。确认接管：rimectl takeover --confirm（会先完整备份 Rime 目录，这份备份永久保留）")
+            return 0
+        }
+        let outcome = try await TakeoverApplier(deployer: deployer(paths: paths, locations: locations, context))
+            .confirm(proposal, catalog: catalog, packages: packages, textReplacement: textReplacement, force: force)
+        return printApplyOutcome(outcome, out)
+    }
+
+    /// 只打印设置、文件名和条数，不打印词库和短语的内容
+    private static func printTakeover(_ proposal: TakeoverProposal, _ preview: TakeoverPreview, catalog: Catalog,
+                                      rime: URL, _ out: Output) {
+        let s = proposal.settings
+        func schemaName(_ id: String) -> String {
+            let name = catalog.packageOwning(schema: id)?.schemas.first { $0.id == id }?.name ?? id
+            return "\(name)（\(id)）"
+        }
+        out.line("Rime 目录：\(rime.path)")
+        out.line("方案（第一个是默认方案）：" + s.schemas.map(schemaName).joined(separator: "、"))
+        for packageID in s.options.keys.sorted() {
+            guard let spec = catalog.package(packageID) else { continue }
+            for option in spec.options {
+                out.line("选项：\(spec.name) · \(option.name)：\(s.choice(option, of: spec).name)")
+            }
+        }
+        let a = s.appearance
+        var look: [String] = []
+        if let v = a.fontPoint { look.append("候选字字号 \(v)") }
+        if let v = a.labelFontPoint { look.append("序号字号 \(v)") }
+        if let v = a.commentFontPoint { look.append("注释字号 \(v)") }
+        if let v = a.colorScheme { look.append("浅色配色 \(v)") }
+        if let v = a.colorSchemeDark { look.append("深色配色 \(v)") }
+        if let v = a.candidateListLayout { look.append(v == .linear ? "候选横排" : "候选竖排") }
+        if let v = a.textOrientation { look.append(v == .horizontal ? "文字横排" : "文字竖排") }
+        if let v = a.pageSize { look.append("每页 \(v) 个候选") }
+        out.line("外观：" + (look.isEmpty ? "都是方案默认的" : look.joined(separator: "，")))
+        for (name, items) in s.preservedPatches.sorted(by: { $0.key < $1.key }) {
+            out.line("保留的补丁：\(name).custom.yaml 里的 " + items.map(\.key).joined(separator: "、"))
+        }
+        let dicts = proposal.personalDicts.map(\.lastPathComponent)
+        out.line("个人词库：\(dicts.count) 个" + (dicts.isEmpty ? "" : "（\(dicts.joined(separator: "、"))）"))
+        out.line("手动短语：\(proposal.manualPhrases.count) 条")
+        if proposal.textReplacementMatches > 0 {
+            out.line("和 macOS 文本替换一样的短语：\(proposal.textReplacementMatches) 条（接管后打开文本替换同步，由它生成）")
+        }
+        for note in proposal.notes + preview.warnings { out.line("注意：\(note)") }
+        out.line("接管后：换掉 \(preview.replaced.count) 个文件，内容不变 \(preview.unchanged.count) 个，新加 \(preview.added.count) 个，原样保留 \(preview.kept.count) 个")
+        if !preview.replaced.isEmpty { out.line("  换掉：" + preview.replaced.joined(separator: "、")) }
+        if !preview.added.isEmpty { out.line("  新加：" + preview.added.joined(separator: "、")) }
+        if !preview.kept.isEmpty { out.line("  原样保留：" + preview.kept.joined(separator: "、")) }
     }
 
     private static func reportDeploy(_ deploy: DeployOutcome, backupID: String, _ out: Output) -> Int32 {
