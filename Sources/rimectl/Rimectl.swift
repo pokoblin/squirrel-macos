@@ -644,6 +644,9 @@ struct Rimectl {
         case .timedOut:
             out.error("等了 \(Int(timeout)) 秒，还没看到鼠须管被添加。添加好后再运行一次 rimectl activate")
             return 1
+        case .reregistered:
+            out.error("已重新注册鼠须管的输入源，请再运行一次 rimectl activate（这个进程看不到它最新的状态）")
+            return 1
         case .notRegistered:
             out.error("重新注册了鼠须管的输入源，系统里还是没有。可以试试注销再登录后再运行 rimectl activate，或者运行 rimectl install --force 重新安装")
             return 1

@@ -54,7 +54,7 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 
 | 参数 | 作用 | 验证 |
 |---|---|---|
-| `--register-input-source` | 向系统注册输入法。只要「简体」子模式还启用着，就打印 `User already registered …` 跳过、退出码 0；输入源整个从系统里消失时运行它，马上就回来（之前加过的仍是 enabled）。`rimectl activate` 发现没注册时会先跑它 | 实测（squirrel-dev，阶段 5 和之后） |
+| `--register-input-source` | 向系统注册输入法。只要「简体」子模式还启用着，就打印 `User already registered …` 跳过、退出码 0；输入源整个从系统里消失时运行它，马上就回来（之前加过的仍是 enabled）。`rimectl activate` 发现没注册时会先跑它，然后让用户再运行一次（见第 2 节） | 实测（squirrel-dev，阶段 5 和之后） |
 | `--enable-input-source` | 启用（**只能启用到「简体」子模式，本体启用不了**，见第 2 节） | 实测 |
 | `--select-input-source` | 切换到鼠须管（本体没启用时会失败：`Selection fails for input source`） | 实测 |
 | `--disable-input-source` | 停用 | 查看（`strings`），未实测 |
@@ -119,6 +119,8 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | 同一个进程里每秒查一次 TIS：等待时用 `Thread.sleep` 干等，**永远看不到**用户在系统设置里的删除和添加；用 `CFRunLoopRunInMode` 让 run loop 转起来就能看到（TIS 有缓存，靠系统通知更新） | 实测（squirrel-dev，阶段 4，`tis-probe watch`） |
 | **TIS 的调用要放在主线程**：rimectl 的 async 入口里在后台线程查 TIS，同时主线程在处理「输入源变了」的通知，会在 Carbon 内部崩溃（SIGTRAP，`islGetInputSourceProperty`）。全部放到主线程后正常 | 实测（squirrel-fresh，阶段 4） |
 | 用户重新添加鼠须管后，「鼠须管 - 简体」不会自动被选中，要程序切换过去 | 实测（squirrel-dev，阶段 4） |
+| `Squirrel.app` 不在 `/Library/Input Methods` 时，输入源缓存（`$(getconf DARWIN_USER_CACHE_DIR)/com.apple.IntlDataCache.le*`）一重建（删掉缓存后任何用到 TIS 的进程都会重建，注销再登录也会），系统里就一个 `im.rime.inputmethod.*` 都没有了；把 app 放回去，新进程马上又能看到。TIS 直接扫目录，不靠 LaunchServices | 实测（squirrel-dev，阶段 5 之后） |
+| **输入源消失又回来后，已经在运行的进程里，本体的 enabled 一直是 false**（新进程看到的是 true）。转 run loop、本进程调 `TISRegisterInputSource`、自己发 `kTISNotifyEnabledKeyboardInputSourcesChanged` 通知都刷新不了。所以 `rimectl activate` 重新注册后就停下，让用户再运行一次；以后的图形界面要用新进程查，或者让用户重开应用 | 实测（squirrel-dev，阶段 5 之后） |
 
 查看和切换输入源的小工具：[tools/vm/tis-probe.swift](../tools/vm/tis-probe.swift)。
 

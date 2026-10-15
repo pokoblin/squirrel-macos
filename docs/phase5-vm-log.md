@@ -49,14 +49,15 @@
 
 结论：根因不明，先记下。值得以后改进的地方：输入源没注册时，`doctor` 建议的 `install --force` 不一定有用（postinstall 如果认为「已经注册过」就跳过注册）；`activate` 可以先跑一次 `Squirrel --register-input-source` 再等用户添加。
 
-**后续（已改）**：`rimectl activate` 发现系统里没有鼠须管的输入源时，先运行 `Squirrel --register-input-source`，让 run loop 转一下再查（最多 5 秒）；回来了就照常继续（没添加就打开系统设置等，然后切换、启动），还是没有才报错，建议注销再登录或 `install --force`。`doctor` 的建议改成 `rimectl activate`。
+**后续（已改）**：`rimectl activate` 发现系统里没有鼠须管的输入源时，先运行 `Squirrel --register-input-source`，让 run loop 转一下再查（最多 5 秒）。回来了就停下，提示「请再运行一次 rimectl activate」（原因见下面的实测）；还是没有才报错，建议注销再登录或 `install --force`。`doctor` 的建议改成 `rimectl activate`。
 
-想复现没成功（squirrel-dev）：
-- 退出鼠须管，把 `Squirrel.app` 移出 `/Library/Input Methods`：30 秒内三个输入源都还在。
-- 再删掉 `$(getconf DARWIN_USER_CACHE_DIR)/com.apple.IntlDataCache.le*`、杀掉 `TextInputMenuAgent`/`TextInputSwitcher`：三个输入源仍列着，只是名字变成 `?`，本体 enabled=false；缓存文件没有马上重建。
-- 把 `Squirrel.app` 移回去：马上恢复正常（名字和 enabled 都回来）。之后把缓存文件也放回原样。
-- 注意到原来那份缓存文件的修改时间正好是 16:29（发现输入源丢失的时间）。猜测和登录时重建输入源缓存有关，但测登录要用户输密码，没继续。
-- 在正常状态下实测：`Squirrel --register-input-source` 打印「User already registered」、退出码 0；新的 `rimectl activate`、`doctor` 结果正常。「没注册 → 重新注册」这条路只有单元测试覆盖。
+后来在 squirrel-dev 里复现出来了（同一天 17:00 前后）：
+- 退出鼠须管，把 `Squirrel.app` 移出 `/Library/Input Methods`，只等 30 秒：三个输入源都还在。
+- 再删掉 `$(getconf DARWIN_USER_CACHE_DIR)/com.apple.IntlDataCache.le*`、杀掉 `TextInputMenuAgent`/`TextInputSwitcher`：第一次试时还列着（名字变成 `?`）；注销再登录（app 不在）后一个都没有了。之后在新登录的会话里，同样的三步做完，3 秒内就一个都没有了。缓存文件会被任何用到 TIS 的进程重建（日志 `TISFileInterrogator updateSystemInputSources`）。
+- 把 `Squirrel.app` 移回去：**新进程**马上就能看到三个输入源，本体 enabled=true，不用重新注册（这时 `--register-input-source` 打印「User already registered」）。原来那次是 app 一直在、输入源却一直没有，要手动注册才回来，和这里不完全一样，根因还是不清楚。
+- 用 `lsregister -u` 把鼠须管从 LaunchServices 里注销，再注销、登录：输入源照样都在。TIS 不靠 LaunchServices，直接扫目录。之后用 `lsregister -f -R` 注册回去了。
+- **同一个进程的状态是旧的**：在输入源消失时就已经启动的进程，app 移回去后能看到输入源回来，但本体的 enabled 一直是 false，新进程看到的是 true。用 `CFRunLoopRunInMode` 转 run loop、在本进程里调 `TISRegisterInputSource`、自己发 `kTISNotifyEnabledKeyboardInputSourcesChanged` 分布式通知，都刷新不了。第一版的 `activate` 就是因此在重新注册后打开了系统设置，白等了 30 秒。
+- 改成重新注册后就停下以后：第一次 `rimectl activate` 输出「系统里没有鼠须管的输入源，正在重新注册……」「已重新注册鼠须管的输入源，请再运行一次 rimectl activate」（退出码 1）；第二次「已启动鼠须管」「鼠须管可以用了」；`doctor` 全部正常。`doctor` 在没有输入源时报「系统里没有鼠须管的输入源 → 运行 rimectl activate（会重新注册输入源）」。
 
 ## 4. 宿主机真实配置（只读，经用户同意）
 

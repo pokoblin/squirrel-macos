@@ -69,10 +69,11 @@ import Testing
         let e = try env(installed: "1.1.2", input: InputSourceState(registered: false, enabled: false, selected: false))
         defer { e.dir.remove() }
         let input = e.input
-        e.squirrel.onRegister = { input.changeOnNextPump(to: InputSourceState(registered: true, enabled: true, selected: false)) }
-        #expect(await e.run(["activate"]) == 0)
+        e.squirrel.onRegister = { input.changeOnNextPump(to: InputSourceState(registered: true, enabled: false, selected: false)) }
+        #expect(await e.run(["activate"]) == 1)
         #expect(e.output.text.contains("系统里没有鼠须管的输入源，正在重新注册"))
-        #expect(e.output.text.contains("鼠须管可以用了"))
+        #expect(e.output.text.contains("已重新注册鼠须管的输入源，请再运行一次 rimectl activate"))
+        #expect(!e.output.text.contains("已打开系统设置"))
     }
 
     @Test func activate重新注册也没用() async throws {

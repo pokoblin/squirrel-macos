@@ -7,9 +7,13 @@ public enum ActivationOutcome: Sendable, Equatable {
     case timedOut
     /// 系统里没有鼠须管的输入源，重新注册了也还是没有
     case notRegistered
+    /// 重新注册了，输入源回来了。但这个进程里 TIS 的「已启用」一直是旧的（测试机实测），
+    /// 要换个新进程再检查：命令行让用户再运行一次 activate
+    case reregistered
 }
 
-/// 启用鼠须管（设计 6.2 第 1 步后半）：输入源丢了就重新注册 → 没添加就打开系统设置等用户添加 → 切换过去 → 没运行就启动
+/// 启用鼠须管（设计 6.2 第 1 步后半）：没添加就打开系统设置等用户添加 → 切换过去 → 没运行就启动。
+/// 输入源整个从系统里丢了时，只重新注册，然后让调用方换个新进程再来
 public struct SquirrelActivator: Sendable {
     let locations: RimeLocations
     let inputSource: any InputSourceControlling
@@ -46,6 +50,7 @@ public struct SquirrelActivator: Sendable {
                 waited += pollInterval
                 state = inputSource.state()
             }
+            return .reregistered
         }
 
         var opened = false
