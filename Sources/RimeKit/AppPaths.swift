@@ -34,6 +34,9 @@ public struct AppPaths: Sendable, Equatable {
     /// 每次写入前对 ~/Library/Rime 的备份
     public var backups: URL { root.appending(path: "backups", directoryHint: .isDirectory) }
 
+    /// 导入前把应用里原来的设置和个人内容另存在这里（Rime 目录的备份不含这些）
+    public var beforeImport: URL { root.appending(path: "before-import", directoryHint: .isDirectory) }
+
     /// 防止应用和 rimectl 同时改
     public var lockFile: URL { root.appending(path: "lock") }
 }
