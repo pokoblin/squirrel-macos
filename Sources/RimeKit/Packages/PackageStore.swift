@@ -88,6 +88,13 @@ public struct PackageStore: Sendable {
         return cachedVersions(spec.id).first { $0.info.rules == rules }
     }
 
+    /// 是不是「没下载成」的错误（断网、被拦、返回内容不对、下载内容坏了）。
+    /// 这类错误时，如果本地有旧版本，可以问用户要不要先用旧版本（设计第 7 节）。
+    /// 上游结构变了、清单有问题之类的不算。
+    public static func isDownloadFailure(_ error: any Error) -> Bool {
+        error is HTTPError || error is SourceError || error is UnzipError
+    }
+
     /// 清单规则的指纹：规则任何一处变了，指纹就变
     public static func rulesFingerprint(_ spec: PackageSpec) -> String {
         struct Rules: Encodable {

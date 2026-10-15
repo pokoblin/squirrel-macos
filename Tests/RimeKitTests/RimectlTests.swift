@@ -98,3 +98,40 @@ import Testing
         #expect(out.text.contains("用法"))
     }
 }
+
+@Suite struct RimectlDownloadFailureTests {
+    @Test func 认证页返回网页时也提示可以用旧版本() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let http = FakeHTTPClient()
+        try Fixtures.stubAll(http, baseVersion: "v1")
+        let (ctx, out) = RimectlTests().context(http, dir)
+        #expect(await Rimectl.run(["fetch", "base"], ctx) == 0)
+        http.stub(Fixtures.baseReleaseURL, .success(Data("<html>请先登录 Wi-Fi</html>".utf8)))
+        #expect(await Rimectl.run(["fetch", "base"], ctx) == 1)
+        #expect(out.text.contains("看不懂 GitHub 返回的内容"))
+        #expect(out.text.contains("v1"))
+        #expect(out.text.contains("--cache-only"))
+    }
+
+    @Test func 下载内容坏了也提示可以用旧版本() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let http = FakeHTTPClient()
+        try Fixtures.stubAll(http, baseVersion: "v1")
+        let (ctx, out) = RimectlTests().context(http, dir)
+        #expect(await Rimectl.run(["fetch", "base"], ctx) == 0)
+        try Fixtures.stubAll(http, baseVersion: "v2")
+        http.stub(Fixtures.baseZipURL, .success(Data("不是 zip".utf8)))
+        #expect(await Rimectl.run(["fetch", "base"], ctx) == 1)
+        #expect(out.text.contains("解压失败"))
+        #expect(out.text.contains("--cache-only"))
+    }
+
+    @Test func 哪些错误算下载失败() {
+        let url = URL(string: "https://example.com")!
+        #expect(PackageStore.isDownloadFailure(HTTPError.transport("x")))
+        #expect(PackageStore.isDownloadFailure(SourceError.badResponse(url)))
+        #expect(PackageStore.isDownloadFailure(UnzipError.failed(status: 1, message: "x")))
+        #expect(!PackageStore.isDownloadFailure(CatalogError.unknownPackage("x")))
+        #expect(!PackageStore.isDownloadFailure(PackageStoreError.anchorNotFound(package: "x", anchor: "y")))
+    }
+}

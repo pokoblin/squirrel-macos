@@ -88,7 +88,7 @@ struct Rimectl {
         let store = PackageStore(paths: paths, http: context.http, retry: context.retry)
         for spec in try catalog.installOrder(for: ids) {
             if cacheOnly {
-                guard let pkg = store.latestCached(spec.id) else {
+                guard let pkg = store.latestCached(for: spec) else {
                     out.error("\(spec.id)：本地没有缓存")
                     return 1
                 }
@@ -97,9 +97,9 @@ struct Rimectl {
             }
             do {
                 report(try await store.fetch(spec), out)
-            } catch let error as HTTPError {
+            } catch where PackageStore.isDownloadFailure(error) {
                 var message = "\(spec.id)：下载失败。\(error)"
-                if let old = store.latestCached(spec.id) {
+                if let old = store.latestCached(for: spec) {
                     message += "\n本地有缓存的旧版本 \(old.info.version)，可以加 --cache-only 先用它"
                 }
                 out.error(message)
