@@ -44,6 +44,12 @@ public final class MainModel {
     /// 正在做的事（界面上显示）；nil 表示空闲
     public internal(set) var working: String?
     public var notice: Notice?
+    /// 应用时遇到的外部改动：界面弹窗让用户选（覆盖 / 采用外面改过的个人词库 / 放弃）
+    public internal(set) var pendingExternalChanges: [ExternalChange]?
+    /// 外部改动里有个人词库被改过（弹窗里多一个「采用」）
+    public internal(set) var pendingPersonalChanges = false
+    /// 上次应用用的选项（用户在弹窗里选了以后再用）
+    var lastApply = (options: ApplyOptions(), usingCache: false)
     public internal(set) var colorSchemes: [ColorSchemeInfo] = []
 
     let env: AppEnvironment
