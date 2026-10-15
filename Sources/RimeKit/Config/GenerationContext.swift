@@ -205,7 +205,16 @@ final class GenerationContext {
     // MARK: 规则 7：短语
 
     func applyPhrases() throws {
-        let phrases = input.personal.phrases + input.textReplacementPhrases
+        var phrases: [Phrase] = []
+        var seen = Set<String>()
+        var invalid = 0
+        for phrase in input.personal.phrases + input.textReplacementPhrases {
+            guard phrase.isValid else { invalid += 1; continue }
+            if seen.insert(phrase.line).inserted { phrases.append(phrase) }
+        }
+        if invalid > 0 {
+            warnings.append("有 \(invalid) 条短语格式不对（含换行、Tab，或以 # 开头），没有写进去")
+        }
         guard !phrases.isEmpty else { return }
         var targets: [String] = []
         for schema in input.settings.schemas {

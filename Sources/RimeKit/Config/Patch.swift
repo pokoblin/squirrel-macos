@@ -3,7 +3,10 @@ import Yams
 
 /// 造 YAML 节点的小工具
 public enum YAMLNode {
-    public static func text(_ s: String) -> Node { Node(s) }
+    /// 空字符串要写成 ""，不然 YAML 会读成空值（null）
+    public static func text(_ s: String) -> Node {
+        s.isEmpty ? Node("", Tag(.str), .doubleQuoted) : Node(s)
+    }
     public static func int(_ n: Int) -> Node { Node(String(n)) }
     public static func bool(_ b: Bool) -> Node { Node(b ? "true" : "false") }
 

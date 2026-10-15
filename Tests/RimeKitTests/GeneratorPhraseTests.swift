@@ -61,3 +61,24 @@ import Testing
         #expect(GenFixtures.exists(out, "wb.custom.yaml"))
     }
 }
+
+@Suite struct GeneratorPhraseValidationTests {
+    @Test func 格式不对的短语跳过并提醒重复的只写一次() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let packages = try GenFixtures.makePackages(in: dir.url.appending(path: "cache"))
+        let out = dir.url.appending(path: "out")
+        let good = Phrase(text: "测试短语", code: "tstx", weight: 1)
+        let personal = PersonalContent(dicts: [], phrases: [
+            good,
+            Phrase(text: "第一行\n第二行\tzz", code: "hh", weight: nil),
+            Phrase(text: "#看起来像注释", code: "zs", weight: nil),
+            Phrase(text: "带\tTab", code: "tb", weight: nil),
+            Phrase(text: "编码坏了", code: "a b\n", weight: nil),
+            good,
+        ])
+        let result = try ConfigGenerator().generate(
+            try GenFixtures.input(Settings(schemas: ["sp"]), packages: packages, personal: personal), into: out)
+        #expect(try GenFixtures.read(out, "custom_phrase_double.txt") == PhraseFile.header + "测试短语\ttstx\t1\n")
+        #expect(result.warnings == ["有 4 条短语格式不对（含换行、Tab，或以 # 开头），没有写进去"])
+    }
+}

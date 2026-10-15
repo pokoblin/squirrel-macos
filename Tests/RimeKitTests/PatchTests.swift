@@ -64,6 +64,13 @@ import Yams
         #expect(back["custom_phrase"]?["enable_sentence"]?.string == "false")
     }
 
+    @Test func 空字符串写成引号而不是空值() throws {
+        var p = Patch()
+        p.set("custom_phrase", YAMLNode.map([("dictionary", YAMLNode.text(""))]))
+        let text = try p.renderCustomYAML()
+        #expect(text.contains("dictionary: \"\"") || text.contains("dictionary: ''"), "\(text)")
+    }
+
     @Test func 坏的YAML会报错() {
         #expect(throws: (any Error).self) {
             try Patch.parse(customYAML: "patch:\n  a: [1, 2\n")

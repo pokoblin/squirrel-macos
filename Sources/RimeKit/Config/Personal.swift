@@ -12,6 +12,13 @@ public struct Phrase: Sendable, Equatable, Codable {
         self.weight = weight
     }
 
+    /// 能不能写进短语文件：短语和编码都不能空、不能含换行和 Tab，短语不能以 # 开头（会被当成注释）
+    public var isValid: Bool {
+        let bad: (Character) -> Bool = { $0 == "\t" || $0.isNewline }
+        return !text.isEmpty && !code.isEmpty && !text.hasPrefix("#")
+            && !text.contains(where: bad) && !code.contains(where: bad)
+    }
+
     /// Rime 短语文件里的一行：短语<Tab>编码[<Tab>权重]
     public var line: String {
         weight.map { "\(text)\t\(code)\t\($0)" } ?? "\(text)\t\(code)"
