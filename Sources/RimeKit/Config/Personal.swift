@@ -30,7 +30,7 @@ public enum PhraseFile {
     public static let header = """
     # Rime table
     # coding: utf-8
-    # 由 squirrel-macos 生成的自定义短语。格式：短语<Tab>编码<Tab>权重
+    # 由\(AppInfo.name)（squirrel-macos）生成的自定义短语。格式：短语<Tab>编码<Tab>权重
 
     """
 

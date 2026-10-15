@@ -56,9 +56,9 @@ public enum TransferError: Error, Equatable, Sendable, CustomStringConvertible {
         case .targetExists(let path):
             return "\(path) 已经有了。要覆盖就加 --force"
         case .targetNotAFile(let path):
-            return "\(path) 是文件夹（或别的不是普通文件的东西），不能当导出文件。请写一个文件名，例如 \(path)/squirrel-macos-导出.zip"
+            return "\(path) 是文件夹（或别的不是普通文件的东西），不能当导出文件。请写一个文件名，例如 \(path)/\(AppInfo.name)-导出.zip"
         case .notAnExport(let path):
-            return "\(path) 不是 squirrel-macos 的导出文件"
+            return "\(path) 不是\(AppInfo.name)的导出文件"
         case .unsupportedFormat(let v):
             return "导出文件的格式版本是 \(v)，这个版本的应用只认识 \(ExportManifest.currentFormatVersion)，请更新应用"
         case .badSettings(let message):

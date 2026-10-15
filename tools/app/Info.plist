@@ -7,9 +7,9 @@
     <key>CFBundleIdentifier</key>
     <string>io.github.pokoblin.squirrel-macos</string>
     <key>CFBundleName</key>
-    <string>squirrel-macos</string>
+    <string>鼠须管助手</string>
     <key>CFBundleDisplayName</key>
-    <string>squirrel-macos</string>
+    <string>鼠须管助手</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -18,6 +18,8 @@
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>27.0</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 bindiry · MIT License · 非鼠须管官方出品</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

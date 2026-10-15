@@ -185,7 +185,7 @@ import Testing
         let flow = SetupFlow(env: b.environment())
         await flow.importFile(file)
         guard case .failed(let message) = flow.step else { Issue.record("\(flow.step)"); return }
-        #expect(message.contains("不是 squirrel-macos 的导出文件"))
+        #expect(message.contains("不是鼠须管助手的导出文件"))
     }
 
     @Test func 下载失败时先用本地旧版本_完成页提醒() async throws {

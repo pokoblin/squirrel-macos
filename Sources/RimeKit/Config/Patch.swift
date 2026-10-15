@@ -33,7 +33,7 @@ public struct Patch: Equatable {
         public let value: Node
     }
 
-    public static let header = "# 由 squirrel-macos 生成。请在应用里修改设置；直接改这个文件，下次应用时会被覆盖。\n"
+    public static let header = "# 由\(AppInfo.name)（squirrel-macos）生成。请在\(AppInfo.name)里修改设置；直接改这个文件，下次应用时会被覆盖。\n"
 
     public private(set) var entries: [Entry] = []
 

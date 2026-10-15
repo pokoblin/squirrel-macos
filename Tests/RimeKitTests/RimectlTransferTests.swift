@@ -88,7 +88,7 @@ import Testing
         try Data("不是".utf8).write(to: file)
         let c = cli(b)
         #expect(await c.run(["import", file.path, "--cache-only"]) == 1)
-        #expect(c.output.text.contains("不是 squirrel-macos 的导出文件"))
+        #expect(c.output.text.contains("不是鼠须管助手的导出文件"))
     }
 
     @Test func 没装鼠须管时先装() async throws {
