@@ -3,31 +3,42 @@ import RimeKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 应用的根视图：现在只有第一次打开的引导（主窗口在阶段 8b）
+/// 应用的根视图：先走第一次打开的引导，设置好了进主窗口
 public struct RootView: View {
-    let flow: SetupFlow?
+    let state: AppState?
 
-    public init(flow: SetupFlow?) {
-        self.flow = flow
+    public init(state: AppState?) {
+        self.state = state
     }
 
     public var body: some View {
-        Group {
-            if let flow {
-                SetupView(flow: flow)
-                    .task { await flow.start() }
+        if let state {
+            if let main = state.main {
+                MainView(model: main)
+            } else if let error = state.openError {
+                Message(symbol: "exclamationmark.triangle", title: "打不开主窗口", lines: [error])
+                    .padding(40)
+                    .frame(width: 560)
             } else {
+                SetupView(flow: state.setup, onFinish: { state.openMain(welcome: $0) })
+                    .task { await state.start() }
+                    .frame(width: 560)
+                    .frame(minHeight: 360)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
                 Message(symbol: "exclamationmark.triangle", title: "应用里找不到方案清单",
                         lines: ["应用好像坏了，请重新下载"])
             }
+            .padding(40)
+            .frame(width: 560)
         }
-        .frame(width: 560)
-        .frame(minHeight: 360)
     }
 }
 
 struct SetupView: View {
     let flow: SetupFlow
+    let onFinish: ([String]) -> Void
     @State private var importing = false
 
     var body: some View {
@@ -76,7 +87,8 @@ struct SetupView: View {
             chooseStart(choice)
         case .done(let lines):
             Message(symbol: "checkmark.circle", title: "设置好了", lines: lines)
-            Button("重新检查") { Task { await flow.start() } }
+            Button("开始使用") { onFinish(lines) }
+                .buttonStyle(.borderedProminent)
         case .failed(let message):
             Message(symbol: "exclamationmark.triangle", title: "出了点问题", lines: [message])
             Button("重试") { Task { await flow.start() } }
