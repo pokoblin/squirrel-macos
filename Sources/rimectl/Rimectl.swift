@@ -7,6 +7,7 @@ struct Rimectl {
     struct Context: Sendable {
         var http: any HTTPClient
         var retry: RetryPolicy
+        /// 内置的方案清单；run 里会换成生效的那份（内置的或在线拉到的）
         var catalog: @Sendable () throws -> Catalog
         var defaultPaths: AppPaths
         var output: Output
@@ -28,6 +29,12 @@ struct Rimectl {
         var textReplacementSnapshot: @Sendable () throws -> TextReplacementSnapshot = { try TextReplacementReader().snapshot() }
         /// 空就用鼠须管自带的 rime_dict_manager
         var userDBTool: (any UserDBTool)? = nil
+        /// 认哪些在线清单的签名公钥；测试换成测试公钥
+        var catalogKeys: [Data] = CatalogSignature.trustedKeys
+        /// 在线清单的地址
+        var catalogURL: URL = CatalogStore.defaultRemote
+        /// catalog sign 从这里读私钥
+        var readStdin: @Sendable () -> Data = { FileHandle.standardInput.readDataToEndOfFile() }
 
         /// 能用的文本替换
         func textReplacements() throws -> [Phrase] {
@@ -37,7 +44,7 @@ struct Rimectl {
 
     static let usage = """
     用法：
-      rimectl catalog                                          列出内置方案清单
+      rimectl catalog [show|check]                             列出方案清单 / 看用的是哪份 / 检查在线方案清单更新
       rimectl fetch [--cache-only] 包名...                      下载（或从缓存取）这些包和它们的依赖
       rimectl settings init <rime-ice|flypy|wubi-pinyin> [--force]   写入起步设置
       rimectl settings show                                    打印当前设置
@@ -143,12 +150,17 @@ struct Rimectl {
         let paths = dataDir.map { AppPaths(root: URL(fileURLWithPath: $0, isDirectory: true)) } ?? context.defaultPaths
         var locations = context.locations
         if let rimeDir { locations.rimeDirectory = URL(fileURLWithPath: rimeDir, isDirectory: true) }
+        let catalogStore = CatalogStore(paths: paths, http: context.http, retry: context.retry,
+                                        builtIn: context.catalog, keys: context.catalogKeys, remote: context.catalogURL)
+        // 以后各命令取清单都取生效的那份
+        var context = context
+        context.catalog = { try catalogStore.effective().catalog }
 
         do {
             switch command {
             case "catalog":
-                try listCatalog(try context.catalog(), out)
-                return 0
+                return try await catalogCommand(Array(positional.dropFirst()), outFile: outDir, store: catalogStore,
+                                                paths: paths, context)
             case "settings":
                 return try settingsCommand(Array(positional.dropFirst()), force: force, paths: paths, context)
             case "generate":
@@ -171,7 +183,7 @@ struct Rimectl {
                                         paths: paths, locations: locations, context)
             case "import":
                 return try await importCommand(Array(positional.dropFirst()), includeUserDB: !noUserDB, cacheOnly: cacheOnly,
-                                               paths: paths, locations: locations, context)
+                                               store: catalogStore, paths: paths, locations: locations, context)
             case "status":
                 return try status(paths: paths, locations: locations, context)
             case "restore":
@@ -194,6 +206,86 @@ struct Rimectl {
         } catch {
             out.error(String(describing: error))
             return 1
+        }
+    }
+
+    /// 方案清单（在线方案清单设计 4.8、5.1）。keygen、sign、verify、verify-source 是发布用的，不写进 usage
+    private static func catalogCommand(_ args: [String], outFile: String?, store: CatalogStore, paths: AppPaths,
+                                       _ context: Context) async throws -> Int32 {
+        let out = context.output
+        switch args.first {
+        case nil:
+            try listCatalog(try context.catalog(), out)
+            return 0
+        case "show":
+            let status = try store.effective()
+            out.line(describe(status))
+            out.line("包 \(status.catalog.packages.count) 个")
+            if let problem = status.cacheProblem { out.line("缓存的在线方案清单用不了：\(problem)") }
+            return 0
+        case "check":
+            let settings = try SettingsStore(paths: paths).load()
+            switch await store.check(inUse: settings) {
+            case .upToDate:
+                out.line("方案清单已经是最新的")
+                return 0
+            case .updated(let diff, let status):
+                out.line("方案清单更新了（编号 \(status.catalog.serial)）")
+                diff.lines.forEach(out.line)
+                if diff.affectsInUse { out.line("运行 rimectl apply 让新的安装规则生效") }
+                return 0
+            case .rejected(let reason):
+                out.error("没有用上新的方案清单：\(reason)")
+                return 1
+            }
+        case "keygen":
+            let pair = CatalogSignature.generateKeyPair()
+            out.line("private \(pair.privateKey)")
+            out.line("public \(pair.publicKey)")
+            return 0
+        case "sign":
+            guard args.count == 2, let outFile else { out.error(usage); return 2 }
+            let key = String(decoding: context.readStdin(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let privateKey = Data(base64Encoded: key) else { out.error("标准输入里读不到私钥（base64）"); return 1 }
+            let data = try Data(contentsOf: URL(fileURLWithPath: args[1]))
+            try CatalogSignature.sign(data, privateKey: privateKey).write(to: URL(fileURLWithPath: outFile))
+            return 0
+        case "verify":
+            guard args.count == 3 else { out.error(usage); return 2 }
+            let data = try Data(contentsOf: URL(fileURLWithPath: args[1]))
+            let signature = try Data(contentsOf: URL(fileURLWithPath: args[2]))
+            guard CatalogSignature.verify(data, signature: signature, keys: context.catalogKeys) else {
+                out.error("签名不对")
+                return 1
+            }
+            out.line("签名正确")
+            return 0
+        case "verify-source":
+            guard args.count == 2 || args.count == 3 else { out.error(usage); return 2 }
+            let new = try Catalog.decode(Data(contentsOf: URL(fileURLWithPath: args[1])))
+            var old: Catalog?
+            if args.count == 3, FileManager.default.fileExists(atPath: args[2]) {
+                old = try Catalog.decode(Data(contentsOf: URL(fileURLWithPath: args[2])))
+            }
+            let problems = CatalogPublishCheck.problems(old: old, new: new)
+            guard problems.isEmpty else {
+                problems.forEach(out.error)
+                return 1
+            }
+            out.line("清单可以发布（编号 \(new.serial)，包 \(new.packages.count) 个）")
+            return 0
+        default:
+            out.error(usage)
+            return 2
+        }
+    }
+
+    private static func describe(_ status: CatalogStatus) -> String {
+        switch status.origin {
+        case .builtIn:
+            return "用的是内置方案清单（编号 \(status.catalog.serial)）"
+        case .online(let date):
+            return "用的是在线方案清单（编号 \(status.catalog.serial)，\(date.formatted(date: .numeric, time: .shortened)) 下载）"
         }
     }
 
@@ -486,14 +578,20 @@ struct Rimectl {
         return 0
     }
 
-    private static func importCommand(_ args: [String], includeUserDB: Bool, cacheOnly: Bool, paths: AppPaths,
+    private static func importCommand(_ args: [String], includeUserDB: Bool, cacheOnly: Bool,
+                                      store catalogStore: CatalogStore, paths: AppPaths,
                                       locations: RimeLocations, _ context: Context) async throws -> Int32 {
         let out = context.output
         guard args.count == 1 else { out.error(usage); return 2 }
-        let catalog = try context.catalog()
         let work = paths.staging.appending(path: "import-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: work) }
-        let archive = try ImportArchive.open(URL(fileURLWithPath: args[0]), catalog: catalog, into: work)
+        let inUse = (try? SettingsStore(paths: paths).load()) ?? nil
+        let opened = try await catalogStore.openArchive(
+            URL(fileURLWithPath: args[0]), catalog: try context.catalog(), inUse: inUse, into: work,
+            checking: { out.line("导出文件里有现在的方案清单不认识的方案，正在检查方案清单更新……") })
+        if let updated = opened.updated { out.line("方案清单更新了（编号 \(updated.catalog.serial)）") }
+        let archive = opened.archive
+        let catalog = try context.catalog()   // 可能刚更新过
         let settings = archive.manifest.settings
         out.line("导出时间：\(archive.manifest.exportedAt.formatted(date: .numeric, time: .standard))")
         out.line("方案 \(settings.schemas.count) 个，个人词库 \(archive.personalDicts.count) 个，手动短语 \(archive.phrases.count) 条，输入习惯 \(archive.userDB.count) 份")
