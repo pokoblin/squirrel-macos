@@ -15,9 +15,11 @@ public enum RimeFiles {
     }
 
     /// 目录里的配置文件（相对路径，排好序）：普通文件和符号链接，跳过 Rime 自己的运行文件。目录不存在时返回空。
-    public static func configFiles(in dir: URL) throws -> [String] {
+    public static func configFiles(in directory: URL) throws -> [String] {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: dir.path) else { return [] }
+        guard fm.fileExists(atPath: directory.path) else { return [] }
+        // Rime 目录本身可能是符号链接（放在网盘、dotfiles 里）：subpathsOfDirectory 不会跟随，要先解析
+        let dir = directory.resolvingSymlinksInPath()
         return try fm.subpathsOfDirectory(atPath: dir.path).filter { sub in
             guard !isRimeOwned(sub) else { return false }
             let type = (try? fm.attributesOfItem(atPath: dir.appending(path: sub).path))?[.type] as? FileAttributeType
