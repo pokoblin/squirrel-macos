@@ -1,0 +1,13 @@
+.DS_Store
+# 虚拟机用的 SSH 公钥，每台电脑自己生成
+tools/vm/*.pub
+# 编译出来的测试工具
+tools/vm/tis-probe
+tools/vm/rime-type-probe
+tools/vm/TRProbe.app/
+# Swift / Xcode
+.build/
+DerivedData/
+*.xcuserstate
+# 执行计划时的临时工作区
+.superpowers/
