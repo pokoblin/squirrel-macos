@@ -37,20 +37,6 @@ public struct TakeoverApplier: Sendable {
         return try await deployer.apply(
             staged.generationInput(catalog: catalog, packages: packages, textReplacement: textReplacement),
             options: ApplyOptions(overwriteExternalChanges: true),
-            afterWrite: { try Self.save(settings: settings, dicts: dictFiles, phrases: phrases, paths: paths) })
-    }
-
-    static func save(settings: Settings, dicts: [URL], phrases: [Phrase], paths: AppPaths) throws {
-        let fm = FileManager.default
-        if fm.fileExists(atPath: paths.personal.path) { try fm.removeItem(at: paths.personal) }
-        try fm.createDirectory(at: paths.personalDicts, withIntermediateDirectories: true)
-        for url in dicts {
-            try fm.copyItem(at: url, to: paths.personalDicts.appending(path: url.lastPathComponent))
-        }
-        if !phrases.isEmpty {
-            try Data((PhraseFile.header + PhraseFile.render(phrases)).utf8).write(to: paths.personalPhrases, options: .atomic)
-        }
-        // 设置最后存：个人内容没存好就不会有设置
-        try SettingsStore(paths: paths).save(settings)
+            afterWrite: { try AppDataWriter.replace(settings: settings, dicts: dictFiles, phrases: phrases, paths: paths) })
     }
 }

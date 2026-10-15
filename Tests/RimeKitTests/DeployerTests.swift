@@ -191,4 +191,21 @@ import Testing
             try await deployer.apply(try e.input(Settings(schemas: ["wb"])))
         }
     }
+
+    @Test func 可以要求这次的备份永久保留() async throws {
+        let m = try TransferFixtures.machine(); defer { m.dir.remove() }
+        try FileManager.default.createDirectory(at: m.locations.rimeDirectory, withIntermediateDirectories: true)
+        try Data("随手记\n".utf8).write(to: m.locations.rimeDirectory.appending(path: "notes.txt"))
+        let input = GenerationInput(settings: TransferFixtures.settings, catalog: m.catalog, packages: m.packages,
+                                    personal: .empty, textReplacementPhrases: [])
+        guard case .applied(let first) = try await m.deployer().apply(input) else { Issue.record("没有写入"); return }
+        #expect(first.backup.permanent)   // 第一次应用前：本来就永久保留
+        guard case .applied(let second) = try await m.deployer().apply(input, options: ApplyOptions(permanentBackupReason: "导入前")) else {
+            Issue.record("没有写入"); return
+        }
+        #expect(second.backup.permanent)
+        #expect(second.backup.reason == "导入前")
+        guard case .applied(let third) = try await m.deployer().apply(input) else { Issue.record("没有写入"); return }
+        #expect(!third.backup.permanent)
+    }
 }

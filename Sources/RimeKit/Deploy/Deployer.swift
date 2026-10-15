@@ -6,10 +6,13 @@ public struct ApplyOptions: Sendable, Equatable {
     public var overwriteExternalChanges: Bool
     /// 在应用外改过的个人词库，收回到 personal/ 当正本
     public var adoptPersonalChanges: Bool
+    /// 不为空时这次的备份永久保留，说明写这个（例如「导入前」）。Rime 目录里没有配置文件时不用永久保留
+    public var permanentBackupReason: String?
 
-    public init(overwriteExternalChanges: Bool = false, adoptPersonalChanges: Bool = false) {
+    public init(overwriteExternalChanges: Bool = false, adoptPersonalChanges: Bool = false, permanentBackupReason: String? = nil) {
         self.overwriteExternalChanges = overwriteExternalChanges
         self.adoptPersonalChanges = adoptPersonalChanges
+        self.permanentBackupReason = permanentBackupReason
     }
 }
 
@@ -136,10 +139,17 @@ public struct Deployer: Sendable {
         // 4. 备份
         let backups = BackupStore(paths: paths, now: now)
         let first = ledger.entries.isEmpty
-        // 永久保留只要一份：还原到第一次应用前再应用时，不再加新的永久备份
-        let keep = first && !existing.isEmpty && !backups.list().contains(where: \.permanent)
-        let backup = try backups.create(from: rime, reason: first ? "第一次应用前" : "应用改动前",
-                                        permanent: keep, ledger: ledger)
+        let keep: Bool
+        let reason: String
+        if let permanent = options.permanentBackupReason {
+            keep = !existing.isEmpty
+            reason = permanent
+        } else {
+            // 永久保留只要一份：还原到第一次应用前再应用时，不再加新的永久备份
+            keep = first && !existing.isEmpty && !backups.list().contains(where: \.permanent)
+            reason = first ? "第一次应用前" : "应用改动前"
+        }
+        let backup = try backups.create(from: rime, reason: reason, permanent: keep, ledger: ledger)
 
         // 5. 写入；出错就用刚才的备份还原
         var written: [String] = []
