@@ -7,6 +7,7 @@ public enum RimeFiles {
         let first = path.split(separator: "/").first.map(String.init) ?? path
         let name = (path as NSString).lastPathComponent
         if first == "build" || first == "sync" { return true }
+        if first == ".git" { return true }   // 直接 git clone 到 Rime 目录的情况：不复制、不备份、不动
         if path == "installation.yaml" || path == "user.yaml" { return true }
         if first.hasSuffix(".userdb") || name.hasSuffix(".userdb.txt") { return true }
         if name == ".DS_Store" { return true }

@@ -85,19 +85,25 @@ public struct Deployer: Sendable {
         let ledger = try Ledger.load(paths)
         var input = input
 
-        // 1. 已管理的文件有没有在应用外被改过；需要的话把个人词库的修改收回来
+        let work = paths.staging.appending(path: "apply-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? fm.removeItem(at: work) }
+
+        // 1. 已管理的文件有没有在应用外被改过；需要的话采用个人词库的外部修改
+        //    （先放在暂存区，写入成功后才放回 personal/，中途停下不会动正本）
         var changes = ledger.externalChanges(in: rime)
+        var adopted: [(path: String, staged: URL)] = []
         if options.adoptPersonalChanges {
-            let adopted = try adoptPersonal(changes, ledger: ledger)
-            if !adopted.isEmpty {
-                input.personal = try PersonalContent.load(from: paths)
-                changes.removeAll { adopted.contains($0.path) }
+            adopted = try stageAdoptedPersonal(changes, ledger: ledger, into: work.appending(path: "adopted", directoryHint: .isDirectory))
+            let names = Set(adopted.map { $0.staged.lastPathComponent })
+            if !names.isEmpty {
+                input.personal.dicts = (input.personal.dicts.filter { !names.contains($0.lastPathComponent) } + adopted.map(\.staged))
+                    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+                let adoptedPaths = Set(adopted.map(\.path))
+                changes.removeAll { adoptedPaths.contains($0.path) }
             }
         }
 
         // 2. 在暂存区生成
-        let work = paths.staging.appending(path: "apply-\(UUID().uuidString)", directoryHint: .isDirectory)
-        defer { try? fm.removeItem(at: work) }
         let generated = work.appending(path: "generated", directoryHint: .isDirectory)
         let result = try ConfigGenerator().generate(input, into: generated)
         let newPaths = result.files.map(\.path)
@@ -127,8 +133,10 @@ public struct Deployer: Sendable {
         // 4. 备份
         let backups = BackupStore(paths: paths, now: now)
         let first = ledger.entries.isEmpty
+        // 永久保留只要一份：还原到第一次应用前再应用时，不再加新的永久备份
+        let keep = first && !existing.isEmpty && !backups.list().contains(where: \.permanent)
         let backup = try backups.create(from: rime, reason: first ? "第一次应用前" : "应用改动前",
-                                        permanent: first && !existing.isEmpty, ledger: ledger)
+                                        permanent: keep, ledger: ledger)
 
         // 5. 写入；出错就用刚才的备份还原
         var written: [String] = []
@@ -157,6 +165,10 @@ public struct Deployer: Sendable {
                 }
             }
             try newLedger.save(paths)
+            for item in adopted {
+                try fm.createDirectory(at: paths.personalDicts, withIntermediateDirectories: true)
+                try Self.replace(paths.personalDicts.appending(path: item.staged.lastPathComponent), with: item.staged)
+            }
         } catch {
             let restored = (try? backups.restore(backup.id, to: rime, managed: Set(written))) != nil
             if restored { try? ledger.save(paths) }
@@ -231,16 +243,15 @@ public struct Deployer: Sendable {
         return (launched, deploy, warnings)
     }
 
-    /// 把在应用外改过的个人词库复制回 personal/dicts/，返回收回的路径
-    private func adoptPersonal(_ changes: [ExternalChange], ledger: Ledger) throws -> [String] {
-        var adopted: [String] = []
+    /// 把在应用外改过的个人词库先复制到暂存区（写入成功后才放回 personal/）
+    private func stageAdoptedPersonal(_ changes: [ExternalChange], ledger: Ledger, into dir: URL) throws -> [(path: String, staged: URL)] {
+        var result: [(path: String, staged: URL)] = []
         for case .modified(let path) in changes where ledger.entries[path]?.origin == FileOrigin.personal.ledgerValue {
-            let target = paths.personalDicts.appending(path: (path as NSString).lastPathComponent)
-            try FileManager.default.createDirectory(at: paths.personalDicts, withIntermediateDirectories: true)
-            try Self.replace(target, with: locations.rimeDirectory.appending(path: path))
-            adopted.append(path)
+            let staged = dir.appending(path: (path as NSString).lastPathComponent)
+            try Self.copy(locations.rimeDirectory.appending(path: path), to: staged)
+            result.append((path, staged))
         }
-        return adopted
+        return result
     }
 
     /// 复制到暂存区：符号链接换成它指向的真实内容（相对链接直接复制过去会断）；指向不存在的链接跳过
