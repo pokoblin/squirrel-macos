@@ -27,7 +27,7 @@
 | 已安装的版本在 `Squirrel.app/Contents/Info.plist` 的 `CFBundleVersion`（1.1.2 没有 `CFBundleShortVersionString`） | 实测（宿主机） |
 | **安装包改了 1 个字节，`spctl -a -t install` 仍然 `accepted`**；`pkgutil --check-signature` 报 `package is invalid (checksum did not verify)`，退出码 1。所以要 sha256 + `pkgutil` + `spctl` 三道检查 | 实测（宿主机临时目录，2026-10-15；阶段 4 联网测试） |
 | `rimectl install --gui-auth`（进程里用 `NSAppleScript` 的 `with administrator privileges`）在干净测试机里弹出系统授权框：输密码就装好；点「取消」时错误号是 -128，什么都不动。免密 sudo（`sudo -n installer`）不弹框也能装 | 实测（squirrel-fresh，阶段 4） |
-| 应用用 Developer ID 签名、**打开 hardened runtime**（没有加任何 entitlement）、公证后，进程里用 `NSAppleScript` 的 `with administrator privileges` 安装：照样弹出系统授权框，输密码就装好。不需要 `com.apple.security.automation.apple-events` | 实测（squirrel-release，发布 0.1.0 前，见 [release-vm-log.md](release-vm-log.md)） |
+| 应用用 Developer ID 签名、**打开 hardened runtime**（没有加任何 entitlement）、公证后，用 osascript 子进程执行 `do shell script … with administrator privileges` 安装（`OsascriptPrivilegedInstaller`）：照样弹出系统授权框，输密码就装好。不需要 `com.apple.security.automation.apple-events`。rimectl `--gui-auth` 用的进程内 `NSAppleScript` 在 hardened runtime 下没有验证过 | 实测（squirrel-release，发布 0.1.0 前，见 [release-vm-log.md](release-vm-log.md)） |
 
 ### 安装包的 postinstall 脚本做了什么（查看）
 

@@ -5,5 +5,5 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 vm="${1:?用法：$0 <测试机名字>}"
 app="$(./tools/app/build-app.sh)"
-./tools/vm/vm.sh ssh "$vm" "pkill -x SquirrelMacOSApp || true; mkdir -p ~/Applications && rm -rf ~/Applications/SquirrelHelper.app && cp -R '/Volumes/My Shared Files/project/$app' ~/Applications/ && xattr -cr ~/Applications/SquirrelHelper.app && sudo launchctl asuser \$(id -u) sudo -u tester open ~/Applications/SquirrelHelper.app"
+./tools/vm/vm.sh ssh "$vm" "pkill -x SquirrelMacOSApp || true; mkdir -p ~/Applications && rm -rf ~/Applications/SquirrelHelper.app ~/Applications/squirrel-macos.app ~/Applications/鼠须管助手.app && cp -R '/Volumes/My Shared Files/project/$app' ~/Applications/ && xattr -cr ~/Applications/SquirrelHelper.app && sudo launchctl asuser \$(id -u) sudo -u tester open ~/Applications/SquirrelHelper.app"
 echo "已在 $vm 里打开 ~/Applications/SquirrelHelper.app"

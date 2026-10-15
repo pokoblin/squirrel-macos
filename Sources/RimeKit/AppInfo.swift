@@ -2,5 +2,4 @@
 /// 内部标识（bundle ID、数据目录 squirrel-macos、rimectl）不跟着改，免得已有数据对不上
 public enum AppInfo {
     public static let name = "鼠须管助手"
-    public static let englishName = "SquirrelHelper"
 }

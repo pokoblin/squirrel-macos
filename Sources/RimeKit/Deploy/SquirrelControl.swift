@@ -44,8 +44,6 @@ public struct SquirrelControl: SquirrelControlling {
         guard r.status == 0 else { throw SquirrelError.commandFailed("open 鼠须管", r.stderr) }
     }
 
-    /// 输入源从系统里消失时用（阶段 5 测试机实测：运行这条命令马上就回来了）。
-    /// 重装不一定有用：postinstall 认为「已经注册过」就跳过注册
     /// 只退出当前用户的鼠须管；没在运行时 killall 返回 1，不算错
     public func quit() throws {
         let r = try Shell.run("/usr/bin/killall", ["-u", NSUserName(), "Squirrel"])
@@ -59,6 +57,8 @@ public struct SquirrelControl: SquirrelControlling {
         status != 0 && !stderr.contains("No matching processes")
     }
 
+    /// 输入源从系统里消失时用（阶段 5 测试机实测：运行这条命令马上就回来了）。
+    /// 重装不一定有用：postinstall 认为「已经注册过」就跳过注册
     public func registerInputSource() throws {
         let r = try Shell.run(locations.squirrelBinary.path, ["--register-input-source"])
         guard r.status == 0 else { throw SquirrelError.commandFailed("Squirrel --register-input-source", r.stderr) }
