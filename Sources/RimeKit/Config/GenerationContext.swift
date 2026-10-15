@@ -1,0 +1,133 @@
+import Foundation
+import Yams
+
+/// 一次生成的过程和中间状态
+final class GenerationContext {
+    let input: GenerationInput
+    let output: URL
+    let required: [PackageSpec]
+    private let fm = FileManager.default
+    private var files: [String: FileOrigin] = [:]
+    private(set) var warnings: [String] = []
+    /// 配置名（default、squirrel、方案 id）→ 补丁
+    var patches: [String: Patch] = [:]
+
+    init(input: GenerationInput, output: URL) throws {
+        self.input = input
+        self.output = output
+        if fm.fileExists(atPath: output.path) {
+            guard try fm.contentsOfDirectory(atPath: output.path).isEmpty else {
+                throw GenerationError.outputNotEmpty(output.path)
+            }
+        }
+        required = try input.settings.requiredPackages(input.catalog)
+        for spec in required where input.packages[spec.id] == nil {
+            throw GenerationError.missingPackage(spec.id)
+        }
+        try fm.createDirectory(at: output, withIntermediateDirectories: true)
+    }
+
+    func result() -> GenerationResult {
+        GenerationResult(
+            files: files.keys.sorted().map { GeneratedFile(path: $0, origin: files[$0]!) },
+            warnings: warnings)
+    }
+
+    // MARK: 写文件
+
+    func write(_ text: String, to path: String, origin: FileOrigin) throws {
+        let url = output.appending(path: path)
+        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: url, options: .atomic)
+        files[path] = origin
+    }
+
+    func copy(_ source: URL, to path: String, origin: FileOrigin) throws {
+        let target = output.appending(path: path)
+        if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+        try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.copyItem(at: source, to: target)
+        files[path] = origin
+    }
+
+    func readYAML(_ path: String, label: String) throws -> Node? {
+        let url = output.appending(path: path)
+        guard fm.fileExists(atPath: url.path) else { return nil }
+        do {
+            return try YAMLNode.parse(try String(contentsOf: url, encoding: .utf8))
+        } catch {
+            throw GenerationError.badYAML(file: label, message: String(describing: error))
+        }
+    }
+
+    // MARK: 规则 2：复制上游文件
+
+    static func isUpstreamPatch(_ path: String) -> Bool {
+        !path.contains("/") && path.hasSuffix(".custom.yaml")
+    }
+
+    func copyPackageFiles() throws {
+        for spec in required {
+            let package = input.packages[spec.id]!
+            for path in package.info.files where !Self.isUpstreamPatch(path) && path != "LICENSE" {
+                let source = package.filesDirectory.appending(path: path)
+                let target = output.appending(path: path)
+                if fm.fileExists(atPath: target.path), !fm.contentsEqual(atPath: source.path, andPath: target.path) {
+                    warnings.append("\(path) 在好几个包里都有而且内容不一样，用的是 \(spec.id) 的")
+                }
+                try copy(source, to: path, origin: .package(spec.id))
+            }
+        }
+    }
+
+    // MARK: 规则 3：上游补丁当默认值
+
+    func collectUpstreamPatches() throws {
+        for spec in required {
+            let package = input.packages[spec.id]!
+            for path in package.info.files where Self.isUpstreamPatch(path) {
+                let name = String(path.dropLast(".custom.yaml".count))
+                let text = try String(contentsOf: package.filesDirectory.appending(path: path), encoding: .utf8)
+                do {
+                    patches[name, default: Patch()].merge(try Patch.parse(customYAML: text))
+                } catch {
+                    throw GenerationError.badYAML(file: "\(spec.id)/\(path)", message: String(describing: error))
+                }
+            }
+        }
+    }
+
+    // MARK: 设置里保留的补丁
+
+    func applyPreservedPatches() throws {
+        for (name, items) in input.settings.preservedPatches.sorted(by: { $0.key < $1.key }) {
+            for item in items {
+                let node: Node?
+                do {
+                    node = try YAMLNode.parse(item.yaml)
+                } catch {
+                    throw GenerationError.badYAML(file: "settings.json 里保留的 \(name) 补丁 \(item.key)", message: String(describing: error))
+                }
+                if let node { patches[name, default: Patch()].set(item.key, node) }
+            }
+        }
+    }
+
+    // MARK: 规则 4：方案列表、每页候选数
+
+    func applySchemaList() {
+        let list = YAMLNode.list(input.settings.schemas.map { YAMLNode.map([("schema", YAMLNode.text($0))]) })
+        patches["default", default: Patch()].set("schema_list", list)
+        if let pageSize = input.settings.appearance.pageSize {
+            patches["default", default: Patch()].set("menu/page_size", YAMLNode.int(pageSize))
+        }
+    }
+
+    // MARK: 规则 8：写出补丁文件
+
+    func writePatches() throws {
+        for (name, patch) in patches.sorted(by: { $0.key < $1.key }) where !patch.isEmpty {
+            try write(try patch.renderCustomYAML(), to: "\(name).custom.yaml", origin: .generated)
+        }
+    }
+}
