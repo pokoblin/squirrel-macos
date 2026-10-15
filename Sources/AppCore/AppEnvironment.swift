@@ -5,7 +5,11 @@ import RimeKit
 public struct AppEnvironment: Sendable {
     public var paths: AppPaths
     public var locations: RimeLocations
-    public var catalog: Catalog
+    /// 方案清单：读内置和缓存的、检查在线更新
+    public var catalogStore: CatalogStore
+    /// 生效的方案清单（引导和主窗口共用）
+    public var catalogs: CatalogHolder
+    public var catalog: Catalog { catalogs.status.catalog }
     public var compiler: any RimeCompiler
     public var squirrel: any SquirrelControlling
     public var inputSource: any InputSourceControlling
@@ -33,8 +37,9 @@ public struct AppEnvironment: Sendable {
         let locations = RimeLocations.default
         let http = URLSessionHTTPClient()
         let store = PackageStore(paths: paths, http: http, retry: .standard)
+        let catalogStore = CatalogStore(paths: paths, http: http)
         return AppEnvironment(
-            paths: paths, locations: locations, catalog: try Catalog.builtIn(),
+            paths: paths, locations: locations, catalogStore: catalogStore, catalogs: CatalogHolder(try catalogStore.effective()),
             compiler: DeployerCompiler(locations: locations),
             squirrel: SquirrelControl(locations: locations),
             inputSource: AppInputSource(),

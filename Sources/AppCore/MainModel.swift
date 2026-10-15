@@ -56,12 +56,20 @@ public final class MainModel {
     public internal(set) var checks: [DoctorCheck] = []
     /// 导出时带上输入习惯（默认带上）
     public var includeUserDB = true
+    /// 生效的方案清单（检查更新、导入时会换）
+    public internal(set) var catalogStatus: CatalogStatus
+    public var catalog: Catalog { catalogStatus.catalog }
+    /// 方案清单更新改到了正在用的包：要重新应用一次
+    public internal(set) var catalogNeedsApply = false
+    /// 底部要不要显示「应用改动」
+    public var hasPendingChanges: Bool { isDirty || catalogNeedsApply }
 
     let env: AppEnvironment
 
     public init(env: AppEnvironment, welcome: [String] = []) throws {
         guard let settings = try SettingsStore(paths: env.paths).load() else { throw TransferError.noSettings }
         self.env = env
+        catalogStatus = env.catalogs.status
         saved = settings
         draft = settings
         if !welcome.isEmpty { notice = Notice(kind: .info, title: "设置好了", lines: welcome) }
@@ -72,7 +80,7 @@ public final class MainModel {
     func normalized(_ settings: Settings) -> Settings {
         var copy = settings
         for (packageID, choices) in settings.options {
-            guard let package = env.catalog.package(packageID) else { continue }
+            guard let package = catalog.package(packageID) else { continue }
             let defaults = Dictionary(uniqueKeysWithValues: package.options.map { ($0.id, $0.defaultChoice) })
             let kept = choices.filter { defaults[$0.key] != $0.value }
             copy.options[packageID] = kept.isEmpty ? nil : kept
@@ -86,13 +94,14 @@ public final class MainModel {
 
     // MARK: 方案
 
-    /// 有方案的包（方案页列出来让用户启用）
+    /// 有方案的包（方案页列出来让用户启用）。下架的不列，正在用的除外
     public var catalogPackages: [PackageSpec] {
-        env.catalog.packages.filter { !$0.schemas.isEmpty }
+        let used = Set((draft.schemas + saved.schemas).compactMap { catalog.packageOwning(schema: $0)?.id })
+        return catalog.packages.filter { !$0.schemas.isEmpty && (!$0.deprecated || used.contains($0.id)) }
     }
 
     public func schemaName(_ id: String) -> String {
-        env.catalog.packageOwning(schema: id)?.schemas.first { $0.id == id }?.name ?? id
+        catalog.packageOwning(schema: id)?.schemas.first { $0.id == id }?.name ?? id
     }
 
     public func isEnabled(_ schema: String) -> Bool {
@@ -122,7 +131,7 @@ public final class MainModel {
 
     /// 同时启用了好几个方案包时的提醒（同时启用的规则还没定）
     public var mixedPackagesNote: String? {
-        let packages = Set(draft.schemas.compactMap { env.catalog.packageOwning(schema: $0)?.id })
+        let packages = Set(draft.schemas.compactMap { catalog.packageOwning(schema: $0)?.id })
         guard packages.count > 1 else { return nil }
         return "同时启用了好几个方案包的方案，它们的默认短语、按键设置可能会互相影响"
     }
@@ -131,7 +140,7 @@ public final class MainModel {
 
     /// 用到的包里有选项的
     public var optionPackages: [PackageSpec] {
-        ((try? draft.requiredPackages(env.catalog)) ?? []).filter { !$0.options.isEmpty }
+        ((try? draft.requiredPackages(catalog)) ?? []).filter { !$0.options.isEmpty }
     }
 
     public func choice(_ option: PackageOption, of package: PackageSpec) -> String {
@@ -146,7 +155,7 @@ public final class MainModel {
 
     /// 用到的包里能选的配色（从本地缓存读；没有缓存的包跳过）
     func refreshColorSchemes() {
-        let packages = ((try? draft.requiredPackages(env.catalog)) ?? []).compactMap { env.cachedPackage($0) }
+        let packages = ((try? draft.requiredPackages(catalog)) ?? []).compactMap { env.cachedPackage($0) }
         colorSchemes = (try? ColorSchemes.available(in: packages)) ?? []
     }
 }

@@ -259,11 +259,19 @@ public final class SetupFlow {
         let accessing = file.startAccessingSecurityScopedResource()
         defer { if accessing { file.stopAccessingSecurityScopedResource() } }
         do {
+            let catalogStore = env.catalogStore
+            let current = env.catalog
+            let opened = try await offMain {
+                try await catalogStore.openArchive(file, catalog: current, inUse: nil, into: work,
+                                                   checking: { await MainActor.run { self.step = .working("正在更新方案清单……") } })
+            }
+            if let updated = opened.updated { env.catalogs.update(updated) }
+            let archive = opened.archive
             let catalog = env.catalog
-            let archive = try await offMain { try ImportArchive.open(file, catalog: catalog, into: work) }
             let settings = archive.manifest.settings
-            let packages = try await fetch(try settings.requiredPackages(env.catalog))
+            let packages = try await fetch(try settings.requiredPackages(catalog))
             var notes = archive.warnings
+            if opened.updated != nil { notes.insert("导出文件里有现在的方案清单不认识的方案，已经更新了方案清单", at: 0) }
             var textReplacement: [Phrase] = []
             if settings.textReplacement.sync {
                 do {

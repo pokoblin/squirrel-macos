@@ -27,7 +27,7 @@ extension MainModel {
         var settings = onlySync ? saved : draft
         if onlySync { settings.textReplacement.sync = true }
         do {
-            try settings.validate(env.catalog)
+            try settings.validate(catalog)
         } catch {
             notice = Notice(kind: .error, title: "设置有问题", lines: ["\(error)"])
             return
@@ -50,7 +50,7 @@ extension MainModel {
             } else {
                 replacements = []
             }
-            let input = GenerationInput(settings: settings, catalog: env.catalog, packages: packages,
+            let input = GenerationInput(settings: settings, catalog: catalog, packages: packages,
                                         personal: try PersonalContent.load(from: env.paths), textReplacementPhrases: replacements)
             // 写好后（通知鼠须管前）保存设置，并记下这次用的文本替换
             let updated = settings.recordingTextReplacement(replacements)
@@ -63,6 +63,7 @@ extension MainModel {
             switch outcome {
             case .applied(let report):
                 saved = updated
+                catalogNeedsApply = false
                 if onlySync {
                     draft.textReplacement.lastSyncedHash = updated.textReplacement.lastSyncedHash
                     draft.textReplacement.syncedEntries = updated.textReplacement.syncedEntries
@@ -94,7 +95,7 @@ extension MainModel {
     /// 取用到的包。下载失败、本地有旧版本时提示用户（返回 nil）；没有旧版本就抛错
     func packages(for settings: Settings, usingCache: Bool) async throws -> [String: CachedPackage]? {
         var result: [String: CachedPackage] = [:]
-        for spec in try settings.requiredPackages(env.catalog) {
+        for spec in try settings.requiredPackages(catalog) {
             working = "正在下载方案：\(spec.name)……"
             if usingCache, let cached = env.cachedPackage(spec) {
                 result[spec.id] = cached
@@ -117,7 +118,7 @@ extension MainModel {
     func packagesFallingBack(for settings: Settings) async throws -> ([String: CachedPackage], [String]) {
         var result: [String: CachedPackage] = [:]
         var notes: [String] = []
-        for spec in try settings.requiredPackages(env.catalog) {
+        for spec in try settings.requiredPackages(catalog) {
             working = "正在下载方案：\(spec.name)……"
             do {
                 result[spec.id] = try await env.fetchPackage(spec)
@@ -239,6 +240,33 @@ extension MainModel {
                         action: .syncTextReplacement, actionTitle: "现在同步")
     }
 
+    // MARK: 方案清单（在线方案清单设计 4.2）
+
+    public func checkCatalog() async {
+        guard working == nil else { return }
+        working = "正在检查方案清单更新……"
+        defer { working = nil }
+        let store = env.catalogStore
+        let inUse = saved
+        switch await store.check(inUse: inUse) {
+        case .upToDate:
+            notice = Notice(kind: .info, title: "方案清单已经是最新的", lines: [])
+        case .updated(let diff, let status):
+            adoptCatalog(status)
+            if diff.affectsInUse { catalogNeedsApply = true }
+            notice = Notice(kind: .info, title: "方案清单更新了", lines: diff.lines)
+        case .rejected(let reason):
+            notice = Notice(kind: .warning, title: "没有用上新的方案清单", lines: [reason, "继续用现在的方案清单"])
+        }
+    }
+
+    /// 换成新的方案清单；引导和主窗口共用一份
+    func adoptCatalog(_ status: CatalogStatus) {
+        env.catalogs.update(status)
+        catalogStatus = status
+        refreshColorSchemes()
+    }
+
     // MARK: 导出（设计 6.3）
 
     public func export(to file: URL) async {
@@ -246,7 +274,7 @@ extension MainModel {
         working = includeUserDB ? "正在导出（输入法会暂停几秒）……" : "正在导出……"
         defer { working = nil }
         do {
-            let versions = try saved.requiredPackages(env.catalog).compactMap { spec in
+            let versions = try saved.requiredPackages(catalog).compactMap { spec in
                 env.cachedPackage(spec).map { ExportManifest.Package(id: spec.id, version: $0.info.version) }
             }
             let exporter = Exporter(paths: env.paths, locations: env.locations,
@@ -274,12 +302,24 @@ extension MainModel {
         let accessing = file.startAccessingSecurityScopedResource()
         defer { if accessing { file.stopAccessingSecurityScopedResource() } }
         do {
-            let catalog = env.catalog
-            let archive = try await offMain { try ImportArchive.open(file, catalog: catalog, into: work) }
+            let catalogStore = env.catalogStore
+            let current = catalog
+            let inUse = saved
+            let opened = try await offMain {
+                try await catalogStore.openArchive(file, catalog: current, inUse: inUse, into: work,
+                                                   checking: { await MainActor.run { self.working = "正在更新方案清单……" } })
+            }
+            var catalogNote: [String] = []
+            if let updated = opened.updated {
+                adoptCatalog(updated)
+                catalogNote = ["导出文件里有现在的方案清单不认识的方案，已经更新了方案清单"]
+            }
+            let archive = opened.archive
+            let catalog = self.catalog
             let settings = archive.manifest.settings
             // 导入是一次性的：下载不了就直接用本地旧版本，结果里提醒（和第一次打开时的导入一样）
             let (packages, fallback) = try await packagesFallingBack(for: settings)
-            var lines = archive.warnings + fallback
+            var lines = catalogNote + archive.warnings + fallback
             var replacements: [Phrase] = []
             if settings.textReplacement.sync {
                 do {
@@ -298,6 +338,7 @@ extension MainModel {
             lines += report.warnings
             switch report.outcome {
             case .applied(let applied):
+                catalogNeedsApply = false
                 if let note = reloadSettingsAfterImport() { lines.append(note) }
                 refreshColorSchemes()
                 var result = Self.notice(for: applied)

@@ -74,4 +74,37 @@ enum TestCatalogs {
         try Zipper().zip(content, to: file)
         return file
     }
+
+    /// 把一份清单换上新的 serial，再在 JSON 上改一改（给 AppCore 测试用：假电脑的清单是 GenFixtures 的）
+    static func online(_ catalog: Catalog, serial: Int, _ change: (inout [[String: Any]]) -> Void = { _ in }) throws -> Data {
+        var object = try JSONSerialization.jsonObject(with: JSONCoding.encoder.encode(catalog)) as! [String: Any]
+        var packages = object["packages"] as! [[String: Any]]
+        change(&packages)
+        object["packages"] = packages
+        object["serial"] = serial
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+
+    /// 复制一个包，换 id 和方案（只有一个方案）
+    static func addPackage(copying id: String, as newID: String, schema: String, deprecated: Bool = false)
+        -> (inout [[String: Any]]) -> Void {
+        { packages in
+            var copy = packages.first { $0["id"] as? String == id }!
+            copy["id"] = newID
+            copy["name"] = "复制的\(newID)"
+            copy["schemas"] = [["id": schema, "name": "方案\(schema)", "category": "other"]]
+            copy["options"] = []
+            copy["userDicts"] = []
+            copy["deprecated"] = deprecated
+            packages.append(copy)
+        }
+    }
+
+    /// 改某个包的一个字段
+    static func set(_ id: String, _ key: String, _ value: Any) -> (inout [[String: Any]]) -> Void {
+        { packages in
+            let i = packages.firstIndex { $0["id"] as? String == id }!
+            packages[i][key] = value
+        }
+    }
 }
