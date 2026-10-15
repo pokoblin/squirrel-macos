@@ -357,7 +357,7 @@ userdb/           # 输入习惯快照 <词典名>.userdb.txt（rime_dict_manage
 ### 8.3 界面
 
 - 逻辑放在 `AppCore`（不含 SwiftUI），在宿主机用假依赖测；视图在 `AppUI`。**不在宿主机上运行应用**（它会读写真实的 `~/Library/Rime`）。
-- 打包：不建 Xcode 工程。SwiftPM 的可执行目标 `SquirrelMacOSApp` + `tools/app/build-app.sh` 拼成 `.app`（RimeKit 的资源包放在 `Contents/Resources`），开发期间临时签名；用 `tools/vm/install-app.sh <测试机>` 放进测试机打开（阶段 8a 定下）。
+- 打包：不建 Xcode 工程。SwiftPM 的可执行目标 `SquirrelMacOSApp` + `tools/app/build-app.sh` 拼成 `.app`（RimeKit 的资源包放在 `Contents/Resources`），开发期间临时签名；用 `tools/vm/install-app.sh <测试机>` 放进测试机打开（阶段 8a 定下）。发布用 `tools/release/build-release.sh`：release 编译、Developer ID 签名（hardened runtime）、公证、钉票据。
 - 每个阶段结束时，在 `squirrel-dev` 里运行真实应用，按检查清单由用户过一遍。
 - 主窗口（阶段 8b）：左边栏 6 页（方案、外观、文本替换、导入导出、备份、诊断）；逻辑在 AppCore 的 MainModel，宿主机用假依赖测。
 
@@ -389,11 +389,12 @@ userdb/           # 输入习惯快照 <词典名>.userdb.txt（rime_dict_manage
 
 ## 11. 不阻塞开发、发布前要定的事
 
-| 事项 | 现状 |
+| 事项 | 已定（发布 0.1.0 时） |
 |---|---|
-| 应用正式名称 | 开发期间用 `squirrel-macos` |
-| 导出文件扩展名 | 跟应用名一起定 |
-| 应用本身用什么许可证 | 未定。应用不打包 GPL 方案，所以不受 GPL 约束 |
-| 苹果开发者账号（Developer ID 签名 + 公证） | 公开发布前需要；开发期间用本机签名 |
+| 应用正式名称 | 跟系统语言：中文系统「鼠须管助手」，其他 SquirrelHelper（`.app` 文件名 `SquirrelHelper.app`）。内部标识不变：bundle ID、数据目录 `squirrel-macos`、`rimectl` |
+| 导出文件扩展名 | 继续用 `.zip`；默认文件名「鼠须管助手 导出 年-月-日 时.分.秒.zip」 |
+| 应用本身用什么许可证 | MIT（版权人 Pokoblin）。应用不打包 GPL 方案；第三方声明见 `THIRD-PARTY-NOTICES.md` |
+| 苹果开发者账号（Developer ID 签名 + 公证） | 用 TONDA K.K. 的 Developer ID（`VS555M5VA8`），打开 hardened runtime，不加 entitlement；公证后钉票据 |
+| 第一个公开版本 | 0.1.0，GitHub 上标成预发布；只出 Apple 芯片版本；没有自己的图标 |
 
-发布方式：Developer ID 签名 + 公证，放在 GitHub Release。不开沙盒，不上 App Store（要写 `~/Library/Rime`、运行安装程序、调用鼠须管的工具）。
+发布方式：Developer ID 签名 + 公证，放在 GitHub Release。不开沙盒，不上 App Store（要写 `~/Library/Rime`、运行安装程序、调用鼠须管的工具）。发布步骤见 [docs/release.md](../../release.md)。

@@ -1,6 +1,6 @@
 # squirrel-macos 项目约定
 
-鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–8 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查；接管已有配置；一键导出导入；文本替换同步；应用骨架和第一次打开的引导；主窗口），第一版功能都有了；下一步按设计第 11 节准备发布（应用名、许可证、签名公证），或者整理待改进项。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
+鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–8 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查；接管已有配置；一键导出导入；文本替换同步；应用骨架和第一次打开的引导；主窗口），第一版已发布 0.1.0（预发布），应用名「鼠须管助手」（英文 SquirrelHelper）；下一步整理待改进项。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
 
 ## 先读这些
 
@@ -16,6 +16,7 @@
 
 - 用简单直白的中文写文档和说明；代码、命令、标识符保持原样。
 - 提交、推送前先问用户，用户同意了再做。
+- 发布：`./tools/release/build-release.sh`，步骤见 `docs/release.md`。打 tag、建 GitHub Release、改仓库简介前先问用户。
 - 应用（SquirrelMacOSApp）不在宿主机上运行，只编译和跑单元测试；用 `./tools/vm/install-app.sh <测试机>` 放进测试机打开。测试机里 SSH 会话进不了 `~/Downloads` 等隐私保护目录，要给应用的文件放在 `/Users/Shared`。
 - **不要碰宿主机的真实配置**：`~/Library/Rime`、`/Library/Input Methods`、输入法启用状态都不要改。需要验证时：
   - 配置和打字效果：复制一份 `~/Library/Rime` 到临时目录，用 librime 模拟（方法见 `docs/verified-facts.md`「用 librime 模拟打字」）。
@@ -36,3 +37,4 @@
 - `rimectl takeover` 也要用桌面会话（`--confirm` 会通知鼠须管）。测试机里试接管时用新的数据目录（如 `/tmp/rk5`），别动 `/tmp/rk`。
 - `rimectl export/import` 也要用桌面会话（要退出、启动鼠须管来导出、合并输入习惯）。测试机里的共享文件夹是只读的：导出要先写到测试机自己的目录（如 `/tmp`），再用 `vm.sh ssh … cat` 拷出来。
 - 宿主机重新编译后，测试机里直接运行共享文件夹里的 rimectl 可能被系统杀掉（退出码 137）。先把 `.build/debug/rimectl` 和旁边的 `SquirrelMacOS_RimeKit.bundle` 一起复制到测试机的 `/tmp/rimectl-bin/` 再运行。
+- 宿主机删掉再重建一个目录后（比如 `.build/release-out/`），测试机的共享文件夹有时一时看不到新文件：改用 `./tools/vm/vm.sh ssh 测试机 "cat > /Users/Shared/文件名" < 本地文件` 传过去。
