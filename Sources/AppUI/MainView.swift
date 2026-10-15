@@ -47,12 +47,12 @@ struct MainView: View {
 
     @ViewBuilder var page: some View {
         switch model.page {
-        case .schemas: Text(model.page.title)
-        case .appearance: Text(model.page.title)
-        case .textReplacement: Text(model.page.title)
-        case .transfer: Text(model.page.title)
-        case .backups: Text(model.page.title)
-        case .diagnostics: Text(model.page.title)
+        case .schemas: SchemasPage(model: model)
+        case .appearance: AppearancePage(model: model)
+        case .textReplacement: TextReplacementPage(model: model)
+        case .transfer: TransferPage(model: model)
+        case .backups: BackupsPage(model: model)
+        case .diagnostics: DiagnosticsPage(model: model)
         }
     }
 }
