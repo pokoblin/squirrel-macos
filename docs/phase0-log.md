@@ -8,7 +8,7 @@
 | 2 | 授权弹窗安装时 postinstall 拿到桌面用户 | **能** | `osascript … with administrator privileges` 弹出系统授权框，输密码后安装成功（约 9 秒）。postinstall 以桌面用户身份注册、启用了 `Squirrel.Hans`，状态和 `sudo installer` 完全一样（本体仍 enabled=false，选中失败）。见「过程」 |
 | 3 | 独立 .app 读文本替换数据库 | | |
 | 4 | `ditto` 解压 GitHub zip | **能** | 干净测试机里 `/usr/bin/ditto -x -k` 解压三个 zip 全部 `exit=0`。结构见 [upstream-layouts.md](upstream-layouts.md)：极点五笔 zip 带顶层目录 `rime-wubi86-jidian-master/`；雾凇 `full.zip` 没有顶层目录，并自带 `default.yaml`、`squirrel.yaml`、`custom_phrase.txt` |
-| 5 | 鼠须管运行时 `rime_dict_manager` 导出/合并 | | |
+| 5 | 鼠须管运行时 `rime_dict_manager` 导出/合并 | **运行时不行，退出后行** | 鼠须管打开过输入习惯数据库后，导出、备份都报 `Error opening db … read-only`。`killall Squirrel` 后导出、备份、导入都正常；`--import` 是**合并**（已有条目不丢、不重复计权重）。做法：导入导出前先退出鼠须管，完成后再 `open` 启动 |
 | 6 | 雾凇全拼、小鹤双拼在鼠须管 1.1.2 上部署和打字 | **能** | 部署约 9 秒，`4 success, 0 failure`，没有 ERROR 日志。用户实际打字和 `rime-type-probe` 结果一致：`nihao` → 你好，`rq`/`sj` 出日期和时间（Lua 正常），`xiaolian` 有 😀（OpenCC 正常），小鹤 `nihc` → 你好。`rime-type-probe` 也能加载 Lua 插件 |
 
 ## 宿主机
@@ -61,3 +61,14 @@
 
   → `rime-type-probe` **能加载 Lua 和 OpenCC**，阶段 2 的打字检查可以测这类方案。
 - 用户在测试机「文本编辑」里实际打字：`nihao` → 你好，`rq` 出日期，`sj` 出时间，`xiaolian` 有 emoji，小鹤 `nihc` → 你好。全部正常。
+
+### 验证 5：`rime_dict_manager`（任务 8）
+
+- 用户在雾凇全拼里选了几个非首选候选，生成 `rime_ice.userdb`。先把它备份到 `/tmp/userdb-backup/`。
+- **鼠须管运行中**（已经打过字）：`--list` 正常（列出 `rime_ice`）；`--export rime_ice …`、`--backup rime_ice` 都报 `level_db.cc:273] Error opening db 'rime_ice' read-only.`，`exit=1`。
+- **`killall Squirrel` 之后**：`--export` → `exported 4 entries.`；`--backup` → 写到 `~/Library/Rime/sync/<安装编号>/rime_ice.userdb.txt`；都 `exit=0`。
+- 例外：鼠须管刚重新启动、用户还没打字时，`--import` 能成功（`imported 4 entries.`）。说明鼠须管是在第一次用到时才打开数据库，这时没锁。**这种情况靠时机，不可靠。**
+- 合并测试（全程在鼠须管退出的状态下导出、导入）：先导出 s1（4 条）→ 用户再打一个新词 → 导出 s2（6 条）→ 导入 s1 → 导出 s3（6 条）。s2 里的条目在 s3 里一条不少，s1 的也都在；s2 和 s3 逐行完全相同（权重没被重复累加）。→ **`--import` 是合并，不是覆盖。**
+- 导出文件格式：开头几行是 `#` 注释（`# Rime user dictionary export`、方案名、`userdb` 等），之后每行 3 列，用 Tab 分隔。
+- 每次退出后都用 `open "/Library/Input Methods/Squirrel.app"` 重新启动了鼠须管，进程正常。
+- **对设计的影响**：导出输入习惯、导入合并时，都要先退出鼠须管（`killall Squirrel`），做完再 `open` 启动。导出用 `--export`（文本，格式简单）还是 `--backup`（写到 sync 目录），阶段 6 再定；两种在退出后都能用。
