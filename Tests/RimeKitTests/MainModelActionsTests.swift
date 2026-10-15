@@ -200,4 +200,19 @@ import Testing
         #expect(model.checks.contains { $0.name == "鼠须管" })
         #expect(model.checks.contains { $0.name == "输入法" && $0.level == .ok })
     }
+
+    @Test func 导入时下载失败就用本地旧版本_真的导入了() async throws {
+        let a = try T.machine(); defer { a.dir.remove() }
+        let file = a.dir.url.appending(path: "e.zip")
+        _ = try await a.exporter().export(to: file, packages: [])
+        let b = try T.machine(userDB: [:]); defer { b.dir.remove() }
+        try SettingsStore(paths: b.paths).save(Settings(schemas: ["py"]))
+        var env = b.environment()
+        env.fetchPackage = { _ in throw HTTPError.transport("断网了") }
+        let model = try MainModel(env: env)
+        await model.importFile(file)
+        #expect(model.saved == T.settings)
+        #expect(model.notice?.action == nil)
+        #expect(model.notice?.lines.contains { $0.contains("没下载成") } == true)
+    }
 }

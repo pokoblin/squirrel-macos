@@ -86,6 +86,23 @@ extension MainModel {
         return result
     }
 
+    /// 取用到的包；下载失败时直接用本地旧版本，返回提醒。没有旧版本就抛错
+    func packagesFallingBack(for settings: Settings) async throws -> ([String: CachedPackage], [String]) {
+        var result: [String: CachedPackage] = [:]
+        var notes: [String] = []
+        for spec in try settings.requiredPackages(env.catalog) {
+            working = "正在下载方案：\(spec.name)……"
+            do {
+                result[spec.id] = try await env.fetchPackage(spec)
+            } catch where PackageStore.isDownloadFailure(error) {
+                guard let old = env.cachedPackage(spec) else { throw error }
+                notes.append("\(spec.name) 没下载成（\(error)），先用了本地以前下载的版本")
+                result[spec.id] = old
+            }
+        }
+        return (result, notes)
+    }
+
     static func notice(for report: ApplyReport) -> Notice {
         var lines = ["写入 \(report.written.count) 个文件，没变 \(report.unchanged) 个，删掉 \(report.removed.count) 个"]
         lines += report.warnings
@@ -202,8 +219,9 @@ extension MainModel {
             let catalog = env.catalog
             let archive = try await offMain { try ImportArchive.open(file, catalog: catalog, into: work) }
             let settings = archive.manifest.settings
-            guard let packages = try await packages(for: settings, usingCache: false) else { return }
-            var lines = archive.warnings
+            // 导入是一次性的：下载不了就直接用本地旧版本，结果里提醒（和第一次打开时的导入一样）
+            let (packages, fallback) = try await packagesFallingBack(for: settings)
+            var lines = archive.warnings + fallback
             var replacements: [Phrase] = []
             if settings.textReplacement.sync {
                 do {
