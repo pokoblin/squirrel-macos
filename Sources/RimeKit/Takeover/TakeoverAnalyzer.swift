@@ -327,10 +327,13 @@ final class TakeoverAnalysis {
         }
     }
 
-    /// 应用注入短语翻译器的两项：有短语时生成器会再写
-    func isPhraseInjection(_ entry: Patch.Entry) -> Bool {
+    /// 应用注入短语翻译器的两项：有短语时生成器会再写。
+    /// 用户自己写了不一样的 custom_phrase 配置（例如用别的短语文件）时，两项都不算，原样保留
+    func isPhraseInjection(_ entry: Patch.Entry, in patch: Patch) -> Bool {
         switch entry.key {
-        case "engine/translators/@before 0": return entry.value.string == Self.phraseTranslator
+        case "engine/translators/@before 0":
+            let ownConfig = patch["custom_phrase"].map { !YAMLNode.same($0, GenerationContext.phraseConfig()) } ?? false
+            return entry.value.string == Self.phraseTranslator && !ownConfig
         case "custom_phrase": return YAMLNode.same(entry.value, GenerationContext.phraseConfig())
         default: return false
         }
@@ -341,7 +344,7 @@ final class TakeoverAnalysis {
         let base = expected[name] ?? Patch()
         let baseLeaves = PatchLeaves(base)
         let managed = managedPaths(name)
-        let entries = mine.entries.filter { !isPhraseInjection($0) }
+        let entries = mine.entries.filter { !isPhraseInjection($0, in: mine) }
 
         // 和默认补丁、应用管理的键有上下级关系的项（以及和这些项有关系的项）逐个叶子比；其余整项原样保留
         var anchors = base.entries.map(\.key) + managed
@@ -389,7 +392,8 @@ final class TakeoverAnalysis {
             let translators = root["engine"]?["translators"]?.sequence?.compactMap(\.string) ?? []
             let file = translators.contains(Self.phraseTranslator)
                 ? (root["custom_phrase"]?["user_dict"]?.string ?? "custom_phrase") + ".txt"
-                : "custom_phrase.txt"
+                // 用户补丁里可能指定了别的短语文件
+                : (PatchLeaves(existing[schema] ?? Patch())["custom_phrase/user_dict"]?.string ?? "custom_phrase") + ".txt"
             if !phraseFiles.contains(file) { phraseFiles.append(file) }
         }
         let fromTextReplacement = Set(textReplacement.map { $0.text + "\t" + $0.code })

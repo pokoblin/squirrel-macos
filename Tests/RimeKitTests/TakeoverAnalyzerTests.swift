@@ -139,6 +139,36 @@ import Testing
         #expect(try F.analyze(e).notes.contains { $0.contains("py_ext.dict.yaml") && $0.contains("my_extra") })
     }
 
+    @Test func 用户自己的短语设置原样保留_短语也收进来() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.wubiSample(e.packages, into: e.rime)
+        try F.put("""
+            patch:
+              reverse_lookup/dictionary: py_ext
+              "engine/translators/@before 0": table_translator@custom_phrase
+              custom_phrase:
+                dictionary: ""
+                user_dict: my_phrase
+                db_class: stabledb
+                enable_completion: false
+                enable_sentence: false
+                initial_quality: 100
+
+            """, "wb.custom.yaml", in: e.rime)
+        let mine = Phrase(text: "我的短语", code: "wddy", weight: 1)
+        try F.put(PhraseFile.header + PhraseFile.render([mine]), "my_phrase.txt", in: e.rime)
+        let p = try F.analyze(e)
+        #expect(p.manualPhrases.contains(mine))
+        #expect(p.manualPhrases.contains(F.manual))
+        #expect(p.settings.preservedPatches["wb"]?.map(\.key) == ["engine/translators/@before 0", "custom_phrase"])
+        // 生成后 wb 方案还是用它自己的短语文件
+        let out = e.dir.url.appending(path: "out", directoryHint: .isDirectory)
+        _ = try ConfigGenerator().generate(p.generationInput(catalog: e.catalog, packages: e.packages, textReplacement: [F.fromTR]), into: out)
+        let wb = try GenFixtures.patch(out, "wb")
+        #expect(wb["custom_phrase"]?["user_dict"]?.string == "my_phrase")
+        #expect(wb["engine/translators/@before 0"]?.string == "table_translator@custom_phrase")
+    }
+
     @Test func 包没给全时报错() throws {
         let e = try F.env(); defer { e.dir.remove() }
         try F.wubiSample(e.packages, into: e.rime)
