@@ -67,8 +67,9 @@ import Testing
         try write(rime, "added.yaml", "x")
         try FileManager.default.removeItem(at: rime.appending(path: "keep/b.yaml"))
         try write(rime, "user.yaml", "runtime")
-        _ = try store.restore(info.id, to: rime)
-        #expect(try RimeFiles.configFiles(in: rime) == ["a.yaml", "keep/b.yaml"])
+        _ = try store.restore(info.id, to: rime, managed: [])
+        // 备份之后新加的、应用不认识的文件不动（设计：不认识的文件永远不动）
+        #expect(try RimeFiles.configFiles(in: rime) == ["a.yaml", "added.yaml", "keep/b.yaml"])
         #expect(try read(rime, "a.yaml") == "old")
         #expect(try read(rime, "user.yaml") == "runtime")
     }
@@ -76,7 +77,40 @@ import Testing
     @Test func 还原不存在的备份() throws {
         let dir = try TempDir(); defer { dir.remove() }
         #expect(throws: BackupError.notFound("nope")) {
-            try BackupStore(paths: Fixtures.paths(dir)).restore("nope", to: dir.url)
+            try BackupStore(paths: Fixtures.paths(dir)).restore("nope", to: dir.url, managed: [])
         }
+    }
+}
+
+@Suite struct BackupRestoreScopeTests {
+    @Test func 应用管理但备份里没有的文件会删掉() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let rime = dir.url.appending(path: "Rime")
+        let fm = FileManager.default
+        try fm.createDirectory(at: rime, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: rime.appending(path: "a.yaml"))
+        let store = BackupStore(paths: Fixtures.paths(dir))
+        let info = try store.create(from: rime, reason: "前", permanent: false, ledger: Ledger())
+        try Data("generated".utf8).write(to: rime.appending(path: "new.yaml"))
+        try Data("theirs".utf8).write(to: rime.appending(path: "user_added.yaml"))
+        _ = try store.restore(info.id, to: rime, managed: ["new.yaml"])
+        #expect(try RimeFiles.configFiles(in: rime) == ["a.yaml", "user_added.yaml"])
+    }
+
+    @Test func 备份里的文件不全时什么都不动() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let rime = dir.url.appending(path: "Rime")
+        let fm = FileManager.default
+        try fm.createDirectory(at: rime, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: rime.appending(path: "a.yaml"))
+        let paths = Fixtures.paths(dir)
+        let store = BackupStore(paths: paths)
+        let info = try store.create(from: rime, reason: "前", permanent: false, ledger: Ledger())
+        try fm.removeItem(at: paths.backups.appending(path: "\(info.id)/files/a.yaml"))
+        try Data("now".utf8).write(to: rime.appending(path: "a.yaml"))
+        #expect(throws: BackupError.incomplete(info.id, missing: ["a.yaml"])) {
+            try store.restore(info.id, to: rime, managed: [])
+        }
+        #expect(try String(contentsOf: rime.appending(path: "a.yaml"), encoding: .utf8) == "now")
     }
 }

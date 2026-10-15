@@ -13,10 +13,13 @@ public struct BackupInfo: Sendable, Equatable, Codable {
 
 public enum BackupError: Error, Equatable, Sendable, CustomStringConvertible {
     case notFound(String)
+    case incomplete(String, missing: [String])
 
     public var description: String {
         switch self {
         case .notFound(let id): return "找不到备份 \(id)"
+        case let .incomplete(id, missing):
+            return "备份 \(id) 不完整，缺少 \(missing.count) 个文件（例如 \(missing[0])），没有还原"
         }
     }
 }
@@ -74,14 +77,18 @@ public struct BackupStore: Sendable {
         return removable
     }
 
-    /// 把 Rime 目录的配置文件恢复成备份时的样子；Rime 自己的运行文件不动
-    public func restore(_ id: String, to rimeDirectory: URL) throws -> BackupInfo {
+    /// 把备份里的文件放回 Rime 目录。只删「备份里有的」和 managed（应用管理的）文件，
+    /// 用户后来加的、应用不认识的文件不动；Rime 自己的运行文件也不动。
+    /// 先确认备份里的文件都在，不全就什么都不动。
+    public func restore(_ id: String, to rimeDirectory: URL, managed: Set<String>) throws -> BackupInfo {
         guard let info = info(id) else { throw BackupError.notFound(id) }
         let fm = FileManager.default
-        for path in try RimeFiles.configFiles(in: rimeDirectory) {
+        let filesDir = paths.backups.appending(path: id, directoryHint: .isDirectory).appending(path: "files", directoryHint: .isDirectory)
+        let missing = info.files.filter { (try? fm.attributesOfItem(atPath: filesDir.appending(path: $0).path)) == nil }
+        guard missing.isEmpty else { throw BackupError.incomplete(id, missing: missing) }
+        for path in Set(info.files).union(managed).sorted() where Ledger.exists(rimeDirectory.appending(path: path)) {
             try fm.removeItem(at: rimeDirectory.appending(path: path))
         }
-        let filesDir = paths.backups.appending(path: id, directoryHint: .isDirectory).appending(path: "files", directoryHint: .isDirectory)
         for path in info.files {
             let target = rimeDirectory.appending(path: path)
             try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)

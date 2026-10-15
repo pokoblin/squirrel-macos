@@ -47,3 +47,13 @@ import Testing
         #expect(s.backups.count == 2)
     }
 }
+
+@Suite struct DeployerRestoreKeepsUnknownTests {
+    @Test func 还原不删用户后来加的文件() async throws {
+        let (e, deployer) = try await DeployerRestoreTests().setup(); defer { e.dir.remove() }
+        try e.write("my_new_schema.schema.yaml", "mine")
+        let target = try #require(BackupStore(paths: e.paths).list().first { $0.reason == "应用改动前" })
+        _ = try await deployer.restore(target.id)
+        #expect(try e.read("my_new_schema.schema.yaml") == "mine")
+    }
+}

@@ -158,7 +158,7 @@ public struct Deployer: Sendable {
             }
             try newLedger.save(paths)
         } catch {
-            let restored = (try? backups.restore(backup.id, to: rime)) != nil
+            let restored = (try? backups.restore(backup.id, to: rime, managed: Set(written))) != nil
             if restored { try? ledger.save(paths) }
             throw ApplyError.writeFailed(String(describing: error), restored: restored)
         }
@@ -178,7 +178,8 @@ public struct Deployer: Sendable {
         guard let target = backups.info(id) else { throw BackupError.notFound(id) }
         let safety = try backups.create(from: locations.rimeDirectory, reason: "还原前", permanent: false,
                                         ledger: try Ledger.load(paths))
-        let restored = try backups.restore(target.id, to: locations.rimeDirectory)
+        let current = try Ledger.load(paths)
+        let restored = try backups.restore(target.id, to: locations.rimeDirectory, managed: Set(current.entries.keys))
         try restored.ledger.save(paths)
         _ = try? backups.prune()
         let (launched, deploy, warnings) = await notifySquirrel()
