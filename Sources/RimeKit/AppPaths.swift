@@ -17,6 +17,9 @@ public struct AppPaths: Sendable, Equatable {
     /// 上游包缓存，按「包名@版本」存放
     public var packages: URL { root.appending(path: "packages", directoryHint: .isDirectory) }
 
+    /// 上次拉到、验过签名的在线方案清单（catalog.json 和 catalog.json.sig）
+    public var catalogCache: URL { root.appending(path: "catalog", directoryHint: .isDirectory) }
+
     /// 生成、下载用的暂存区
     public var staging: URL { root.appending(path: "staging", directoryHint: .isDirectory) }
 
