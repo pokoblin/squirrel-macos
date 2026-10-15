@@ -27,6 +27,7 @@
 | 已安装的版本在 `Squirrel.app/Contents/Info.plist` 的 `CFBundleVersion`（1.1.2 没有 `CFBundleShortVersionString`） | 实测（宿主机） |
 | **安装包改了 1 个字节，`spctl -a -t install` 仍然 `accepted`**；`pkgutil --check-signature` 报 `package is invalid (checksum did not verify)`，退出码 1。所以要 sha256 + `pkgutil` + `spctl` 三道检查 | 实测（宿主机临时目录，2026-10-15；阶段 4 联网测试） |
 | `rimectl install --gui-auth`（进程里用 `NSAppleScript` 的 `with administrator privileges`）在干净测试机里弹出系统授权框：输密码就装好；点「取消」时错误号是 -128，什么都不动。免密 sudo（`sudo -n installer`）不弹框也能装 | 实测（squirrel-fresh，阶段 4） |
+| 应用用 Developer ID 签名、**打开 hardened runtime**（没有加任何 entitlement）、公证后，进程里用 `NSAppleScript` 的 `with administrator privileges` 安装：照样弹出系统授权框，输密码就装好。不需要 `com.apple.security.automation.apple-events` | 实测（squirrel-release，发布 0.1.0 前，见 [release-vm-log.md](release-vm-log.md)） |
 
 ### 安装包的 postinstall 脚本做了什么（查看）
 
@@ -188,7 +189,7 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | `defaults read -g NSUserDictionaryReplacementItems` 里也有一份，条数一致（测试机新加 1 条后马上两边都是 2 条）；但是否每次都同步，没有长期观察。应用以数据库为准 | 实测（宿主机；squirrel-dev，2026-10-15） |
 | 能直接用的条件：快捷码只有字母（Rime 里打不出数字和符号），内容不含换行和 Tab | 实测 |
 | 同一个 Apple 账户的文本替换会通过 iCloud 同步到别的 Mac | 查看（苹果的说明），未实测 |
-| 本机临时签名、**未开沙盒**的独立 .app 用 SQLite 只读打开这个数据库：**不用授权、不弹窗**，能读（宿主机 11 条；测试机 1 条，加 1 条后马上读到 2 条，新数据还在 `-wal` 里也能读到）。工具：`tools/vm/tr-probe.swift`。正式签名后或开沙盒后是否一样，**待验证** | 实测（宿主机；squirrel-dev，2026-10-15） |
+| 本机临时签名、**未开沙盒**的独立 .app 用 SQLite 只读打开这个数据库：**不用授权、不弹窗**，能读（宿主机 11 条；测试机 1 条，加 1 条后马上读到 2 条，新数据还在 `-wal` 里也能读到）。工具：`tools/vm/tr-probe.swift`。**Developer ID 签名、打开 hardened runtime、公证后也一样**：不用授权、不弹窗，能读（干净测试机 squirrel-release，系统自带 1 条；没有弹窗要权限）。开沙盒后是否一样，**待验证**（第一版不开沙盒） | 实测（宿主机；squirrel-dev；squirrel-release，2026-10-15，见 [release-vm-log.md](release-vm-log.md)） |
 | 新账户（没登录 Apple 账户）本来就有这个数据库，里面有 1 条系统自带的 | 实测（squirrel-dev） |
 
 可以直接复用的 SQL（已验证）：
