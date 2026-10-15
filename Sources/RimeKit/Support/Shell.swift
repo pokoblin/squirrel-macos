@@ -8,7 +8,7 @@ struct ShellResult: Sendable {
 
 /// 运行一个外部程序并等它结束（只用于系统自带的小工具，比如 ditto）
 enum Shell {
-    static func run(_ executable: String, _ arguments: [String]) throws -> ShellResult {
+    static func run(_ executable: String, _ arguments: [String], currentDirectory: URL? = nil) throws -> ShellResult {
         let fm = FileManager.default
         // stderr 写到临时文件：如果和 stdout 都用管道、又先读完 stdout，
         // 程序往 stderr 写超过管道缓冲（约 64KB）时双方会互相等死
@@ -23,6 +23,7 @@ enum Shell {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
         let out = Pipe()
         process.standardOutput = out
         process.standardError = errHandle

@@ -18,4 +18,11 @@ import Testing
         #expect(r.stdout == "done\n")
         #expect(r.stderr.count == 300_000)
     }
+
+    @Test func 可以指定当前目录() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let r = try Shell.run("/bin/pwd", [], currentDirectory: dir.url)
+        let printed = URL(fileURLWithPath: r.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+        #expect(printed.resolvingSymlinksInPath() == dir.url.resolvingSymlinksInPath())
+    }
 }

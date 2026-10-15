@@ -7,6 +7,8 @@ public protocol SquirrelControlling: Sendable {
     func reload() throws
     func launch() throws
     func registerInputSource() throws
+    /// 退出鼠须管：导出、合并输入习惯前要先退出，不然数据库被它占着
+    func quit() throws
 }
 
 public enum SquirrelError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -44,6 +46,11 @@ public struct SquirrelControl: SquirrelControlling {
 
     /// 输入源从系统里消失时用（阶段 5 测试机实测：运行这条命令马上就回来了）。
     /// 重装不一定有用：postinstall 认为「已经注册过」就跳过注册
+    /// 只退出当前用户的鼠须管；没在运行时 killall 返回 1，不算错
+    public func quit() throws {
+        _ = try Shell.run("/usr/bin/killall", ["-u", NSUserName(), "Squirrel"])
+    }
+
     public func registerInputSource() throws {
         let r = try Shell.run(locations.squirrelBinary.path, ["--register-input-source"])
         guard r.status == 0 else { throw SquirrelError.commandFailed("Squirrel --register-input-source", r.stderr) }

@@ -42,6 +42,13 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
         try simulateDeploy()
     }
 
+    func quit() throws {
+        lock.withLock {
+            log.append("quit")
+            running = false
+        }
+    }
+
     func registerInputSource() throws {
         lock.withLock { log.append("register") }
         if let registerError { throw registerError }
