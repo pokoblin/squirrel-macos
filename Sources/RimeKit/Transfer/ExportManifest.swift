@@ -46,6 +46,8 @@ public enum TransferError: Error, Equatable, Sendable, CustomStringConvertible {
     case unsupportedFormat(Int)
     case badSettings(String)
     case badContent(String)
+    /// 导入出错；previous 是导入前另存的设置和个人内容
+    case importFailed(String, previous: String)
 
     public var description: String {
         switch self {
@@ -63,6 +65,8 @@ public enum TransferError: Error, Equatable, Sendable, CustomStringConvertible {
             return "导出文件里的设置用不了：\(message)"
         case .badContent(let message):
             return "导出文件坏了：\(message)"
+        case let .importFailed(message, previous):
+            return "导入失败：\(message)。应用里原来的设置和个人内容另存在 \(previous)，需要时可以用 rimectl import 这个文件找回"
         }
     }
 }

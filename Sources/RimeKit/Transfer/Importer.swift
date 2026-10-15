@@ -44,9 +44,16 @@ public struct Importer: Sendable {
         let input = GenerationInput(settings: settings, catalog: catalog, packages: packages,
                                     personal: PersonalContent(dicts: dicts, phrases: phrases),
                                     textReplacementPhrases: settings.textReplacement.sync ? textReplacement : [])
-        let outcome = try await deployer.apply(
-            input, options: ApplyOptions(overwriteExternalChanges: true, permanentBackupReason: "导入前"),
-            afterWrite: { try AppDataWriter.replace(settings: settings, dicts: dicts, phrases: phrases, paths: paths) })
+        let outcome: ApplyOutcome
+        do {
+            outcome = try await deployer.apply(
+                input, options: ApplyOptions(overwriteExternalChanges: true, permanentBackupReason: "导入前"),
+                afterWrite: { try AppDataWriter.replace(settings: settings, dicts: dicts, phrases: phrases, paths: paths) })
+        } catch {
+            // 出错时告诉用户原来的设置另存在哪里
+            guard let previous else { throw error }
+            throw TransferError.importFailed(String(describing: error), previous: previous.path)
+        }
 
         // 3. 合并输入习惯（合并，不是覆盖）；合并不上不影响已经导入的配置
         guard case .applied = outcome, let userDB, !archive.userDB.isEmpty else {

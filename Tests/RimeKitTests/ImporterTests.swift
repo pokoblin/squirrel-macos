@@ -45,6 +45,21 @@ import Testing
         #expect(try SettingsStore(paths: b.paths).load() == T.settings)
     }
 
+    @Test func 导入出错时告诉用户原来的设置另存在哪里() async throws {
+        let b = try T.machine(); defer { b.dir.remove() }
+        let a = try await archive(for: b)
+        try FileManager.default.removeItem(at: a.personalDicts[0])   // 生成时复制个人词库会失败
+        do {
+            _ = try await importer(b).run(a, catalog: b.catalog, packages: b.packages, textReplacement: [])
+            Issue.record("应该报错")
+        } catch let TransferError.importFailed(_, previous) {
+            #expect(FileManager.default.fileExists(atPath: previous))
+            #expect(previous.hasPrefix(b.paths.beforeImport.path))
+        }
+        #expect(try SettingsStore(paths: b.paths).load() == T.settings)
+        #expect(try PersonalContent.load(from: b.paths).dicts.map(\.lastPathComponent) == ["py_user.dict.yaml"])
+    }
+
     @Test func Rime目录里原有的配置先备份_永久保留() async throws {
         let b = try T.machine(withSettings: false); defer { b.dir.remove() }
         try FileManager.default.createDirectory(at: b.locations.rimeDirectory, withIntermediateDirectories: true)
