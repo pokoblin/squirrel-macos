@@ -22,29 +22,35 @@ public struct TakeoverApplier: Sendable {
         defer { try? fm.removeItem(at: work) }
         let dicts = work.appending(path: "dicts", directoryHint: .isDirectory)
         try fm.createDirectory(at: dicts, withIntermediateDirectories: true)
-        var staged = proposal
-        staged.personalDicts = try proposal.personalDicts.map { url in
+        let dictFiles = try proposal.personalDicts.map { url in
             let target = dicts.appending(path: url.lastPathComponent)
             try fm.copyItem(at: url.resolvingSymlinksInPath(), to: target)
             return target
         }
+        var staged = proposal
+        staged.personalDicts = dictFiles
 
-        // 用户在预览里确认的就是这些覆盖；第一次的备份永久保留（Deployer.apply 负责）
-        let outcome = try await deployer.apply(
+        // 用户在预览里确认的就是这些覆盖；第一次的备份永久保留（Deployer.apply 负责）。
+        // 文件写好后、通知鼠须管之前就保存设置和个人内容（还在锁里）：等部署最多两分钟，这时被中断也不会留下半截状态
+        let settings = proposal.settings
+        let phrases = proposal.manualPhrases
+        return try await deployer.apply(
             staged.generationInput(catalog: catalog, packages: packages, textReplacement: textReplacement),
-            options: ApplyOptions(overwriteExternalChanges: true))
-        guard case .applied = outcome else { return outcome }
+            options: ApplyOptions(overwriteExternalChanges: true),
+            afterWrite: { try Self.save(settings: settings, dicts: dictFiles, phrases: phrases, paths: paths) })
+    }
 
-        try SettingsStore(paths: paths).save(proposal.settings)
+    static func save(settings: Settings, dicts: [URL], phrases: [Phrase], paths: AppPaths) throws {
+        let fm = FileManager.default
         if fm.fileExists(atPath: paths.personal.path) { try fm.removeItem(at: paths.personal) }
         try fm.createDirectory(at: paths.personalDicts, withIntermediateDirectories: true)
-        for url in staged.personalDicts {
+        for url in dicts {
             try fm.copyItem(at: url, to: paths.personalDicts.appending(path: url.lastPathComponent))
         }
-        if !proposal.manualPhrases.isEmpty {
-            try Data((PhraseFile.header + PhraseFile.render(proposal.manualPhrases)).utf8)
-                .write(to: paths.personalPhrases, options: .atomic)
+        if !phrases.isEmpty {
+            try Data((PhraseFile.header + PhraseFile.render(phrases)).utf8).write(to: paths.personalPhrases, options: .atomic)
         }
-        return outcome
+        // 设置最后存：个人内容没存好就不会有设置
+        try SettingsStore(paths: paths).save(settings)
     }
 }

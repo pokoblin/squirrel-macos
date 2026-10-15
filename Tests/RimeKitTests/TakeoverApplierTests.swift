@@ -55,6 +55,30 @@ import Testing
         #expect(try String(contentsOf: e.locations.rimeDirectory.appending(path: "weasel.custom.yaml"), encoding: .utf8) == "patch:\n  style/font_point: 20\n")
     }
 
+    /// 通知鼠须管时看一眼设置和个人内容存好了没有
+    final class WatchingSquirrel: SquirrelControlling, @unchecked Sendable {
+        let paths: AppPaths
+        var seen: [Bool] = []
+        init(paths: AppPaths) { self.paths = paths }
+        func isRunning() -> Bool { true }
+        func reload() throws {
+            seen.append(FileManager.default.fileExists(atPath: paths.settingsFile.path)
+                        && FileManager.default.fileExists(atPath: paths.personalDicts.appending(path: "wb_user.dict.yaml").path))
+        }
+        func launch() throws { try reload() }
+    }
+
+    @Test func 等部署之前就保存好设置和个人内容() async throws {
+        // 等部署最多两分钟：这时中断（Ctrl-C、应用退出）也不能留下「目录已接管、设置却没有」的状态
+        let e = try env(); defer { e.dir.remove() }
+        let squirrel = WatchingSquirrel(paths: e.paths)
+        let deployer = Deployer(paths: e.paths, locations: e.locations, compiler: FakeCompiler(), squirrel: squirrel,
+                                watcher: DeployFixtures.watcher(e.locations))
+        _ = try await TakeoverApplier(deployer: deployer)
+            .confirm(try e.proposal(), catalog: e.catalog, packages: e.packages, textReplacement: [F.fromTR], force: false)
+        #expect(squirrel.seen == [true])
+    }
+
     @Test func 接管后再应用一次什么都不写() async throws {
         let e = try env(); defer { e.dir.remove() }
         guard case .applied = try await e.confirm() else { Issue.record("没有写入"); return }

@@ -76,7 +76,10 @@ public struct Deployer: Sendable {
         self.now = now
     }
 
-    public func apply(_ input: GenerationInput, options: ApplyOptions = ApplyOptions()) async throws -> ApplyOutcome {
+    /// afterWrite：文件和 ledger 都写好之后、通知鼠须管之前调用（还在锁里）。它出错时和写入失败一样，用刚才的备份还原。
+    /// 接管时用它保存设置和个人内容：等部署最多两分钟，这期间被中断也不会留下「目录已接管、设置却没有」的状态。
+    public func apply(_ input: GenerationInput, options: ApplyOptions = ApplyOptions(),
+                      afterWrite: @Sendable () throws -> Void = {}) async throws -> ApplyOutcome {
         guard locations.squirrelInstalled else { throw ApplyError.squirrelNotInstalled }
         let lock = try ApplyLock.acquire(paths)
         defer { withExtendedLifetime(lock) {} }
@@ -169,6 +172,7 @@ public struct Deployer: Sendable {
                 try fm.createDirectory(at: paths.personalDicts, withIntermediateDirectories: true)
                 try Self.replace(paths.personalDicts.appending(path: item.staged.lastPathComponent), with: item.staged)
             }
+            try afterWrite()
         } catch {
             let restored = (try? backups.restore(backup.id, to: rime, managed: Set(written))) != nil
             if restored { try? ledger.save(paths) }
