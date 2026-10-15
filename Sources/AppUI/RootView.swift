@@ -93,9 +93,10 @@ struct SetupView: View {
             Working(text: "请在系统设置里添加「鼠须管」（简体中文下面）。加好后这里会自动继续……\n加好了很久还没继续的话，请退出应用再打开。")
             Button("重新打开系统设置") { flow.reopenSettings() }
         case .needRestart:
-            Message(symbol: "arrow.clockwise", title: "请退出应用再打开",
-                    lines: ["系统里鼠须管的输入源丢了，已经重新注册。要退出这个应用再重新打开，才能看到最新的状态。"])
-            Button("退出应用") { NSApplication.shared.terminate(nil) }
+            Message(symbol: "arrow.clockwise", title: "请重新打开这个应用",
+                    lines: ["鼠须管刚装好（或者它的输入源刚重新注册）。macOS 要这个应用重新打开一次，才看得到新的输入法。",
+                            "点下面的按钮，应用会自己关掉再打开，然后接着往下走。"])
+            Button("重新打开应用") { Self.relaunch() }
                 .buttonStyle(.borderedProminent)
         case .chooseStart(let choice):
             chooseStart(choice)
@@ -108,6 +109,15 @@ struct SetupView: View {
             Button("重试") { Task { await flow.start() } }
                 .buttonStyle(.borderedProminent)
         }
+    }
+
+    /// 关掉自己再打开：等 1 秒（让这个进程先退出）再用 open 打开同一个应用
+    static func relaunch() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", Bundle.main.bundlePath]
+        try? process.run()
+        NSApplication.shared.terminate(nil)
     }
 
     @ViewBuilder func chooseStart(_ choice: StartChoice) -> some View {

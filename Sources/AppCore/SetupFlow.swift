@@ -22,7 +22,7 @@ public final class SetupFlow {
         /// 附带说明（例如等超时了）
         case needInputMethod(String?)
         case waitingForInputMethod
-        /// 重新注册了输入源：要退出应用再打开（同一个进程里 TIS 的状态不会更新）
+        /// 刚装好鼠须管、或者重新注册了输入源：要重新打开应用（同一个进程里 TIS 的状态不会更新）
         case needRestart
         case chooseStart(StartChoice)
         /// 正在做的事（下载、写入、部署……）
@@ -82,7 +82,9 @@ public final class SetupFlow {
         do {
             let install = env.installSquirrel
             _ = try await offMain { try await install() }
-            step = .needInputMethod(nil)
+            // 同一个进程里 TIS 看不到刚装好的鼠须管（测试机实测：会被当成「没有输入源」）。
+            // 重新打开应用后就看得到了；安装包已经替用户启用了输入法，打开后会自己往下走
+            step = .needRestart
         } catch InstallError.cancelled {
             step = .needInstall("你取消了授权，鼠须管没有安装。准备好了再点「安装鼠须管」")
         } catch let error as InstallError {

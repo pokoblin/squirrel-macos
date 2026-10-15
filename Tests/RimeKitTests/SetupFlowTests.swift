@@ -37,7 +37,8 @@ import Testing
         await flow.start()
         #expect(flow.step == .needInstall(nil))
         await flow.install()
-        #expect(flow.step == .needInputMethod(nil))
+        // 测试机实测：同一个进程里 TIS 看不到刚装好的鼠须管，要重新打开应用（之后会自己往下走）
+        #expect(flow.step == .needRestart)
     }
 
     @Test func 添加输入法后看Rime目录_空的就选起步方案() async throws {
