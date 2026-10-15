@@ -256,4 +256,25 @@ import Testing
         await model.checkTextReplacement()
         #expect(model.textReplacementStatus?.changes == TextReplacementSync.Changes(added: 0, removed: 0))
     }
+
+    @Test func 应用时新下载了包_配色列表跟着更新() async throws {
+        // 本地缓存里原来没有：应用时才下载下来
+        let m = try T.machine(); defer { m.dir.remove() }
+        final class Fetched: @unchecked Sendable {
+            let lock = NSLock()
+            var ids: Set<String> = []
+            func add(_ id: String) { lock.withLock { _ = ids.insert(id) } }
+            func has(_ id: String) -> Bool { lock.withLock { ids.contains(id) } }
+        }
+        let fetched = Fetched()
+        var env = m.environment()
+        let fetch = env.fetchPackage
+        let cached = env.cachedPackage
+        env.fetchPackage = { spec in fetched.add(spec.id); return try await fetch(spec) }
+        env.cachedPackage = { spec in fetched.has(spec.id) ? cached(spec) : nil }
+        let model = try MainModel(env: env)
+        #expect(model.colorSchemes.isEmpty)
+        await model.apply()
+        #expect(!model.colorSchemes.isEmpty)
+    }
 }

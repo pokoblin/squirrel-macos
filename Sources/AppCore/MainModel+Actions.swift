@@ -58,6 +58,7 @@ extension MainModel {
                 } else {
                     draft = updated
                 }
+                refreshColorSchemes()   // 这次可能新下载了包
                 notice = Self.notice(for: report)
             case .compileFailed(let errors):
                 notice = Notice(kind: .error, title: "新配置编译不过，没有写入", lines: errors)
@@ -268,6 +269,7 @@ extension MainModel {
                     saved = now
                     draft = now
                 }
+                refreshColorSchemes()
                 var result = Self.notice(for: applied)
                 result.title = result.kind == .info ? "已导入" : result.title
                 result.lines += lines
