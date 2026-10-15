@@ -47,4 +47,19 @@ import Testing
         #expect(catalog.package("rime-ice-dicts")?.license == "GPL-3.0")
         #expect(catalog.package("wubi86-jidian")?.license == "Apache-2.0")
     }
+
+    @Test func 内置清单有serial() throws {
+        #expect(try Catalog.builtIn().serial > 0)
+    }
+
+    @Test func 起步方案用的都在内置清单里而且没下架() throws {
+        let catalog = try Catalog.builtIn()
+        for starter in Starter.allCases {
+            let settings = Settings.starter(starter)
+            try settings.validate(catalog)
+            for spec in try settings.requiredPackages(catalog) {
+                #expect(!spec.deprecated, "\(starter) 用到了下架的 \(spec.id)")
+            }
+        }
+    }
 }

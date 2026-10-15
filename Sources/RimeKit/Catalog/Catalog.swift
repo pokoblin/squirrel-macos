@@ -5,7 +5,24 @@ public struct Catalog: Sendable, Equatable, Codable {
     public static let supportedFormatVersion = 1
 
     public let formatVersion: Int
+    /// 发布序号：在线清单只接受比手头那份更大的（防回滚，在线方案清单设计 3.1）。没写的当成 0
+    public let serial: Int
     public let packages: [PackageSpec]
+
+    public init(formatVersion: Int = Catalog.supportedFormatVersion, serial: Int, packages: [PackageSpec]) {
+        self.formatVersion = formatVersion
+        self.serial = serial
+        self.packages = packages
+    }
+
+    private enum CodingKeys: String, CodingKey { case formatVersion, serial, packages }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try c.decode(Int.self, forKey: .formatVersion)
+        serial = try c.decodeIfPresent(Int.self, forKey: .serial) ?? 0
+        packages = try c.decode([PackageSpec].self, forKey: .packages)
+    }
 
     public func package(_ id: String) -> PackageSpec? {
         packages.first { $0.id == id }
@@ -50,6 +67,11 @@ public struct Catalog: Sendable, Equatable, Codable {
                 throw CatalogError.unknownDependency(package: p.id, dependency: d)
             }
         }
+        for p in packages {
+            if let v = p.minAppVersion, AppVersion(v) == nil {
+                throw CatalogError.badMinAppVersion(package: p.id, value: v)
+            }
+        }
         try checkCycles()
         for p in packages {
             for file in p.requiredFiles {
@@ -80,6 +102,24 @@ public struct Catalog: Sendable, Equatable, Codable {
                 }
             }
         }
+    }
+
+    /// 去掉这个版本的应用用不了的包（minAppVersion 更高），以及因此缺了依赖（包括选项里的依赖）的包（设计 3.4、4.1）
+    public func available(for appVersion: AppVersion) -> Catalog {
+        var kept = packages.filter { p in
+            guard let text = p.minAppVersion, let needed = AppVersion(text) else { return true }
+            return needed <= appVersion
+        }
+        while true {
+            let ids = Set(kept.map(\.id))
+            let next = kept.filter { p in
+                p.dependencies.allSatisfy(ids.contains)
+                    && p.options.allSatisfy { $0.choices.allSatisfy { $0.dependencies.allSatisfy(ids.contains) } }
+            }
+            if next.count == kept.count { break }
+            kept = next
+        }
+        return Catalog(formatVersion: formatVersion, serial: serial, packages: kept)
     }
 
     /// 要装这些包时的顺序：依赖在前，每个包只出现一次
@@ -137,9 +177,14 @@ public struct PackageSpec: Sendable, Equatable, Codable {
     /// 上游自带的个人词库模板（包根目录下的 .dict.yaml）：用户会往里加词。
     /// 接管已有配置时，和上游不一样的就当个人词库收进 personal/；JSON 里可以不写
     public let userDicts: [String]
+    /// 下架了：已经在用的照常能用，「可以启用的方案」里不再列出（设计 3.2）；JSON 里可以不写
+    public let deprecated: Bool
+    /// 要求的最低应用版本（例如 "0.3.0"）；比当前版本高的包当它不存在（设计 3.4）。JSON 里可以不写
+    public let minAppVersion: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, summary, license, homepage, source, anchor, include, exclude, requiredFiles, schemas, dependencies, options, userDicts
+        case id, name, summary, license, homepage, source, anchor, include, exclude, requiredFiles, schemas, dependencies, options, userDicts,
+             deprecated, minAppVersion
     }
 
     public init(from decoder: any Decoder) throws {
@@ -158,6 +203,8 @@ public struct PackageSpec: Sendable, Equatable, Codable {
         dependencies = try c.decode([String].self, forKey: .dependencies)
         options = try c.decodeIfPresent([PackageOption].self, forKey: .options) ?? []
         userDicts = try c.decodeIfPresent([String].self, forKey: .userDicts) ?? []
+        deprecated = try c.decodeIfPresent(Bool.self, forKey: .deprecated) ?? false
+        minAppVersion = try c.decodeIfPresent(String.self, forKey: .minAppVersion)
     }
 }
 

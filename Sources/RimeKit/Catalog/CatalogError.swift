@@ -12,6 +12,7 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
     case unknownDefaultChoice(package: String, option: String)
     case patchForUnknownSchema(package: String, schema: String)
     case badUserDict(package: String, file: String)
+    case badMinAppVersion(package: String, value: String)
 
     public var description: String {
         switch self {
@@ -37,6 +38,8 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
             return "包 \(package) 的选项要改方案 \(schema)，但这个方案不属于这个包"
         case let .badUserDict(package, file):
             return "包 \(package) 的个人词库模板 \(file) 必须是包根目录下、安装规则里有的 .dict.yaml"
+        case let .badMinAppVersion(package, value):
+            return "包 \(package) 的 minAppVersion 写成了 \(value)，要写成 0.3.0 这样的版本号"
         }
     }
 }

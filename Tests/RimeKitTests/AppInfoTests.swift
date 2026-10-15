@@ -33,4 +33,12 @@ import Testing
         #expect(model.notice?.title == "改动已经生效")
         #expect(try String(contentsOf: file, encoding: .utf8).hasPrefix(Patch.header))
     }
+
+    @Test func 版本号和Info_plist一致() throws {
+        let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: root.appending(path: "tools/app/Info.plist"))
+        let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        #expect(plist?["CFBundleShortVersionString"] as? String == AppInfo.version)
+        #expect(AppVersion(AppInfo.version) != nil)
+    }
 }
