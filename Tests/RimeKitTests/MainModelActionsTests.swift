@@ -215,4 +215,25 @@ import Testing
         #expect(model.notice?.action == nil)
         #expect(model.notice?.lines.contains { $0.contains("没下载成") } == true)
     }
+
+    @Test func 还原后应用里的同步记录跟着清掉_没应用的改动留着() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let model = try MainModel(env: m.environment())
+        model.draft.textReplacement.sync = true
+        await model.apply()
+        model.draft.appearance.fontPoint = 26
+        await model.apply()
+        #expect(model.saved.textReplacement.syncedEntries != nil)
+        model.draft.appearance.fontPoint = 30   // 还没应用的改动
+        model.loadBackups()
+        await model.restore(model.backups[0].id)
+        let onDisk = try #require(try SettingsStore(paths: m.paths).load())
+        #expect(model.saved == onDisk)
+        #expect(model.saved.textReplacement.syncedEntries == nil)
+        #expect(model.draft.textReplacement.syncedEntries == nil)
+        #expect(model.draft.appearance.fontPoint == 30)
+        #expect(model.notice?.lines.contains { $0.contains("rimectl") } == false)
+        await model.checkTextReplacement()
+        #expect(model.textReplacementStatus?.changes == nil)   // 和诊断一致：还没同步过
+    }
 }

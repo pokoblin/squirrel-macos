@@ -153,9 +153,18 @@ extension MainModel {
         let deployer = env.deployer()
         do {
             let report = try await offMain { try await deployer.restore(id) }
+            // 还原会清掉文本替换的同步记录：重新读设置；没应用的改动留着，只换同步记录
+            if let now = try SettingsStore(paths: env.paths).load() {
+                saved = now
+                draft.textReplacement.lastSyncedHash = now.textReplacement.lastSyncedHash
+                draft.textReplacement.syncedEntries = now.textReplacement.syncedEntries
+            }
             var lines = ["还原前的状态也备份了：\(report.safetyBackup.id)",
                          "应用里的设置没有变；之后再「应用改动」会按应用里的设置重新写入"]
-            lines += report.deploy.errors.map { "部署时有错误：\($0)" } + report.warnings
+            lines += report.deploy.errors.map { "部署时有错误：\($0)" }
+            lines += report.warnings.map {
+                $0.replacingOccurrences(of: "（rimectl textreplacement sync）", with: "（「文本替换」页里同步）")
+            }
             notice = Notice(kind: report.deploy.errors.isEmpty ? .info : .warning,
                             title: "已还原到 \(report.restored.id)（\(report.restored.reason)）", lines: lines)
         } catch {
