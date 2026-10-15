@@ -101,6 +101,11 @@ public struct Deployer: Sendable {
         let generated = work.appending(path: "generated", directoryHint: .isDirectory)
         let result = try ConfigGenerator().generate(input, into: generated)
         let newPaths = result.files.map(\.path)
+        // 要写、要删的文件所在的目录如果经符号链接指到 Rime 目录外面，一律不写（--overwrite 也不行）
+        let outside = (newPaths + ledger.entries.keys.sorted()).filter { !Self.isInside(rime, $0) }
+        if !outside.isEmpty {
+            return .externalChanges(Array(Set(outside)).sorted().map { .outsideRimeDirectory($0) })
+        }
         changes += ledger.unmanagedOverwrites(newPaths, in: rime)
         if !changes.isEmpty, !options.overwriteExternalChanges {
             return .externalChanges(changes)
@@ -226,10 +231,26 @@ public struct Deployer: Sendable {
         return adopted
     }
 
+    /// 复制到暂存区：符号链接换成它指向的真实内容（相对链接直接复制过去会断）；指向不存在的链接跳过
     static func copy(_ source: URL, to target: URL) throws {
         let fm = FileManager.default
+        let real = source.resolvingSymlinksInPath()
+        guard fm.fileExists(atPath: real.path) else { return }
         try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try fm.copyItem(at: source, to: target)
+        try fm.copyItem(at: real, to: target)
+    }
+
+    /// 这个相对路径所在的目录（解析符号链接后）还在 Rime 目录里吗
+    static func isInside(_ rime: URL, _ path: String) -> Bool {
+        let root = rime.resolvingSymlinksInPath().path
+        var parent = rime.appending(path: path).deletingLastPathComponent()
+        while !FileManager.default.fileExists(atPath: parent.path), parent.path != "/" {
+            parent = parent.deletingLastPathComponent()
+        }
+        // Rime 目录自己还不存在：下面的都是新建的，当然在里面
+        if rime.standardizedFileURL.path.hasPrefix(parent.standardizedFileURL.path + "/") { return true }
+        let resolved = parent.resolvingSymlinksInPath().path
+        return resolved == root || resolved.hasPrefix(root + "/")
     }
 
     /// 先复制成同目录下的临时文件，再 rename 过去：不会出现写了一半的文件

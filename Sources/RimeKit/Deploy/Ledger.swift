@@ -78,10 +78,12 @@ public enum ExternalChange: Sendable, Equatable, CustomStringConvertible {
     case modified(String)
     case deleted(String)
     case unmanaged(String)
+    /// 所在目录是指向 Rime 目录外面的符号链接，加 --overwrite 也不写
+    case outsideRimeDirectory(String)
 
     public var path: String {
         switch self {
-        case .modified(let p), .deleted(let p), .unmanaged(let p): return p
+        case .modified(let p), .deleted(let p), .unmanaged(let p), .outsideRimeDirectory(let p): return p
         }
     }
 
@@ -90,6 +92,7 @@ public enum ExternalChange: Sendable, Equatable, CustomStringConvertible {
         case .modified(let p): return "\(p)：在应用外被改过"
         case .deleted(let p): return "\(p)：在应用外被删了"
         case .unmanaged(let p): return "\(p)：不是应用写的，这次会被覆盖"
+        case .outsideRimeDirectory(let p): return "\(p)：所在目录是指向 Rime 目录外面的链接，不能往里写（请先处理这个链接）"
         }
     }
 }
