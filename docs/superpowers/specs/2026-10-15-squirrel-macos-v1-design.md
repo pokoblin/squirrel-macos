@@ -99,7 +99,7 @@ Windows（小狼毫）、直接编辑 YAML 的高级模式、App Store 版本。
 
 ### 两个技术细节
 
-- **管理员权限**：`Installer` 接受一个「怎么提权」的参数。应用用系统授权弹窗（`NSAppleScript` 执行 `do shell script "installer -pkg … -target /" with administrator privileges`）；`rimectl` 在测试机里用 `sudo`（测试机已配好免密 sudo）。第一版不做 `SMAppService` 特权辅助程序。
+- **管理员权限**：`Installer` 接受一个「怎么提权」的参数。应用用系统授权弹窗（`NSAppleScript` 执行 `do shell script "installer -pkg … -target /" with administrator privileges`）；`rimectl` 在测试机里用 `sudo`（测试机已配好免密 sudo）。第一版不做 `SMAppService` 特权辅助程序。安装前三道检查：sha256 等于 GitHub 接口的 `digest`、`pkgutil` 确认签名和公证且团队 ID 是 `28HU5A7B46`、`spctl` 通过（只靠 `spctl` 不够，改过的包它也放行，已实测）。已经装了同版本或更新版本就不重装。
 - **解压**：用系统自带的 `/usr/bin/ditto -x -k`（已验证：干净的 macOS 27 上可用）。各包的目录结构见 [upstream-layouts.md](../../upstream-layouts.md)，路径一律用查找定位，不写死（极点五笔的 zip 带顶层目录 `rime-wubi86-jidian-master/`，雾凇 `full.zip` 没有顶层目录）。
 
 ### 第三方代码依赖
@@ -240,7 +240,7 @@ userdb/           # 输入习惯的文本快照（可选，默认带上）
 
 ### 6.2 第一次打开
 
-1. **环境检查**：鼠须管装了没有 → 没装就一键安装 → 本体 `im.rime.inputmethod.Squirrel` 启用了没有（用 TIS 的 `kTISPropertyInputSourceIsEnabled` 判断，不读偏好文件）→ 没有就打开系统设置键盘页，配图文说明，每秒检测一次，好了自动切换过去。切换后**主动 `open` 启动鼠须管**（实测：切换后鼠须管不会自己马上启动，`~/Library/Rime` 也不会生成）。
+1. **环境检查**：鼠须管装了没有 → 没装就一键安装 → 本体 `im.rime.inputmethod.Squirrel` 启用了没有（用 TIS 的 `kTISPropertyInputSourceIsEnabled` 判断，不读偏好文件）→ 没有就打开系统设置键盘页，配图文说明，每秒检测一次，好了自动切换过去。切换后**主动 `open` 启动鼠须管**（实测：切换后鼠须管不会自己马上启动，`~/Library/Rime` 也不会生成）。等待用户添加时每秒查一次，等待期间让 run loop 转起来（同一个进程里才能看到变化），TIS 的调用都在主线程上做（否则会崩溃）；最多等 10 分钟，超时就提示用户添加好后再点一次。（阶段 4 实测）
 2. 看 `~/Library/Rime`：
    - **已有配置**：完整备份（这份永久保留）→ 下载能认出的上游包做对照 → 识别方案、包选项、外观、个人词库、短语、补丁 → 把识别结果给用户看，**用户确认后**走 6.1。认不出的文件列出来，原样保留。第一版只认清单里的包。
    - **空的**：选一个起步方案（雾凇全拼、雾凇小鹤双拼、五笔 + 拼音混输），走 6.1。
@@ -335,8 +335,8 @@ userdb/           # 输入习惯的文本快照（可选，默认带上）
 
 | # | 要确认的事 | 影响 | 结论 |
 |---|---|---|---|
-| 1 | `x-apple.systempreferences:com.apple.Keyboard-Settings.extension` 能打开键盘设置页 | 引导添加输入法 | 能，直接停在键盘页。另外发现切换后要主动启动鼠须管（已改 6.2） |
-| 2 | 用 `NSAppleScript` 带管理员权限运行 `installer` 时，postinstall 能拿到当前桌面用户（它用 `stat -f%Su /dev/console`） | 安装 | 能，结果和 `sudo installer` 一样 |
+| 1 | `x-apple.systempreferences:com.apple.Keyboard-Settings.extension` 能打开键盘设置页 | 引导添加输入法 | 能，直接停在键盘页。另外发现切换后要主动启动鼠须管（已改 6.2）。阶段 4 已在干净测试机里用 `rimectl activate` 跑通 |
+| 2 | 用 `NSAppleScript` 带管理员权限运行 `installer` 时，postinstall 能拿到当前桌面用户（它用 `stat -f%Su /dev/console`） | 安装 | 能，结果和 `sudo installer` 一样。阶段 4 用 `rimectl install --gui-auth` 在干净测试机里实测通过（取消也正确处理） |
 | 3 | 独立的 .app（未开沙盒）读 `TextReplacements.db` 会不会被隐私权限拦住 | F6 | 不会被拦，不用授权（已改第 2、7 节） |
 | 4 | 干净的 Mac 上 `/usr/bin/ditto -x -k` 能解压 GitHub 的 zip | 下载方案 | 能（已改第 3、4 节） |
 | 5 | 鼠须管运行时，`rime_dict_manager` 能不能导出、合并输入习惯快照 | 导入导出 | 运行时不行，要先退出；导入是合并（已改 6.3、6.4） |

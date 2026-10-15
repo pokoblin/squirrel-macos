@@ -6,7 +6,7 @@
 
 ## 现在在哪个阶段
 
-**第一版设计已确认，阶段 0–3 已完成（方案清单、下载缓存、生成配置、写入和部署、备份还原）。** 下一步是阶段 4（安装鼠须管、环境检查）。还没有图形界面。
+**第一版设计已确认，阶段 0–4 已完成（方案清单、下载缓存、生成配置、写入和部署、备份还原、安装和环境检查）。** 下一步是阶段 5（接管已有配置）。还没有图形界面。
 
 这些调研来自上一个项目 [squirrel-wubi86](../squirrel-wubi86)。那个项目只为我自己的“极点五笔 + 拼音混输”做配置，所有步骤都是手动在终端里完成的。这里的结论都在虚拟机或真机上实际验证过。
 
@@ -36,3 +36,4 @@ Swift Package（需要 Xcode 27）：`RimeKit` 是全部逻辑，`rimectl` 是�
 - 试用命令行：`swift build && .build/debug/rimectl catalog`；下载时请加 `--data-dir 某个临时目录`
 - 试生成配置：`rimectl settings init wubi-pinyin --data-dir D`，再 `rimectl generate --data-dir D --out D/rime`（生成的测试要先运行 `./tools/vm/build-probes.sh`）
 - 宿主机上试 `rimectl apply` 只用 `--rime-dir` 指向临时目录；写真实配置只在测试机里做
+- 安装、启用鼠须管只在测试机里试：`rimectl install --gui-auth`、`rimectl activate`、`rimectl doctor`

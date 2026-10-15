@@ -68,6 +68,6 @@
 
 - 用图形界面双击 pkg 安装（不是 `installer` 命令），最后的“注销”按钮能不能跳过。
 - 安装时不在桌面登录状态（比如只有 SSH 会话）会怎样：postinstall 用 `stat -f%Su /dev/console` 取当前桌面用户。
-- 已经装过旧版鼠须管的电脑上升级。
+- 已经装过旧版鼠须管的电脑上升级。（`rimectl install` 在已装版本比最新旧时会升级，阶段 4 用假数据测过；真机升级没测。鼠须管自带 Sparkle，也会自己升级。）
 - ~~打开系统设置键盘页的链接是否有效~~：已验证能用，见 [phase0-log.md](phase0-log.md)。
 - ~~前端 .app 自己读取 `TextReplacements.db` 会不会被隐私权限拦住~~：已验证不会被拦（未签名、不开沙盒），见 [phase0-log.md](phase0-log.md)。

@@ -23,6 +23,10 @@
 | Homebrew | cask `squirrel-app` 只是下载同一个 pkg 再运行，没有额外步骤。**不需要 Homebrew** | 查看（`brew info --cask --json=v2`） |
 | 自动更新 | 鼠须管自带 Sparkle 2.6.2，自己会更新，前端不用管升级 | 查看（pkg 的 PackageInfo） |
 | 许可证 | GPL-3.0 | 查看 |
+| GitHub 接口 `repos/rime/squirrel/releases/latest` 的附件带 `digest`（`sha256:…`），可以用来核对下载的安装包 | 查看（2026-10-15） |
+| 已安装的版本在 `Squirrel.app/Contents/Info.plist` 的 `CFBundleVersion`（1.1.2 没有 `CFBundleShortVersionString`） | 实测（宿主机） |
+| **安装包改了 1 个字节，`spctl -a -t install` 仍然 `accepted`**；`pkgutil --check-signature` 报 `package is invalid (checksum did not verify)`，退出码 1。所以要 sha256 + `pkgutil` + `spctl` 三道检查 | 实测（宿主机临时目录，2026-10-15；阶段 4 联网测试） |
+| `rimectl install --gui-auth`（进程里用 `NSAppleScript` 的 `with administrator privileges`）在干净测试机里弹出系统授权框：输密码就装好；点「取消」时错误号是 -128，什么都不动。免密 sudo（`sudo -n installer`）不弹框也能装 | 实测（squirrel-fresh，阶段 4） |
 
 ### 安装包的 postinstall 脚本做了什么（查看）
 
@@ -110,6 +114,9 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | 在宿主机上，`com.apple.HIToolbox` 偏好里的 `AppleEnabledInputSources` **找不到**鼠须管（只在 `AppleInputSourceHistory` 里），但 TIS 显示已启用。所以**别用读偏好文件的方法判断启用状态**，要用 TIS API | 实测 |
 | 打开系统设置键盘页的链接 `x-apple.systempreferences:com.apple.Keyboard-Settings.extension`：直接停在「键盘」页，「文字输入 → 输入法 → 编辑…」和「文本替换…」都在这一页 | 实测（squirrel-dev，2026-10-15） |
 | 用 TIS 切换到鼠须管（OSStatus 0）后，鼠须管进程**不会马上启动**（等了 30 多秒也没有），`~/Library/Rime` 也不生成；要 `open "/Library/Input Methods/Squirrel.app"` 才启动（4 秒内）。应用在用户添加好输入法后要主动启动它 | 实测（squirrel-dev，2026-10-15） |
+| 同一个进程里每秒查一次 TIS：等待时用 `Thread.sleep` 干等，**永远看不到**用户在系统设置里的删除和添加；用 `CFRunLoopRunInMode` 让 run loop 转起来就能看到（TIS 有缓存，靠系统通知更新） | 实测（squirrel-dev，阶段 4，`tis-probe watch`） |
+| **TIS 的调用要放在主线程**：rimectl 的 async 入口里在后台线程查 TIS，同时主线程在处理「输入源变了」的通知，会在 Carbon 内部崩溃（SIGTRAP，`islGetInputSourceProperty`）。全部放到主线程后正常 | 实测（squirrel-fresh，阶段 4） |
+| 用户重新添加鼠须管后，「鼠须管 - 简体」不会自动被选中，要程序切换过去 | 实测（squirrel-dev，阶段 4） |
 
 查看和切换输入源的小工具：[tools/vm/tis-probe.swift](../tools/vm/tis-probe.swift)。
 

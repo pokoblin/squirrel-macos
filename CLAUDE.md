@@ -1,6 +1,6 @@
 # squirrel-macos 项目约定
 
-鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–3 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原），下一步写阶段 4 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
+鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–4 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查），下一步写阶段 5 的计划。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
 
 ## 先读这些
 
