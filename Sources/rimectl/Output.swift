@@ -12,7 +12,10 @@ final class Output: @unchecked Sendable {
 
     func line(_ s: String) {
         lock.withLock { lines.append(s) }
-        if echo { print(s) }
+        if echo {
+            print(s)
+            fflush(stdout)   // 不是终端（比如通过 SSH）时 stdout 是整块缓冲的，不刷新的话要等命令结束才看得到
+        }
     }
 
     func error(_ s: String) {

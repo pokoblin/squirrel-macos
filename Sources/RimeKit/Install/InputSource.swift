@@ -47,18 +47,29 @@ public struct TISInputSourceService: InputSourceControlling {
     public init() {}
 
     public func state() -> InputSourceState {
-        let main = Self.sources().first { Self.id($0) == Self.mainID }
-        let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-        return InputSourceState(
-            registered: main != nil,
-            enabled: main.map { Self.bool($0, kTISPropertyInputSourceIsEnabled) } ?? false,
-            selected: Self.id(current).hasPrefix(Self.mainID))
+        Self.onMain {
+            let main = Self.sources().first { Self.id($0) == Self.mainID }
+            let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+            return InputSourceState(
+                registered: main != nil,
+                enabled: main.map { Self.bool($0, kTISPropertyInputSourceIsEnabled) } ?? false,
+                selected: Self.id(current).hasPrefix(Self.mainID))
+        }
     }
 
     public func selectSquirrel() throws {
-        guard let hans = Self.sources().first(where: { Self.id($0) == Self.hansID }) else { throw InputSourceError.notFound }
-        let status = TISSelectInputSource(hans)
+        let status: OSStatus? = Self.onMain {
+            guard let hans = Self.sources().first(where: { Self.id($0) == Self.hansID }) else { return nil }
+            return TISSelectInputSource(hans)
+        }
+        guard let status else { throw InputSourceError.notFound }
         guard status == noErr else { throw InputSourceError.selectFailed(Int(status)) }
+    }
+
+    /// TIS 的调用都放到主线程上：系统的「输入源变了」通知在主线程上处理，
+    /// 在别的线程同时读会和它撞车，在 Carbon 内部崩溃（阶段 4 测试机实测）
+    static func onMain<T>(_ body: () -> T) -> T {
+        Thread.isMainThread ? body() : DispatchQueue.main.sync(execute: body)
     }
 
     public func openKeyboardSettings() throws {
