@@ -20,7 +20,10 @@ public final class AppState {
     public func start() async {
         guard main == nil else { return }
         await setup.start()
-        if case .done = setup.step { openMain(welcome: []) }
+        if case .done = setup.step {
+            openMain(welcome: [])
+            await main?.checkTextReplacementAtLaunch()
+        }
     }
 
     /// 引导完成页点「开始使用」

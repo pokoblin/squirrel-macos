@@ -35,4 +35,41 @@ import Testing
         #expect(state.main == nil)
         #expect(state.openError?.contains("还没有设置") == true)
     }
+
+    @Test func 打开时文本替换有变化就提示同步() async throws {
+        // 设计 6.5：应用启动时检查，有变化就问要不要同步
+        let m = try T.machine(); defer { m.dir.remove() }
+        let a = Phrase(text: "替换甲", code: "tha", weight: 1)
+        let b = Phrase(text: "替换乙", code: "thb", weight: 1)
+        let first = try MainModel(env: m.environment(textReplacements: {
+            TextReplacementSnapshot(usable: [a], badShortcut: 0, badPhrase: 0)
+        }))
+        first.draft.textReplacement.sync = true
+        await first.apply()   // 上次同步时只有 a
+        let state = AppState(env: m.environment(textReplacements: {
+            TextReplacementSnapshot(usable: [a, b], badShortcut: 0, badPhrase: 0)
+        }))
+        await state.start()
+        let notice = try #require(state.main?.notice)
+        #expect(notice.action == .syncTextReplacement)
+        #expect(notice.lines.contains { $0.contains("新增 1 条") })
+        await state.main?.perform(.syncTextReplacement)
+        await state.main?.checkTextReplacement()
+        #expect(state.main?.textReplacementStatus?.changes == TextReplacementSync.Changes(added: 0, removed: 0))
+    }
+
+    @Test func 打开时文本替换没变化不提示() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        try Ledger(entries: ["x.yaml": LedgerEntry(sha256: "0", origin: "generated")]).save(m.paths)
+        let a = Phrase(text: "替换甲", code: "tha", weight: 1)
+        var settings = T.settings
+        settings.textReplacement.sync = true
+        try SettingsStore(paths: m.paths).save(settings.recordingTextReplacement([a]))
+        let state = AppState(env: m.environment(textReplacements: {
+            TextReplacementSnapshot(usable: [a], badShortcut: 0, badPhrase: 0)
+        }))
+        await state.start()
+        #expect(state.main != nil)
+        #expect(state.main?.notice == nil)
+    }
 }

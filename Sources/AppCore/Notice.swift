@@ -11,6 +11,8 @@ public struct Notice: Identifiable, Equatable, Sendable {
         case applyUsingCache
         /// 部署有问题时：还原到这个备份
         case restore(String)
+        /// 打开应用时发现文本替换有变化：只同步文本替换
+        case syncTextReplacement
     }
 
     public let id = UUID()

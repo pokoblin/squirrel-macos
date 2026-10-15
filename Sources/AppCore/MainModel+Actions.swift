@@ -157,6 +157,8 @@ extension MainModel {
             await run(lastApply.options, usingCache: true, onlySync: lastApply.onlySync)
         case .restore(let id):
             await restore(id)
+        case .syncTextReplacement:
+            await syncTextReplacement()
         }
     }
 
@@ -205,6 +207,22 @@ extension MainModel {
                                                           synced: synced.sync,
                                                           error: "\(error)。可以去「系统设置 → 隐私与安全性」检查权限")
         }
+    }
+
+    /// 打开应用时检查一次文本替换（设计 6.5）：同步开着、有变化就问要不要同步。已经有消息时不打扰
+    public func checkTextReplacementAtLaunch() async {
+        guard saved.textReplacement.sync else { return }
+        await checkTextReplacement()
+        guard notice == nil, let status = textReplacementStatus, status.error == nil else { return }
+        let line: String
+        if let changes = status.changes {
+            guard !changes.isEmpty else { return }
+            line = "和上次同步比：新增 \(changes.added) 条，删掉 \(changes.removed) 条"
+        } else {
+            line = "文本替换还没同步过"
+        }
+        notice = Notice(kind: .info, title: "macOS 文本替换有变化", lines: [line, "要现在同步吗？只同步文本替换，别的设置不变。"],
+                        action: .syncTextReplacement, actionTitle: "现在同步")
     }
 
     // MARK: 导出（设计 6.3）
