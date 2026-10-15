@@ -24,7 +24,7 @@ import Testing
             locations: m.locations, compiler: FakeCompiler(), squirrel: m.squirrel,
             deployTimeout: .milliseconds(20), sleep: { _ in })
         context.userDBTool = m.tool
-        context.textReplacements = { [] }
+        context.textReplacementSnapshot = { TextReplacementSnapshot(usable: [], badShortcut: 0, badPhrase: 0) }
         return CLI(machine: m, output: output, context: context)
     }
 

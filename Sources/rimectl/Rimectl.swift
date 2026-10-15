@@ -25,9 +25,14 @@ struct Rimectl {
         var verifier: (any PackageVerifying)? = nil
         var activationTimeout: Double = 600
         /// 读 macOS 文本替换；测试时换成假的
-        var textReplacements: @Sendable () throws -> [Phrase] = { try TextReplacementReader().read() }
+        var textReplacementSnapshot: @Sendable () throws -> TextReplacementSnapshot = { try TextReplacementReader().snapshot() }
         /// 空就用鼠须管自带的 rime_dict_manager
         var userDBTool: (any UserDBTool)? = nil
+
+        /// 能用的文本替换
+        func textReplacements() throws -> [Phrase] {
+            try textReplacementSnapshot().usable
+        }
     }
 
     static let usage = """
@@ -44,6 +49,7 @@ struct Rimectl {
       rimectl takeover [--confirm] [--force] [--cache-only]    认出已有的 Rime 配置并预览；加 --confirm 才真的接管（先完整备份）
       rimectl export <文件> [--no-userdb] [--force]           把设置、个人内容、输入习惯打成一个文件（--force 覆盖已有文件）
       rimectl import <文件> [--no-userdb] [--cache-only]      从导出文件还原：下载最新上游包、写入配置、合并输入习惯
+      rimectl textreplacement status|sync|off [--cache-only]  文本替换：看状态 / 打开同步并应用 / 关掉同步并应用
       rimectl status                                           查看鼠须管、Rime 目录、外部改动、备份
       rimectl restore --list | <备份 id>                        列出备份 / 还原到某个备份
       rimectl install [--force] [--gui-auth]                   下载、检查、安装鼠须管（--gui-auth 弹系统授权框，否则用免密 sudo）
@@ -155,6 +161,9 @@ struct Rimectl {
             case "takeover":
                 return try await takeover(confirm: confirm, force: force, cacheOnly: cacheOnly,
                                           paths: paths, locations: locations, context)
+            case "textreplacement":
+                return try await textReplacementCommand(Array(positional.dropFirst()), cacheOnly: cacheOnly,
+                                                        paths: paths, locations: locations, context)
             case "export":
                 return try await export(Array(positional.dropFirst()), includeUserDB: !noUserDB, force: force,
                                         paths: paths, locations: locations, context)
@@ -267,9 +276,10 @@ struct Rimectl {
     }
 
     /// 读设置、取包、读个人内容；失败时已经输出了错误，返回 nil
-    private static func prepareInput(cacheOnly: Bool, paths: AppPaths, _ context: Context) async throws -> GenerationInput? {
+    private static func prepareInput(cacheOnly: Bool, paths: AppPaths, _ context: Context,
+                                     settings override: Settings? = nil) async throws -> GenerationInput? {
         let out = context.output
-        guard let settings = try SettingsStore(paths: paths).load() else {
+        guard let settings = try override ?? SettingsStore(paths: paths).load() else {
             out.error("还没有设置，先运行 rimectl settings init rime-ice|flypy|wubi-pinyin")
             return nil
         }
@@ -309,10 +319,16 @@ struct Rimectl {
     }
 
     private static func apply(cacheOnly: Bool, options: ApplyOptions, paths: AppPaths, locations: RimeLocations,
-                              _ context: Context) async throws -> Int32 {
+                              _ context: Context, settings override: Settings? = nil) async throws -> Int32 {
         let out = context.output
-        guard let input = try await prepareInput(cacheOnly: cacheOnly, paths: paths, context) else { return 1 }
-        return printApplyOutcome(try await deployer(paths: paths, locations: locations, context).apply(input, options: options), out)
+        guard let input = try await prepareInput(cacheOnly: cacheOnly, paths: paths, context, settings: override) else { return 1 }
+        // 写好后（通知鼠须管前）记下这次用的文本替换；设置没变就不写
+        let updated = input.settings.recordingTextReplacement(input.textReplacementPhrases)
+        let changed = try updated != SettingsStore(paths: paths).load()
+        let outcome = try await deployer(paths: paths, locations: locations, context).apply(
+            input, options: options,
+            afterWrite: { if changed { try SettingsStore(paths: paths).save(updated) } })
+        return printApplyOutcome(outcome, out)
     }
 
     private static func printApplyOutcome(_ outcome: ApplyOutcome, _ out: Output) -> Int32 {
@@ -392,6 +408,50 @@ struct Rimectl {
         let outcome = try await TakeoverApplier(deployer: deployer(paths: paths, locations: locations, context))
             .confirm(proposal, catalog: catalog, packages: packages, textReplacement: textReplacement, force: force)
         return printApplyOutcome(outcome, out)
+    }
+
+    /// 文本替换：status 只读；sync / off 改开关后走一次应用。只输出条数，不输出内容
+    private static func textReplacementCommand(_ args: [String], cacheOnly: Bool, paths: AppPaths, locations: RimeLocations,
+                                               _ context: Context) async throws -> Int32 {
+        let out = context.output
+        guard args.count == 1 else { out.error(usage); return 2 }
+        guard var settings = try SettingsStore(paths: paths).load() else {
+            out.error("还没有设置。先运行 rimectl takeover 接管已有配置，或 rimectl settings init 选一个起步方案")
+            return 1
+        }
+        switch args[0] {
+        case "status":
+            let snapshot = try context.textReplacementSnapshot()
+            var line = "macOS 文本替换：\(snapshot.usable.count) 条能用"
+            if snapshot.badShortcut > 0 { line += "；\(snapshot.badShortcut) 条快捷码里有数字或符号，Rime 里打不出来，跳过" }
+            if snapshot.badPhrase > 0 { line += "；\(snapshot.badPhrase) 条内容是空的、有换行或 Tab，跳过" }
+            out.line(line)
+            guard settings.textReplacement.sync else {
+                out.line("同步：没打开。打开并应用：rimectl textreplacement sync")
+                return 0
+            }
+            if let changes = TextReplacementSync.changes(snapshot.usable, since: settings.textReplacement) {
+                if changes.isEmpty {
+                    out.line("同步：已打开，和上次同步时一样")
+                } else {
+                    out.line("同步：已打开。和上次同步比：新增 \(changes.added) 条，删掉 \(changes.removed) 条。要同步就运行 rimectl textreplacement sync")
+                }
+            } else {
+                out.line("同步：已打开，还没同步过。要同步就运行 rimectl textreplacement sync")
+            }
+            return 0
+        case "sync":
+            settings.textReplacement.sync = true
+            return try await apply(cacheOnly: cacheOnly, options: ApplyOptions(), paths: paths, locations: locations,
+                                   context, settings: settings)
+        case "off":
+            settings.textReplacement.sync = false
+            return try await apply(cacheOnly: cacheOnly, options: ApplyOptions(), paths: paths, locations: locations,
+                                   context, settings: settings)
+        default:
+            out.error(usage)
+            return 2
+        }
     }
 
     private static func userDB(_ locations: RimeLocations, _ context: Context) -> UserDBTransfer {

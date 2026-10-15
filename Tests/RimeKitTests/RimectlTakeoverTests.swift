@@ -30,7 +30,7 @@ import Testing
             http: FakeHTTPClient(), retry: .immediate, catalog: { catalog }, defaultPaths: paths, output: output,
             locations: locations, compiler: FakeCompiler(), squirrel: FakeSquirrel(locations: locations, running: true),
             deployTimeout: .milliseconds(20), sleep: { _ in })
-        context.textReplacements = { [F.fromTR] }
+        context.textReplacementSnapshot = { TextReplacementSnapshot(usable: [F.fromTR], badShortcut: 0, badPhrase: 0) }
         return Env(dir: dir, paths: paths, locations: locations, output: output, context: context)
     }
 
@@ -70,7 +70,7 @@ import Testing
         // 读不到就分不出哪些是文本替换的短语：接管会把它们存成手动短语（以后还会被导出）
         var e = try env(); defer { e.dir.remove() }
         var context = e.context
-        context.textReplacements = { throw Unreadable() }
+        context.textReplacementSnapshot = { throw Unreadable() }
         e = Env(dir: e.dir, paths: e.paths, locations: e.locations, output: e.output, context: context)
         #expect(await e.run(["takeover", "--cache-only"]) == 0)
         #expect(e.output.text.contains("数据库打不开"))
