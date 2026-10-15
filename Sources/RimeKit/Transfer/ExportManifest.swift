@@ -45,6 +45,8 @@ public enum TransferError: Error, Equatable, Sendable, CustomStringConvertible {
     case notAnExport(String)
     case unsupportedFormat(Int)
     case badSettings(String)
+    /// 导出文件里用到了现在的方案清单里没有的方案或选项（导入时会先检查一次在线清单，在线方案清单设计 4.5）
+    case unknownToCatalog(String)
     case badContent(String)
     /// 导入出错；previous 是导入前另存的设置和个人内容
     case importFailed(String, previous: String)
@@ -63,6 +65,8 @@ public enum TransferError: Error, Equatable, Sendable, CustomStringConvertible {
             return "导出文件的格式版本是 \(v)，这个版本的应用只认识 \(ExportManifest.currentFormatVersion)，请更新应用"
         case .badSettings(let message):
             return "导出文件里的设置用不了：\(message)"
+        case .unknownToCatalog(let message):
+            return "导出文件里用到了这个版本的应用不认识的方案或选项：\(message)。请更新应用"
         case .badContent(let message):
             return "导出文件坏了：\(message)"
         case let .importFailed(message, previous):

@@ -62,4 +62,16 @@ enum TestCatalogs {
         try data.write(to: paths.catalogCache.appending(path: "catalog.json"))
         try (signature ?? sign(data)).write(to: paths.catalogCache.appending(path: "catalog.json.sig"))
     }
+
+    /// 只有 manifest.json 的导出文件，设置里启用了这些方案
+    static func exportFile(schemas: [String], in dir: URL) throws -> URL {
+        let content = dir.appending(path: "export-content-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: content, withIntermediateDirectories: true)
+        let manifest = ExportManifest(formatVersion: 1, exportedAt: Date(), settings: Settings(schemas: schemas),
+                                      packages: [], personalDicts: [], phrases: 0, userDB: [])
+        try JSONCoding.encoder.encode(manifest).write(to: content.appending(path: "manifest.json"))
+        let file = dir.appending(path: "export-\(UUID().uuidString).zip")
+        try Zipper().zip(content, to: file)
+        return file
+    }
 }

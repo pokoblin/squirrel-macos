@@ -182,3 +182,31 @@ public struct CatalogStore: Sendable {
         }
     }
 }
+
+extension CatalogStore {
+    public struct OpenedArchive: Sendable {
+        public let archive: ImportArchive
+        /// 为了认出导出文件里的方案，更新了方案清单（没更新为 nil）
+        public let updated: CatalogStatus?
+    }
+
+    /// 打开导出文件（设计 4.5）。里面用到了手头清单里没有的方案时，先检查一次在线清单再打开；
+    /// checking 在开始检查前调用（界面上显示「正在更新方案清单」）
+    public func openArchive(_ file: URL, catalog: Catalog, inUse: Settings?, into dir: URL,
+                            checking: @escaping @Sendable () async -> Void = {}) async throws -> OpenedArchive {
+        do {
+            return OpenedArchive(archive: try ImportArchive.open(file, catalog: catalog, into: dir), updated: nil)
+        } catch TransferError.unknownToCatalog(let message) {
+            await checking()
+            switch await check(inUse: inUse) {
+            case .updated(_, let status):
+                try? FileManager.default.removeItem(at: dir)   // 重新解压一次
+                return OpenedArchive(archive: try ImportArchive.open(file, catalog: status.catalog, into: dir), updated: status)
+            case .upToDate:
+                throw TransferError.unknownToCatalog(message + "（方案清单已经是最新的）")
+            case .rejected(let reason):
+                throw TransferError.unknownToCatalog(message + "（检查方案清单更新：\(reason)）")
+            }
+        }
+    }
+}

@@ -61,7 +61,7 @@ import Testing
         do {
             _ = try open(file, m)
             Issue.record("应该报错")
-        } catch let TransferError.badSettings(message) {
+        } catch let TransferError.unknownToCatalog(message) {
             #expect(message.contains("nope"))
         }
     }

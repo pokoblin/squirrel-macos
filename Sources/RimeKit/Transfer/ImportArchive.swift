@@ -31,8 +31,13 @@ public struct ImportArchive: Sendable, Equatable {
         }
         do {
             try manifest.settings.validate(catalog)
-        } catch {
-            throw TransferError.badSettings(String(describing: error))
+        } catch let error as SettingsError {
+            switch error {
+            case .unknownSchema, .unknownOption, .unknownChoice:
+                throw TransferError.unknownToCatalog(String(describing: error))
+            default:
+                throw TransferError.badSettings(String(describing: error))
+            }
         }
 
         var warnings: [String] = []
