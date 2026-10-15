@@ -82,6 +82,7 @@ public struct TextReplacementReader: Sendable {
         var usable: [Phrase] = []
         var badShortcut = 0
         var badPhrase = 0
+        var seen = Set<String>()
         while true {
             let step = sqlite3_step(statement)
             if step == SQLITE_DONE { break }
@@ -98,6 +99,8 @@ public struct TextReplacementReader: Sendable {
                 badPhrase += 1
                 continue
             }
+            // 快捷码转小写后，只差大小写的同一条只留一条（生成短语时也只算一条）
+            guard seen.insert(phrase.text + "\t" + phrase.code).inserted else { continue }
             usable.append(phrase)
         }
         return TextReplacementSnapshot(usable: usable, badShortcut: badShortcut, badPhrase: badPhrase)

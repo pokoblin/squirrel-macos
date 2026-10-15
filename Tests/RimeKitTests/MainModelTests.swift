@@ -81,4 +81,17 @@ import Testing
         model.setEnabled("py", false)
         #expect(model.mixedPackagesNote == nil)
     }
+
+    @Test func 选项改回默认值不算有改动() throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        try SettingsStore(paths: m.paths).save(Settings(schemas: ["wb_py", "py"]))   // 没有写选项：都是默认值
+        let model = try MainModel(env: m.environment())
+        let wubi = model.optionPackages[0]
+        let option = wubi.options[0]
+        let other = try #require(option.choices.first { $0.id != option.defaultChoice })
+        model.setChoice(other.id, option: option, of: wubi)
+        #expect(model.isDirty)
+        model.setChoice(option.defaultChoice, option: option, of: wubi)
+        #expect(!model.isDirty)
+    }
 }

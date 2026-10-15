@@ -40,7 +40,7 @@ public final class MainModel {
     public var draft: Settings {
         didSet { if oldValue.schemas != draft.schemas || oldValue.options != draft.options { refreshColorSchemes() } }
     }
-    public var isDirty: Bool { draft != saved }
+    public var isDirty: Bool { normalized(draft) != normalized(saved) }
     /// 正在做的事（界面上显示）；nil 表示空闲
     public internal(set) var working: String?
     public var notice: Notice?
@@ -66,6 +66,18 @@ public final class MainModel {
         draft = settings
         if !welcome.isEmpty { notice = Notice(kind: .info, title: "设置好了", lines: welcome) }
         refreshColorSchemes()
+    }
+
+    /// 包选项里和默认值一样的项去掉（改回默认值不算改动）
+    func normalized(_ settings: Settings) -> Settings {
+        var copy = settings
+        for (packageID, choices) in settings.options {
+            guard let package = env.catalog.package(packageID) else { continue }
+            let defaults = Dictionary(uniqueKeysWithValues: package.options.map { ($0.id, $0.defaultChoice) })
+            let kept = choices.filter { defaults[$0.key] != $0.value }
+            copy.options[packageID] = kept.isEmpty ? nil : kept
+        }
+        return copy
     }
 
     public func revert() {

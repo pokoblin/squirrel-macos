@@ -75,4 +75,12 @@ import Testing
         #expect(try TextReplacementReader(database: dir.url.appending(path: "none.db")).snapshot()
                 == TextReplacementSnapshot(usable: [], badShortcut: 0, badPhrase: 0))
     }
+
+    @Test func 快捷码只差大小写的同一条只算一次() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let db = dir.url.appending(path: "TextReplacements.db")
+        try TextReplacementFixtures.makeDatabase(db, [("ABC", "同一条", 0), ("abc", "同一条", 0), ("abc", "另一条", 0)])
+        let snapshot = try TextReplacementReader(database: db).snapshot()
+        #expect(snapshot.usable.count == 2)
+    }
 }

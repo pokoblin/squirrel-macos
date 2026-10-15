@@ -277,4 +277,50 @@ import Testing
         await model.apply()
         #expect(!model.colorSchemes.isEmpty)
     }
+
+    @Test func 同步开着读不了文本替换时_说可以先关同步() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        struct Unreadable: Error, CustomStringConvertible { var description: String { "没有权限" } }
+        let model = try MainModel(env: m.environment(textReplacements: { throw Unreadable() }))
+        model.draft.textReplacement.sync = true
+        await model.apply()
+        #expect(model.notice?.title == "读不了 macOS 文本替换，没有写入")
+        #expect(model.notice?.lines.contains { $0.contains("关掉同步") } == true)
+    }
+
+    @Test func 只有目录在Rime外面的改动时_不问覆盖_直接说不能写() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        try SettingsStore(paths: m.paths).save(Settings(schemas: ["wb"]))   // 五笔要写 cn/a.dict.yaml
+        let fm = FileManager.default
+        try fm.createDirectory(at: m.locations.rimeDirectory, withIntermediateDirectories: true)
+        let outside = m.dir.url.appending(path: "dotfiles/cn", directoryHint: .isDirectory)
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: m.locations.rimeDirectory.appending(path: "cn"), withDestinationURL: outside)
+        let model = try MainModel(env: m.environment())
+        await model.apply()
+        #expect(model.pendingExternalChanges == nil)
+        #expect(model.notice?.title == "这些文件不能写，没有写入")
+    }
+
+    @Test func 关掉外部改动弹窗等于放弃() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let model = try MainModel(env: m.environment())
+        await model.apply()
+        try Data("# 外面改的\n".utf8).write(to: m.locations.rimeDirectory.appending(path: "squirrel.custom.yaml"))
+        model.draft.appearance.fontPoint = 30
+        await model.apply()
+        #expect(model.pendingExternalChanges != nil)
+        model.dismissExternalChanges()
+        #expect(model.pendingExternalChanges == nil)
+        #expect(model.isDirty)   // 草稿还在
+    }
+
+    @Test func 导入后读不了设置时_说导入好了但要重开() throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let model = try MainModel(env: m.environment())
+        try Data("坏了".utf8).write(to: m.paths.settingsFile)
+        let note = try #require(model.reloadSettingsAfterImport())
+        #expect(note.contains("导入好了"))
+        #expect(note.contains("退出应用再打开"))
+    }
 }

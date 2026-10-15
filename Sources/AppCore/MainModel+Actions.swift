@@ -38,7 +38,18 @@ extension MainModel {
         pendingExternalChanges = nil
         do {
             guard let packages = try await packages(for: settings, usingCache: usingCache) else { return }
-            let replacements = settings.textReplacement.sync ? try env.textReplacements().usable : []
+            let replacements: [Phrase]
+            if settings.textReplacement.sync {
+                do {
+                    replacements = try env.textReplacements().usable
+                } catch {
+                    notice = Notice(kind: .error, title: "读不了 macOS 文本替换，没有写入",
+                                    lines: ["\(error)", "可以去「系统设置 → 隐私与安全性」检查权限；或者先在「文本替换」页关掉同步，再应用改动"])
+                    return
+                }
+            } else {
+                replacements = []
+            }
             let input = GenerationInput(settings: settings, catalog: env.catalog, packages: packages,
                                         personal: try PersonalContent.load(from: env.paths), textReplacementPhrases: replacements)
             // 写好后（通知鼠须管前）保存设置，并记下这次用的文本替换
@@ -63,8 +74,8 @@ extension MainModel {
             case .compileFailed(let errors):
                 notice = Notice(kind: .error, title: "新配置编译不过，没有写入", lines: errors)
             case .externalChanges(let changes):
-                if options.overwriteExternalChanges {
-                    // 已经要求覆盖了还是不能写：所在目录是指到 Rime 目录外面的链接
+                if options.overwriteExternalChanges || changes.allSatisfy({ if case .outsideRimeDirectory = $0 { true } else { false } }) {
+                    // 已经要求覆盖了还是不能写，或者只有覆盖也没用的改动：所在目录是指到 Rime 目录外面的链接
                     notice = Notice(kind: .error, title: "这些文件不能写，没有写入", lines: changes.map(\.description))
                 } else {
                     let ledger = try Ledger.load(env.paths)
@@ -147,6 +158,11 @@ extension MainModel {
             await run(ApplyOptions(overwriteExternalChanges: true, adoptPersonalChanges: true), usingCache: usingCache,
                       onlySync: lastApply.onlySync)
         }
+    }
+
+    /// 外部改动弹窗被关掉（按 Esc 等）：等于放弃这次改动，草稿留着
+    public func dismissExternalChanges() {
+        pendingExternalChanges = nil
     }
 
     /// 消息里的按钮
@@ -281,10 +297,7 @@ extension MainModel {
             if let error = report.userDBError { lines.append("输入习惯没有合并上：\(error)。配置已经导入好了，可以再导入一次") }
             switch report.outcome {
             case .applied(let applied):
-                if let now = try SettingsStore(paths: env.paths).load() {
-                    saved = now
-                    draft = now
-                }
+                if let note = reloadSettingsAfterImport() { lines.append(note) }
                 refreshColorSchemes()
                 var result = Self.notice(for: applied)
                 result.title = result.kind == .info ? "已导入" : result.title
@@ -297,6 +310,19 @@ extension MainModel {
             }
         } catch {
             notice = Notice(kind: .error, title: "没能导入", lines: ["\(error)"])
+        }
+    }
+
+    /// 导入成功后重新读设置。读不了时返回提醒（导入本身已经成功）
+    func reloadSettingsAfterImport() -> String? {
+        do {
+            if let now = try SettingsStore(paths: env.paths).load() {
+                saved = now
+                draft = now
+            }
+            return nil
+        } catch {
+            return "配置已经导入好了，但应用重新读设置时出错（\(error)）。请退出应用再打开"
         }
     }
 

@@ -33,7 +33,7 @@ struct MainView: View {
         } message: { notice in
             Text(notice.lines.joined(separator: "\n"))
         }
-        .confirmationDialog("有文件在应用外被改过", isPresented: Binding(get: { model.pendingExternalChanges != nil }, set: { _ in }),
+        .confirmationDialog("有文件在应用外被改过", isPresented: Binding(get: { model.pendingExternalChanges != nil }, set: { if !$0 { model.dismissExternalChanges() } }),
                             titleVisibility: .visible) {
             Button("覆盖（先备份）") { Task { await model.resolveExternalChanges(.overwrite) } }
             if model.pendingPersonalChanges {
