@@ -123,6 +123,42 @@ final class GenerationContext {
         }
     }
 
+    // MARK: 规则 4：外观
+
+    func applyAppearance() throws {
+        let a = input.settings.appearance
+        var p = patches["squirrel"] ?? Patch()
+        if let s = a.colorScheme { p.set("style/color_scheme", YAMLNode.text(s)) }
+        if let s = a.colorSchemeDark { p.set("style/color_scheme_dark", YAMLNode.text(s)) }
+        var values: [(String, Node)] = []
+        if let v = a.fontPoint { values.append(("font_point", YAMLNode.int(v))) }
+        if let v = a.labelFontPoint { values.append(("label_font_point", YAMLNode.int(v))) }
+        if let v = a.commentFontPoint { values.append(("comment_font_point", YAMLNode.int(v))) }
+        if let v = a.candidateListLayout { values.append(("candidate_list_layout", YAMLNode.text(v.rawValue))) }
+        if let v = a.textOrientation { values.append(("text_orientation", YAMLNode.text(v.rawValue))) }
+        if !values.isEmpty {
+            let schemes = try effectiveColorSchemes(p)
+            for (key, value) in values {
+                p.set("style/\(key)", value)
+                for scheme in schemes { p.set("preset_color_schemes/\(scheme)/\(key)", value) }
+            }
+        }
+        if !p.isEmpty { patches["squirrel"] = p }
+    }
+
+    /// 实际生效的浅色、深色配色名（去重）：补丁里写的（设置里指定的已经写进补丁）> 包里的 squirrel.yaml 写的
+    func effectiveColorSchemes(_ patch: Patch) throws -> [String] {
+        let file = try readYAML("squirrel.yaml", label: "squirrel.yaml")
+        var result: [String] = []
+        for key in ["color_scheme", "color_scheme_dark"] {
+            let name = patch["style/\(key)"]?.string
+                ?? patch["style"]?[key]?.string
+                ?? file?["style"]?[key]?.string
+            if let name, !result.contains(name) { result.append(name) }
+        }
+        return result
+    }
+
     // MARK: 规则 8：写出补丁文件
 
     func writePatches() throws {
