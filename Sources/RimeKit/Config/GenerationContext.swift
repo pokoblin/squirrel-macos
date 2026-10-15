@@ -161,12 +161,13 @@ final class GenerationContext {
 
     // MARK: 规则 5：包选项
 
+    /// 选项的补丁写给选项里列出的所有方案，不管启用没启用：
+    /// 启用的方案会通过 schema/dependencies 用到没启用的方案（极点五笔的混输靠 pinyin_simp 把 pinyin_ext 编译出来）
     func applyOptions() throws {
-        let enabled = Set(input.settings.schemas)
         for spec in required {
             for option in spec.options {
                 let choice = input.settings.choice(option, of: spec)
-                for (schema, values) in choice.patches.sorted(by: { $0.key < $1.key }) where enabled.contains(schema) {
+                for (schema, values) in choice.patches.sorted(by: { $0.key < $1.key }) {
                     for (key, value) in values.sorted(by: { $0.key < $1.key }) {
                         patches[schema, default: Patch()].set(key, YAMLNode.text(value))
                     }

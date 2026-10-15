@@ -30,7 +30,8 @@ import Testing
         #expect(result.files.contains(GeneratedFile(path: "py_ext.dict.yaml", origin: .generated)))
         #expect(try GenFixtures.patch(out, "wb")["reverse_lookup/dictionary"]?.string == "py_ext")
         #expect(try GenFixtures.patch(out, "wpy")["translator/dictionary"]?.string == "py_ext")
-        #expect(!GenFixtures.exists(out, "wb_py.custom.yaml"))   // wb_py 没启用，不写它的补丁
+        // wb_py 没启用也写补丁：启用的方案可能通过 schema/dependencies 用到它
+        #expect(try GenFixtures.patch(out, "wb_py")["reverse_lookup/dictionary"]?.string == "py_ext")
     }
 
     @Test func 有个人词库时挂到总词库最前面() throws {

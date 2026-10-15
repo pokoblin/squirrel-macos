@@ -45,3 +45,20 @@ struct GeneratedConfigCompileTests {
         #expect(sp["tstx"]?.first == "测试短语")     // 双拼用自己的短语文件也有
     }
 }
+
+@Suite(.enabled(if: RimeTools.installed))
+struct OptionDependencyCompileTests {
+    @Test func 只启用五笔时拼音混输也能用() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let packages = try GenFixtures.makePackages(in: dir.url.appending(path: "cache"))
+        let out = dir.url.appending(path: "out")
+        // 只启用 wb；wb 依赖的 wpy 没启用，但 wpy 的词库要改成 py_ext，py_ext 才会被编译
+        _ = try ConfigGenerator().generate(try GenFixtures.input(Settings(schemas: ["wb"]), packages: packages), into: out)
+        let build = try RimeTools.build(out)
+        #expect(build.status == 0)
+        #expect(GenFixtures.exists(out, "build/py_ext.table.bin"), "没有编译出 py_ext")
+        let wb = try RimeTools.type(out, schema: "wb", ["g", "daciku"])
+        #expect(wb["g"]?.first == "一")
+        #expect(wb["daciku"]?.contains("大词库") == true, "\(wb["daciku"] ?? [])")
+    }
+}

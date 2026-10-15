@@ -96,10 +96,11 @@ enum GenFixtures {
         translator:
           dictionary: wb
           enable_sentence: false
+        abc_segmentor:
+          extra_tags:
+            - reverse_lookup
         reverse_lookup:
           dictionary: wpy
-          prefix: "z"
-          tips: "〔拼音〕"
 
         """
     }

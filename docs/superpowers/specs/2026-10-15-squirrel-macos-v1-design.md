@@ -216,7 +216,7 @@ userdb/           # 输入习惯的文本快照（可选，默认带上）
 2. **复制上游文件**：按安装顺序复制每个包缓存里的文件，**不复制**根目录的 `*.custom.yaml`（当作上游默认补丁）和 `LICENSE`。两个包有同一路径的文件时后面的覆盖前面的；内容不同就记一条提醒。
 3. **补丁按顺序叠加**（Rime 按顺序应用补丁，后面的覆盖前面的，已实测）：上游自带的 `<名字>.custom.yaml` → 包选项的补丁 → 短语注入 → 设置里保留的补丁 → 应用管理的键。同一个键再写一次时，删掉旧的、放到最后。
 4. **应用管理的键**：`default.custom.yaml` 写 `schema_list`（设置里的顺序，第一个是默认方案）和 `menu/page_size`；`squirrel.custom.yaml` 写外观。外观里的字号、横竖排同时写到 `style/<键>` 和**实际生效的浅色、深色配色**的 `preset_color_schemes/<配色>/<键>`（极点五笔把字号写在配色里，只改 `style` 不生效）。实际生效的配色：设置里指定的 > 补丁里写的 > 包里的 `squirrel.yaml` 写的。
-5. **包选项**：所选选项的补丁写进对应方案的 `<方案>.custom.yaml`（只写启用了的方案）；选项要生成的总词库（如 `pinyin_ext.dict.yaml`）由应用生成，标了「只在有个人词库时」的导入表，只在用户有同名个人词库时才挂上。
+5. **包选项**：所选选项的补丁写进对应方案的 `<方案>.custom.yaml`，**选项里列出的方案都写，不管启用没启用**（启用的方案会通过 `schema/dependencies` 用到没启用的方案：极点五笔的混输靠 `pinyin_simp` 的翻译器指向 `pinyin_ext`，Rime 才会编译这个总词库；Rime 不会因为 `reverse_lookup/dictionary` 去编译词库，已实测）；选项要生成的总词库（如 `pinyin_ext.dict.yaml`）由应用生成，标了「只在有个人词库时」的导入表，只在用户有同名个人词库时才挂上。
 6. **个人词库**：`personal/dicts/*.dict.yaml` 复制到输出目录根，和上游同名时**用个人的**。
 7. **短语**（手动短语 + 文本替换生成的短语，有短语时才处理）：对每个启用的方案，如果方案本来就有 `table_translator@custom_phrase`，用它的 `custom_phrase/user_dict` 指定的文件（雾凇全拼是 `custom_phrase.txt`，小鹤双拼是 `custom_phrase_double.txt`）；没有的（极点五笔）注入短语翻译器，用 `custom_phrase.txt`。每个短语文件 = 上游同名文件原样（如果有）+ 用户的短语；上游没有就新建。
 8. 只有内容不为空的补丁才生成 `.custom.yaml` 文件。
