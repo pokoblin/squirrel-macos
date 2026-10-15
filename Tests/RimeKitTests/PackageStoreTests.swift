@@ -167,3 +167,36 @@ final class Clock: @unchecked Sendable {
         }
     }
 }
+
+@Suite struct PackageStoreCacheRulesTests {
+    @Test func 清单规则变了就不用旧缓存() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let http = FakeHTTPClient()
+        try Fixtures.stubAll(http)
+        let store = PackageStore(paths: Fixtures.paths(dir), http: http, retry: .immediate)
+        let old = try #require(try Fixtures.catalog().package("base"))
+        _ = try await store.fetch(old)
+
+        let json = Fixtures.catalogJSON
+            .replacingOccurrences(of: #""include":["*.schema.yaml","dicts/**"]"#, with: #""include":["*.schema.yaml","dicts/**","README.md"]"#)
+            .replacingOccurrences(of: #""requiredFiles":["base.schema.yaml","dicts/a.dict.yaml"]"#, with: #""requiredFiles":["base.schema.yaml","dicts/a.dict.yaml","README.md"]"#)
+        let newer = try #require(try Catalog.decode(Data(json.utf8)).package("base"))
+        #expect(newer != old)
+        #expect(store.latestCached(for: newer) == nil)
+        let pkg = try await store.fetch(newer)
+        #expect(pkg.info.files.contains("README.md"))
+        #expect(http.callCount(Fixtures.baseZipURL) == 2)
+        #expect(store.latestCached(for: newer)?.info.files.contains("README.md") == true)
+        #expect(store.latestCached(for: old) == nil)   // 同一版本被新规则的缓存替换了
+    }
+
+    @Test func 目录名一样但版本不同不算命中() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let http = FakeHTTPClient()
+        try Fixtures.stubAll(http, baseVersion: "a:b")
+        let store = PackageStore(paths: Fixtures.paths(dir), http: http, retry: .immediate)
+        _ = try await store.fetch(try #require(try Fixtures.catalog().package("base")))
+        #expect(store.cached("base", version: "a:b") != nil)
+        #expect(store.cached("base", version: "a-b") == nil)
+    }
+}

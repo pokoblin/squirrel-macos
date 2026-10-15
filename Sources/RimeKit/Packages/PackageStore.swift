@@ -9,6 +9,9 @@ public struct PackageInfo: Sendable, Equatable, Codable {
     public let fetchedAt: Date
     /// 装进来的文件（相对包根目录），已排序
     public let files: [String]
+    /// 取这个包时用的清单规则（anchor、include、exclude、requiredFiles）的指纹。
+    /// 应用升级后规则变了，旧缓存就不能直接用
+    public let rules: String
 }
 
 public struct CachedPackage: Sendable, Equatable {
@@ -62,7 +65,8 @@ public struct PackageStore: Sendable {
     }
 
     public func cached(_ id: String, version: String) -> CachedPackage? {
-        load(paths.packages.appending(path: Self.directoryName(id: id, version: version), directoryHint: .isDirectory), id: id)
+        let pkg = load(paths.packages.appending(path: Self.directoryName(id: id, version: version), directoryHint: .isDirectory), id: id)
+        return pkg?.info.version == version ? pkg : nil   // 目录名清洗后可能撞车，版本要再核对一次
     }
 
     /// 本地缓存的所有版本，最新取到的在前
@@ -78,10 +82,30 @@ public struct PackageStore: Sendable {
         cachedVersions(id).first
     }
 
+    /// 按当前清单规则还能用的缓存里，最新取到的那个
+    public func latestCached(for spec: PackageSpec) -> CachedPackage? {
+        let rules = Self.rulesFingerprint(spec)
+        return cachedVersions(spec.id).first { $0.info.rules == rules }
+    }
+
+    /// 清单规则的指纹：规则任何一处变了，指纹就变
+    public static func rulesFingerprint(_ spec: PackageSpec) -> String {
+        struct Rules: Encodable {
+            let anchor: String
+            let include: [FileGlob]
+            let exclude: [FileGlob]
+            let requiredFiles: [String]
+        }
+        let rules = Rules(anchor: spec.anchor, include: spec.include, exclude: spec.exclude, requiredFiles: spec.requiredFiles)
+        let data = (try? JSONCoding.encoder.encode(rules)) ?? Data()
+        return Hashing.sha256(of: data)
+    }
+
     /// 取这个包的最新版：本地已有这个版本就直接用，没有就下载
     public func fetch(_ spec: PackageSpec) async throws -> CachedPackage {
         let resolved = try await resolver.resolve(spec.source)
-        if let hit = cached(spec.id, version: resolved.version) { return hit }
+        let rules = Self.rulesFingerprint(spec)
+        if let hit = cached(spec.id, version: resolved.version), hit.info.rules == rules { return hit }
 
         let fm = FileManager.default
         let work = paths.staging.appending(path: "fetch-\(spec.id)-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -109,12 +133,12 @@ public struct PackageStore: Sendable {
         }
 
         let info = PackageInfo(id: spec.id, version: resolved.version, sourceURL: resolved.downloadURL,
-                               zipSHA256: sha, fetchedAt: now(), files: copied.sorted())
+                               zipSHA256: sha, fetchedAt: now(), files: copied.sorted(), rules: rules)
         try JSONCoding.encoder.encode(info).write(to: staged.appending(path: "package.json"))
 
         try fm.createDirectory(at: paths.packages, withIntermediateDirectories: true)
         let destination = paths.packages.appending(path: Self.directoryName(id: spec.id, version: resolved.version), directoryHint: .isDirectory)
-        if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }   // 没有 package.json 的残留
+        if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }   // 残留，或者按旧规则取的同一版本
         try fm.moveItem(at: staged, to: destination)
         // 从磁盘再读一次再返回：JSON 里的时间只精确到秒，这样和以后从缓存读出来的完全一样
         guard let saved = load(destination, id: spec.id) else {
