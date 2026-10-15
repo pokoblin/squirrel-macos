@@ -304,7 +304,7 @@ public final class SetupFlow {
         switch outcome {
         case .applied(let report):
             var lines = ["鼠须管已经设置好了，可以打字了"]
-            if !report.deploy.finished { lines.append("等了很久还没看到部署完成，可能还在部署；过一会儿再试试打字") }
+            if !report.deploy.finished { lines.append(report.deploy.notFinishedNote) }
             lines += report.deploy.errors.map { "部署时有错误：\($0)" }
             lines += report.warnings + notes + fallbackNotes
             step = .done(lines)

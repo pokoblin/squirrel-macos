@@ -5,10 +5,20 @@ public struct DeployOutcome: Sendable, Equatable {
     public let finished: Bool
     /// 这次部署新出现的错误（已翻译成白话）
     public let errors: [String]
+    /// 通知到了鼠须管（重新加载或启动）。没通知到时根本没等，鼠须管也不会自己部署
+    public let notified: Bool
 
-    public init(finished: Bool, errors: [String]) {
+    public init(finished: Bool, errors: [String], notified: Bool = true) {
         self.finished = finished
         self.errors = errors
+        self.notified = notified
+    }
+
+    /// 没看到部署完成时，界面上怎么说
+    public var notFinishedNote: String {
+        notified
+            ? "等了很久还没看到部署完成，可能还在部署；过一会儿再试试打字"
+            : "没通知到鼠须管，配置已经写好但还没部署：切换一下输入法，或者从「应用程序」里打开鼠须管，它会自己部署"
     }
 }
 

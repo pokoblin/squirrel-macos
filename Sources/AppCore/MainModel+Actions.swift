@@ -134,8 +134,8 @@ extension MainModel {
         var lines = ["写入 \(report.written.count) 个文件，没变 \(report.unchanged) 个，删掉 \(report.removed.count) 个"]
         lines += report.warnings
         if !report.deploy.finished {
-            lines.append("等了很久还没看到部署完成，可能还在部署；过一会儿再试试打字")
-            return Notice(kind: .warning, title: "改动已经写入，但还没看到部署完成", lines: lines,
+            lines.append(report.deploy.notFinishedNote)
+            return Notice(kind: .warning, title: report.deploy.notified ? "改动已经写入，但还没看到部署完成" : "改动已经写入，但没通知到鼠须管", lines: lines,
                           action: .restore(report.backup.id), actionTitle: "还原到应用改动前")
         }
         if !report.deploy.errors.isEmpty {

@@ -82,7 +82,8 @@ public struct Importer: Sendable {
         guard applied.deploy.finished else {
             // 合并要退出鼠须管：还在部署时不打断它
             return ImportReport(outcome: outcome, previous: previous, mergedUserDB: [],
-                                userDBError: "等了很久还没看到鼠须管部署完成，输入习惯先没合并。部署好以后再导入一次这个文件就行（配置不会重复）")
+                                userDBError: (applied.deploy.notified ? "等了很久还没看到鼠须管部署完成" : "没通知到鼠须管、还没部署")
+                                    + "，输入习惯先没合并。部署好以后再导入一次这个文件就行（配置不会重复）")
         }
         do {
             let merged = try await userDB.importAll(archive.userDB)

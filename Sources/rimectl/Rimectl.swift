@@ -576,7 +576,9 @@ struct Rimectl {
 
     private static func reportDeploy(_ deploy: DeployOutcome, backupID: String, _ out: Output) -> Int32 {
         guard deploy.finished else {
-            out.error("等了很久还没看到部署完成。可以过一会儿用 rimectl status 再看；有问题可以 rimectl restore \(backupID)")
+            out.error(deploy.notified
+                ? "等了很久还没看到部署完成。可以过一会儿用 rimectl status 再看；有问题可以 rimectl restore \(backupID)"
+                : "没通知到鼠须管，配置已经写好但还没部署：运行 rimectl activate，或者切换一下输入法")
             return 1
         }
         guard deploy.errors.isEmpty else {

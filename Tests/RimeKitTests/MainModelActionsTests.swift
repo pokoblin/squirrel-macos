@@ -323,4 +323,16 @@ import Testing
         #expect(note.contains("导入好了"))
         #expect(note.contains("退出应用再打开"))
     }
+
+    @Test func 没通知到鼠须管时不说等了很久() async throws {
+        // 终审：通知失败时根本没等，也不会自己部署；提示要说清楚怎么办
+        let m = try T.machine(); defer { m.dir.remove() }
+        m.squirrel.reloadError = .commandFailed("reload", "测试")
+        m.squirrel.launchError = .commandFailed("open", "测试")
+        let model = try MainModel(env: m.environment())
+        await model.apply()
+        let lines = try #require(model.notice?.lines)
+        #expect(lines.contains { $0.contains("没通知到鼠须管") })
+        #expect(!lines.contains { $0.contains("等了很久") })
+    }
 }
