@@ -4,7 +4,7 @@
 
 | # | 验证项 | 结论 | 详情 |
 |---|---|---|---|
-| 1 | 系统设置键盘页链接 | | |
+| 1 | 系统设置键盘页链接 | **能** | `x-apple.systempreferences:com.apple.Keyboard-Settings.extension` 直接打开「键盘」页，「文字输入 → 输入法 → 编辑…」就在页面上。用户在这里添加鼠须管后，本体 enabled=true，切换成功。另外发现：用 TIS 切换后鼠须管进程不会马上启动，要用 `open` 启动 |
 | 2 | 授权弹窗安装时 postinstall 拿到桌面用户 | **能** | `osascript … with administrator privileges` 弹出系统授权框，输密码后安装成功（约 9 秒）。postinstall 以桌面用户身份注册、启用了 `Squirrel.Hans`，状态和 `sudo installer` 完全一样（本体仍 enabled=false，选中失败）。见「过程」 |
 | 3 | 独立 .app 读文本替换数据库 | | |
 | 4 | `ditto` 解压 GitHub zip | | |
@@ -27,3 +27,10 @@
 - 安装后 TIS：本体 `Squirrel` enabled=false；`Squirrel.Hans` enabled=true；`Hant` enabled=false。和 `install-test-log.md` 里用 `sudo installer` 的结果一致。
 - `install.log` 里 postinstall 的输出：`User already registered Squirrel method(s): ["…Squirrel.Hans"]`、`User already enabled …`、`Selection fails for input source: …Squirrel.Hans`。说明 postinstall 拿到了桌面用户并以他的身份执行了注册和启用（选中失败是已知的系统限制，要用户在系统设置里添加）。
 - 另有一行 `User notification authorization error: Couldn’t communicate with a helper application.`，不影响安装。
+
+### 验证 1：系统设置键盘页链接（任务 5）
+
+- `open "x-apple.systempreferences:com.apple.Keyboard-Settings.extension"`（桌面会话里运行）：`exit=0`，系统设置打开后**直接停在「键盘」页**，能看到「Text Input → Input Sources … Edit…」和「Text Replacements…」按钮（用户截图确认）。备用链接 `com.apple.preference.keyboard` 没有必要再试。
+- 用户在这一页手动添加鼠须管后：本体 `im.rime.inputmethod.Squirrel` enabled=true；`tis-probe select "=…Squirrel.Hans"` → OSStatus 0，`selected=true`。
+- **新发现**：切换成功后等了 30 多秒，鼠须管进程**一直没有启动**，`~/Library/Rime` 也没生成（之前的记录里进程是在用户实际打字时才启动的）。用 `open "/Library/Input Methods/Squirrel.app"` 后 4 秒内启动，自动生成了 `build/`、`installation.yaml`、`user.yaml`。
+  → 应用在用户添加好输入法、切换过去之后，应该主动 `open` 一次鼠须管，不要等它自己启动。
