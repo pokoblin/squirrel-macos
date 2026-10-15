@@ -57,3 +57,31 @@ import Testing
         #expect(RimeDirectoryGuard.isInsideRealRimeDirectory(URL(fileURLWithPath: "/System/Volumes/Data" + real)))
     }
 }
+
+@Suite struct RimeDirectoryGuardHoleTests {
+    @Test func Rime目录本身是符号链接时也认得出() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let fm = FileManager.default
+        let home = dir.url.appending(path: "home", directoryHint: .isDirectory)
+        try fm.createDirectory(at: home.appending(path: "Library"), withIntermediateDirectories: true)
+        let synced = dir.url.appending(path: "Dropbox/rime-config", directoryHint: .isDirectory)
+        try fm.createDirectory(at: synced, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appending(path: "Library/Rime"), withDestinationURL: synced)
+        let homes = [home.path]
+        #expect(RimeDirectoryGuard.isInsideRealRimeDirectory(home.appending(path: "Library/Rime/sub"), homes: homes))
+        #expect(RimeDirectoryGuard.isInsideRealRimeDirectory(synced.appending(path: "sub"), homes: homes))
+        #expect(RimeDirectoryGuard.isInsideRealRimeDirectory(synced, homes: homes))
+    }
+
+    @Test func 路径里有两个点就拒绝() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let fm = FileManager.default
+        let home = dir.url.appending(path: "home", directoryHint: .isDirectory)
+        try fm.createDirectory(at: home.appending(path: "Library/x"), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appending(path: "link"), withDestinationURL: home.appending(path: "Library/x"))
+        // link/.. 按字面是 home，按真实路径是 home/Library
+        let tricky = URL(fileURLWithPath: home.path + "/link/../Rime/sub")
+        #expect(RimeDirectoryGuard.isInsideRealRimeDirectory(tricky, homes: [home.path]))
+        #expect(RimeDirectoryGuard.isInsideRealRimeDirectory(URL(fileURLWithPath: dir.url.path + "/a/../b"), homes: [home.path]))
+    }
+}

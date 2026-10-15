@@ -21,8 +21,12 @@ public enum RimeDirectoryGuard {
     }
 
     public static func isInsideRealRimeDirectory(_ url: URL, homes: [String] = defaultHomes()) -> Bool {
+        // 带 .. 的路径，按字面和按真实路径解析的结果可能不一样，直接拒绝
+        if url.pathComponents.contains("..") { return true }
         let libraries = Set(homes.compactMap { fileID(($0 as NSString).appendingPathComponent("Library")) })
         if libraries.isEmpty { return true }
+        // 各个家目录里 Library/Rime 实际指向的目录（stat 会跟随符号链接，同步盘里的配置也认得出）
+        let rimes = Set(homes.compactMap { fileID(($0 as NSString).appendingPathComponent("Library/Rime")) })
 
         // 找到最近一个存在的上级目录，解析掉符号链接；不存在的部分原样接在后面
         let fm = FileManager.default
@@ -42,6 +46,7 @@ public enum RimeDirectoryGuard {
         for component in URL(fileURLWithPath: base).pathComponents.dropFirst() + rest {
             let parent = current
             current = (current as NSString).appendingPathComponent(component)
+            if let id = fileID(current), rimes.contains(id) { return true }
             if component.caseInsensitiveCompare("Rime") == .orderedSame,
                let id = fileID(parent), libraries.contains(id) {
                 return true
