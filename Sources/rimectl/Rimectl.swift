@@ -267,7 +267,8 @@ struct Rimectl {
                 out.error("还没有设置，先运行 rimectl settings init rime-ice|flypy|wubi-pinyin")
                 return 1
             }
-            out.line(String(decoding: try JSONCoding.encoder.encode(settings), as: UTF8.self))
+            // 不打印文本替换的同步记录：短短语的哈希能被猜出来
+            out.line(String(decoding: try JSONCoding.encoder.encode(settings.withoutTextReplacementRecord), as: UTF8.self))
             return 0
         default:
             out.error(usage)

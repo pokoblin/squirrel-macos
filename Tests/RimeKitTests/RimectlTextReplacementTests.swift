@@ -135,6 +135,17 @@ import Testing
         }
     }
 
+    @Test func 打印设置时不打印同步记录() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let r = Replacements([a])
+        #expect(await cli(m, r).run(["textreplacement", "sync"]) == 0)
+        let c = cli(m, r)
+        #expect(await c.run(["settings", "show"]) == 0)
+        #expect(c.output.text.contains("\"sync\" : true"))
+        #expect(!c.output.text.contains("syncedEntries"))
+        #expect(!c.output.text.contains("lastSyncedHash"))
+    }
+
     @Test func 没有设置时() async throws {
         let m = try T.machine(withSettings: false); defer { m.dir.remove() }
         let c = cli(m, Replacements([a]))
