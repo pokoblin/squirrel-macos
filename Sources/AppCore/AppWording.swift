@@ -10,6 +10,7 @@ public enum AppWording {
         (#"请用 rimectl restore (\S+) 再试"#, "请到「备份」页还原 $1 再试"),
         (#"先运行 rimectl apply --adopt-personal"#, "先在「应用改动」时选「采用外面改过的个人词库」"),
         (#"（rimectl textreplacement sync）"#, "（「文本替换」页里同步）"),
+        (#"可以先运行 rimectl catalog check 检查方案清单更新"#, "可以先到「方案」页点「检查方案清单更新」"),
     ]
 
     public static func forApp(_ text: String) -> String {

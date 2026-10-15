@@ -27,9 +27,9 @@ public enum PackageStoreError: Error, Equatable, Sendable, CustomStringConvertib
     public var description: String {
         switch self {
         case let .anchorNotFound(package, anchor):
-            return "\(package) 的下载内容里找不到 \(anchor)，上游方案目录结构变了，需要更新应用"
+            return "\(package) 的下载内容里找不到 \(anchor)，上游方案的目录结构变了。\(CatalogHint.tryUpdate)"
         case let .missingRequiredFiles(package, files):
-            return "\(package) 的下载内容里缺少这些文件：\(files.joined(separator: "、"))。上游方案目录结构变了，需要更新应用"
+            return "\(package) 的下载内容里缺少这些文件：\(files.joined(separator: "、"))。上游方案的目录结构变了。\(CatalogHint.tryUpdate)"
         }
     }
 }

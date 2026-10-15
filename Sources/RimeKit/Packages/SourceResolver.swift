@@ -17,7 +17,7 @@ public enum SourceError: Error, Equatable, Sendable, CustomStringConvertible {
     public var description: String {
         switch self {
         case let .assetNotFound(repo, tag, asset):
-            return "GitHub 上 \(repo) 的 \(tag) 版本里找不到 \(asset)，上游可能改了发布方式，需要更新应用"
+            return "GitHub 上 \(repo) 的 \(tag) 版本里找不到 \(asset)，上游可能改了发布方式。\(CatalogHint.tryUpdate)"
         case .badResponse(let url):
             return "看不懂 GitHub 返回的内容：\(url.absoluteString)"
         }
