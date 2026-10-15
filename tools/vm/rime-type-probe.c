@@ -1,12 +1,16 @@
 // 测试工具：在一份 Rime 用户目录（必须是副本）上模拟打字，打印上屏文字和候选。
 // 用法：rime-type-probe <用户目录> <方案id> <编码>...
-// 用户目录要先用 rime_deployer --build 编译过。拒绝在真实的 ~/Library/Rime 上运行。
+// 用户目录要先用 rime_deployer --build 编译过。拒绝在真实的 ~/Library/Rime（以及它里面的目录）上运行。
 #include <dlfcn.h>
 #include <limits.h>
+#include <pwd.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define SQUIRREL "/Library/Input Methods/Squirrel.app/Contents"
 
@@ -68,23 +72,64 @@ typedef struct {
   Bool (*select_schema)(RimeSessionId, const char *);   // 34
 } RimeApiPrefix;
 
-static int is_real_rime_dir(const char *dir) {
-  const char *home = getenv("HOME");
-  if (!home) return 0;
-  char real_rime[PATH_MAX], given[PATH_MAX], path[PATH_MAX];
-  snprintf(path, sizeof path, "%s/Library/Rime", home);
-  if (!realpath(path, real_rime)) return 0;   // 本机没有 ~/Library/Rime
-  if (!realpath(dir, given)) return 0;
-  return strcmp(real_rime, given) == 0;
+// 用设备号 + inode 比较目录，firmlink（/System/Volumes/Data/…）和符号链接都能认出来
+typedef struct { dev_t dev; ino_t ino; } FileId;
+
+static int file_id(const char *path, FileId *out) {
+  struct stat st;
+  if (stat(path, &st) != 0) return 0;
+  out->dev = st.st_dev;
+  out->ino = st.st_ino;
+  return 1;
+}
+
+static int add_library_dir(FileId *libs, int n, const char *home) {
+  if (!home || !*home || n >= 3) return n;
+  char path[PATH_MAX];
+  snprintf(path, sizeof path, "%s/Library", home);
+  return file_id(path, &libs[n]) ? n + 1 : n;
+}
+
+// 给定路径或它的任何一级上级是「某个家目录/Library/Rime」时拒绝（返回 0）。
+// 家目录同时看 passwd、$HOME、sudo 前的用户。任何一步解析失败都按拒绝处理。
+static int is_safe_dir(const char *dir) {
+  FileId libs[3];
+  int n = 0;
+  struct passwd *pw = getpwuid(getuid());
+  if (pw) n = add_library_dir(libs, n, pw->pw_dir);
+  n = add_library_dir(libs, n, getenv("HOME"));
+  const char *sudo_uid = getenv("SUDO_UID");
+  if (sudo_uid) {
+    struct passwd *sp = getpwuid((uid_t)strtoul(sudo_uid, NULL, 10));
+    if (sp) n = add_library_dir(libs, n, sp->pw_dir);
+  }
+  if (n == 0) return 0;
+
+  char cur[PATH_MAX];
+  if (!realpath(dir, cur)) return 0;
+  for (;;) {
+    char *slash = strrchr(cur, '/');
+    if (!slash || slash == cur) return 1;   // 查到根目录了
+    int is_rime = strcasecmp(slash + 1, "Rime") == 0;
+    *slash = '\0';                           // cur 变成上一级
+    if (is_rime) {
+      FileId parent;
+      if (!file_id(cur, &parent)) return 0;
+      for (int i = 0; i < n; i++)
+        if (libs[i].dev == parent.dev && libs[i].ino == parent.ino) return 0;
+    }
+  }
 }
 
 int main(int argc, char **argv) {
+  // --guard-only <目录>：只做防误用检查，不加载 librime（给测试用）
+  if (argc == 3 && strcmp(argv[1], "--guard-only") == 0) return is_safe_dir(argv[2]) ? 0 : 3;
   if (argc < 4) {
     fprintf(stderr, "用法：%s <用户目录> <方案id> <编码>...\n", argv[0]);
     return 2;
   }
-  if (is_real_rime_dir(argv[1])) {
-    fprintf(stderr, "拒绝运行：这是真实的 ~/Library/Rime，请传一份副本\n");
+  if (!is_safe_dir(argv[1])) {
+    fprintf(stderr, "拒绝运行：这是真实的 ~/Library/Rime（或它里面的目录），或者路径无法解析。请传一份副本\n");
     return 3;
   }
   void *lib = dlopen(SQUIRREL "/Frameworks/librime.1.dylib", RTLD_NOW);
