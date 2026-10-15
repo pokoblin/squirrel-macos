@@ -51,6 +51,11 @@ public final class MainModel {
     /// 上次应用用的选项（用户在弹窗里选了以后再用）
     var lastApply = (options: ApplyOptions(), usingCache: false)
     public internal(set) var colorSchemes: [ColorSchemeInfo] = []
+    public internal(set) var textReplacementStatus: TextReplacementStatus?
+    public internal(set) var backups: [BackupInfo] = []
+    public internal(set) var checks: [DoctorCheck] = []
+    /// 导出时带上输入习惯（默认带上）
+    public var includeUserDB = true
 
     let env: AppEnvironment
 
@@ -131,5 +136,27 @@ public final class MainModel {
     func refreshColorSchemes() {
         let packages = ((try? draft.requiredPackages(env.catalog)) ?? []).compactMap { env.cachedPackage($0) }
         colorSchemes = (try? ColorSchemes.available(in: packages)) ?? []
+    }
+}
+
+/// 文本替换页显示的状态（只有条数）
+public struct TextReplacementStatus: Equatable, Sendable {
+    public var usable: Int
+    public var badShortcut: Int
+    public var badPhrase: Int
+    /// 和上次同步时比（同步没打开或从没同步过时为 nil）
+    public var changes: TextReplacementSync.Changes?
+    /// 同步打开了（已经生效的设置里）
+    public var synced: Bool
+    /// 读不了时的原因
+    public var error: String?
+
+    public init(usable: Int, badShortcut: Int, badPhrase: Int, changes: TextReplacementSync.Changes?, synced: Bool, error: String?) {
+        self.usable = usable
+        self.badShortcut = badShortcut
+        self.badPhrase = badPhrase
+        self.changes = changes
+        self.synced = synced
+        self.error = error
     }
 }

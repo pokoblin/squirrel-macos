@@ -132,6 +132,7 @@ extension MainModel {
         guard working == nil else { return }
         working = "正在还原……"
         defer { working = nil }
+        defer { loadBackups() }
         let deployer = env.deployer()
         do {
             let report = try await offMain { try await deployer.restore(id) }
@@ -143,5 +144,111 @@ extension MainModel {
         } catch {
             notice = Notice(kind: .error, title: "没能还原", lines: ["\(error)"])
         }
+    }
+
+    // MARK: 文本替换（设计 6.5）
+
+    public func checkTextReplacement() async {
+        let read = env.textReplacements
+        let synced = saved.textReplacement
+        do {
+            let snapshot = try await offMain { try read() }
+            textReplacementStatus = TextReplacementStatus(
+                usable: snapshot.usable.count, badShortcut: snapshot.badShortcut, badPhrase: snapshot.badPhrase,
+                changes: synced.sync ? TextReplacementSync.changes(snapshot.usable, since: synced) : nil,
+                synced: synced.sync, error: nil)
+        } catch {
+            textReplacementStatus = TextReplacementStatus(usable: 0, badShortcut: 0, badPhrase: 0, changes: nil,
+                                                          synced: synced.sync,
+                                                          error: "\(error)。可以去「系统设置 → 隐私与安全性」检查权限")
+        }
+    }
+
+    // MARK: 导出（设计 6.3）
+
+    public func export(to file: URL) async {
+        guard working == nil else { return }
+        working = includeUserDB ? "正在导出（输入法会暂停几秒）……" : "正在导出……"
+        defer { working = nil }
+        do {
+            let versions = try saved.requiredPackages(env.catalog).compactMap { spec in
+                env.cachedPackage(spec).map { ExportManifest.Package(id: spec.id, version: $0.info.version) }
+            }
+            let exporter = Exporter(paths: env.paths, locations: env.locations,
+                                    userDB: includeUserDB ? UserDBTransfer(tool: env.userDBTool, squirrel: env.squirrel, sleep: env.sleep) : nil)
+            // 保存对话框已经问过要不要覆盖
+            let report = try await offMain { try await exporter.export(to: file, packages: versions, overwrite: true) }
+            let m = report.manifest
+            notice = Notice(kind: .info, title: "已导出", lines: [
+                file.path,
+                "方案 \(m.settings.schemas.count) 个，个人词库 \(m.personalDicts.count) 个，手动短语 \(m.phrases) 条，输入习惯 \(m.userDB.count) 份（文本替换生成的短语不导出）",
+            ] + report.warnings)
+        } catch {
+            notice = Notice(kind: .error, title: "没能导出", lines: ["\(error)"])
+        }
+    }
+
+    // MARK: 导入（设计 6.4）
+
+    public func importFile(_ file: URL) async {
+        guard working == nil else { return }
+        working = "正在读取导出文件……"
+        defer { working = nil }
+        let work = env.paths.staging.appending(path: "import-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: work) }
+        let accessing = file.startAccessingSecurityScopedResource()
+        defer { if accessing { file.stopAccessingSecurityScopedResource() } }
+        do {
+            let catalog = env.catalog
+            let archive = try await offMain { try ImportArchive.open(file, catalog: catalog, into: work) }
+            let settings = archive.manifest.settings
+            guard let packages = try await packages(for: settings, usingCache: false) else { return }
+            var lines = archive.warnings
+            var replacements: [Phrase] = []
+            if settings.textReplacement.sync {
+                do {
+                    replacements = try env.textReplacements().usable
+                } catch {
+                    lines.append("读不了 macOS 文本替换（\(error)），这次先不带文本替换的短语")
+                }
+            }
+            working = archive.userDB.isEmpty ? "正在写入、部署……" : "正在写入、部署，然后合并输入习惯（输入法会暂停几秒）……"
+            let importer = Importer(deployer: env.deployer(),
+                                    userDB: UserDBTransfer(tool: env.userDBTool, squirrel: env.squirrel, sleep: env.sleep))
+            let phrases = replacements
+            let report = try await offMain { try await importer.run(archive, catalog: catalog, packages: packages, textReplacement: phrases) }
+            if let previous = report.previous { lines.append("原来的设置和个人内容另存在：\(previous.path)") }
+            if let error = report.userDBError { lines.append("输入习惯没有合并上：\(error)。配置已经导入好了，可以再导入一次") }
+            switch report.outcome {
+            case .applied(let applied):
+                if let now = try SettingsStore(paths: env.paths).load() {
+                    saved = now
+                    draft = now
+                }
+                var result = Self.notice(for: applied)
+                result.title = result.kind == .info ? "已导入" : result.title
+                result.lines += lines
+                notice = result
+            case .compileFailed(let errors):
+                notice = Notice(kind: .error, title: "导入的配置编译不过，没有写入", lines: errors + lines)
+            case .externalChanges(let changes):
+                notice = Notice(kind: .error, title: "这些文件不能写，没有导入", lines: changes.map(\.description) + lines)
+            }
+        } catch {
+            notice = Notice(kind: .error, title: "没能导入", lines: ["\(error)"])
+        }
+    }
+
+    // MARK: 备份、诊断
+
+    public func loadBackups() {
+        backups = BackupStore(paths: env.paths).list()
+    }
+
+    public func runDiagnostics() async {
+        let read = env.textReplacements
+        let doctor = Doctor(paths: env.paths, locations: env.locations, inputSource: env.inputSource, squirrel: env.squirrel,
+                            releaseSource: nil, textReplacements: { try read().usable })
+        checks = await doctor.run()
     }
 }

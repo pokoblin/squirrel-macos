@@ -122,4 +122,82 @@ import Testing
         #expect(fetches.value == 3)            // 只应用了一次：要用 words、wubi、pinyin 三个包
         #expect(m.squirrel.calls.count == 1)   // 只部署了一次
     }
+
+    final class Replacements: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: [Phrase]
+        init(_ phrases: [Phrase]) { value = phrases }
+        func set(_ phrases: [Phrase]) { lock.withLock { value = phrases } }
+        func get() -> TextReplacementSnapshot {
+            lock.withLock { TextReplacementSnapshot(usable: value, badShortcut: 1, badPhrase: 0) }
+        }
+    }
+
+    @Test func 文本替换检查() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let a = Phrase(text: "替换甲", code: "tha", weight: 1)
+        let b = Phrase(text: "替换乙", code: "thb", weight: 1)
+        let r = Replacements([a])
+        let model = try MainModel(env: m.environment(textReplacements: { r.get() }))
+        await model.checkTextReplacement()
+        #expect(model.textReplacementStatus == TextReplacementStatus(usable: 1, badShortcut: 1, badPhrase: 0, changes: nil, synced: false, error: nil))
+        model.draft.textReplacement.sync = true
+        await model.apply()
+        await model.checkTextReplacement()
+        #expect(model.textReplacementStatus?.changes == TextReplacementSync.Changes(added: 0, removed: 0))
+        r.set([a, b])
+        await model.checkTextReplacement()
+        #expect(model.textReplacementStatus?.changes == TextReplacementSync.Changes(added: 1, removed: 0))
+        #expect(model.textReplacementStatus?.synced == true)
+    }
+
+    @Test func 导出() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let model = try MainModel(env: m.environment())
+        let file = m.dir.url.appending(path: "out/e.zip")
+        await model.export(to: file)
+        #expect(model.notice?.title == "已导出")
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(m.tool.calls == ["export wb_py"])
+        model.includeUserDB = false
+        await model.export(to: file)
+        #expect(m.tool.calls == ["export wb_py"])   // 这次没导输入习惯
+    }
+
+    @Test func 导入后界面上的设置换成导入的() async throws {
+        let a = try T.machine(); defer { a.dir.remove() }
+        let file = a.dir.url.appending(path: "e.zip")
+        _ = try await a.exporter().export(to: file, packages: [])
+        let b = try T.machine(userDB: [:]); defer { b.dir.remove() }
+        try SettingsStore(paths: b.paths).save(Settings(schemas: ["py"]))
+        let model = try MainModel(env: b.environment())
+        model.setEnabled("wb", true)                 // 还没应用的改动也会被换掉
+        await model.importFile(file)
+        #expect(model.saved == T.settings)
+        #expect(model.draft == T.settings)
+        #expect(model.notice?.lines.contains { $0.contains("另存在") } == true)
+    }
+
+    @Test func 备份列表和还原() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        let model = try MainModel(env: m.environment())
+        await model.apply()
+        model.draft.appearance.fontPoint = 26
+        await model.apply()
+        model.loadBackups()
+        #expect(model.backups.count == 2)
+        await model.restore(model.backups[0].id)
+        #expect(model.notice?.title.hasPrefix("已还原到") == true)
+        model.loadBackups()
+        #expect(model.backups.count == 3)   // 还原前又备份了一份
+    }
+
+    @Test func 诊断() async throws {
+        let m = try T.machine(); defer { m.dir.remove() }
+        try InstallFixtures.writeInfoPlist(app: m.locations.squirrelApp, version: "1.1.2")   // Doctor 靠它判断装没装
+        let model = try MainModel(env: m.environment())
+        await model.runDiagnostics()
+        #expect(model.checks.contains { $0.name == "鼠须管" })
+        #expect(model.checks.contains { $0.name == "输入法" && $0.level == .ok })
+    }
 }
