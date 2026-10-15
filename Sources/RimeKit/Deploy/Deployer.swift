@@ -218,9 +218,11 @@ public struct Deployer: Sendable {
             throw RestoreError.failed(String(describing: error), safetyBackupID: safety.id, rolledBack: rolledBack)
         }
         try restored.ledger.save(paths)
+        let forgot = try forgetTextReplacementRecord()
         _ = try? backups.prune()
         let (launched, deploy, warnings) = await notifySquirrel()
-        return RestoreReport(restored: restored, safetyBackup: safety, launched: launched, deploy: deploy, warnings: warnings)
+        return RestoreReport(restored: restored, safetyBackup: safety, launched: launched, deploy: deploy,
+                             warnings: (forgot ? ["文本替换的短语也回到了备份时的样子；需要的话重新同步（rimectl textreplacement sync）"] : []) + warnings)
     }
 
     public func status() throws -> DeployStatus {
@@ -236,6 +238,17 @@ public struct Deployer: Sendable {
     }
 
     // MARK: 内部
+
+    /// 还原换回了旧的短语文件，文本替换的同步记录就对不上了：同步开着时清掉记录（之后会提示「还没同步过」）
+    func forgetTextReplacementRecord() throws -> Bool {
+        let store = SettingsStore(paths: paths)
+        guard var settings = try store.load(), settings.textReplacement.sync,
+              settings.textReplacement.syncedEntries != nil else { return false }
+        settings.textReplacement.syncedEntries = nil
+        settings.textReplacement.lastSyncedHash = nil
+        try store.save(settings)
+        return true
+    }
 
     /// 在运行就 --reload，没运行就启动；然后等部署完
     func notifySquirrel() async -> (launched: Bool, deploy: DeployOutcome, warnings: [String]) {

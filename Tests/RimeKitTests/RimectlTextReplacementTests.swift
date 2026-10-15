@@ -149,6 +149,23 @@ import Testing
         #expect(c.phraseFile.contains(a.line))
     }
 
+    @Test func 还原之后要重新同步() async throws {
+        // 还原把 custom_phrase.txt 换回了旧的，记录却还是新的：不能说「一样」
+        let m = try T.machine(); defer { m.dir.remove() }
+        let r = Replacements([a])
+        #expect(await cli(m, r).run(["textreplacement", "sync"]) == 0)
+        r.set([a, b])
+        #expect(await cli(m, r).run(["textreplacement", "sync"]) == 0)
+        let before = try #require(BackupStore(paths: m.paths).list().first)   // 第二次同步前的备份
+        let c = cli(m, r)
+        #expect(await c.run(["restore", before.id]) == 0)
+        #expect(!c.phraseFile.contains(b.line))
+        #expect(await c.run(["textreplacement", "status"]) == 0)
+        #expect(c.output.text.contains("还没同步过"))
+        #expect(await c.run(["textreplacement", "sync"]) == 0)
+        #expect(c.phraseFile.contains(b.line))
+    }
+
     @Test func 打印设置时不打印同步记录() async throws {
         let m = try T.machine(); defer { m.dir.remove() }
         let r = Replacements([a])
