@@ -19,4 +19,12 @@ public struct AppPaths: Sendable, Equatable {
 
     /// 生成、下载用的暂存区
     public var staging: URL { root.appending(path: "staging", directoryHint: .isDirectory) }
+
+    /// 用户的所有选择
+    public var settingsFile: URL { root.appending(path: "settings.json") }
+
+    /// 个人内容的正本：个人词库、手动短语
+    public var personal: URL { root.appending(path: "personal", directoryHint: .isDirectory) }
+    public var personalDicts: URL { personal.appending(path: "dicts", directoryHint: .isDirectory) }
+    public var personalPhrases: URL { personal.appending(path: "phrases.txt") }
 }

@@ -12,5 +12,8 @@ import Testing
         let paths = AppPaths(root: URL(fileURLWithPath: "/tmp/x", isDirectory: true))
         #expect(paths.packages.path == "/tmp/x/packages")
         #expect(paths.staging.path == "/tmp/x/staging")
+        #expect(paths.settingsFile.path == "/tmp/x/settings.json")
+        #expect(paths.personalDicts.path == "/tmp/x/personal/dicts")
+        #expect(paths.personalPhrases.path == "/tmp/x/personal/phrases.txt")
     }
 }
