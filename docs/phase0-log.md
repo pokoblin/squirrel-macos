@@ -6,7 +6,7 @@
 |---|---|---|---|
 | 1 | 系统设置键盘页链接 | **能** | `x-apple.systempreferences:com.apple.Keyboard-Settings.extension` 直接打开「键盘」页，「文字输入 → 输入法 → 编辑…」就在页面上。用户在这里添加鼠须管后，本体 enabled=true，切换成功。另外发现：用 TIS 切换后鼠须管进程不会马上启动，要用 `open` 启动 |
 | 2 | 授权弹窗安装时 postinstall 拿到桌面用户 | **能** | `osascript … with administrator privileges` 弹出系统授权框，输密码后安装成功（约 9 秒）。postinstall 以桌面用户身份注册、启用了 `Squirrel.Hans`，状态和 `sudo installer` 完全一样（本体仍 enabled=false，选中失败）。见「过程」 |
-| 3 | 独立 .app 读文本替换数据库 | | |
+| 3 | 独立 .app 读文本替换数据库 | **能，不用授权** | 测试机和宿主机上，本机临时签名、未开沙盒的独立 app 都能直接只读打开，没有弹出权限对话框。新加的条目马上就能读到（还在 WAL 里也能读到） |
 | 4 | `ditto` 解压 GitHub zip | **能** | 干净测试机里 `/usr/bin/ditto -x -k` 解压三个 zip 全部 `exit=0`。结构见 [upstream-layouts.md](upstream-layouts.md)：极点五笔 zip 带顶层目录 `rime-wubi86-jidian-master/`；雾凇 `full.zip` 没有顶层目录，并自带 `default.yaml`、`squirrel.yaml`、`custom_phrase.txt` |
 | 5 | 鼠须管运行时 `rime_dict_manager` 导出/合并 | **运行时不行，退出后行** | 鼠须管打开过输入习惯数据库后，导出、备份都报 `Error opening db … read-only`。`killall Squirrel` 后导出、备份、导入都正常；`--import` 是**合并**（已有条目不丢、不重复计权重）。做法：导入导出前先退出鼠须管，完成后再 `open` 启动 |
 | 6 | 雾凇全拼、小鹤双拼在鼠须管 1.1.2 上部署和打字 | **能** | 部署约 9 秒，`4 success, 0 failure`，没有 ERROR 日志。用户实际打字和 `rime-type-probe` 结果一致：`nihao` → 你好，`rq`/`sj` 出日期和时间（Lua 正常），`xiaolian` 有 😀（OpenCC 正常），小鹤 `nihc` → 你好。`rime-type-probe` 也能加载 Lua 插件 |
@@ -72,3 +72,12 @@
 - 导出文件格式：开头几行是 `#` 注释（`# Rime user dictionary export`、方案名、`userdb` 等），之后每行 3 列，用 Tab 分隔。
 - 每次退出后都用 `open "/Library/Input Methods/Squirrel.app"` 重新启动了鼠须管，进程正常。
 - **对设计的影响**：导出输入习惯、导入合并时，都要先退出鼠须管（`killall Squirrel`），做完再 `open` 启动。导出用 `--export`（文本，格式简单）还是 `--backup`（写到 sync 目录），阶段 6 再定；两种在退出后都能用。
+
+### 验证 3：文本替换数据库（任务 9）
+
+- 新账户（测试机 `tester`，没登录 Apple 账户）本来就有 `~/Library/KeyboardServices/TextReplacements.db`（还有 `-wal`、`-shm`），里面有 1 条系统自带的。
+- TRProbe（本机临时签名、未开沙盒，复制到 `~/Applications` 后用 `open` 启动）：`open_rc=0`、`count=1`，**没有弹出权限对话框**（用户确认）。
+- 对照：系统自带的 `sqlite3 -readonly` 在 SSH 环境和桌面会话里都读到 1 条。
+- 用户在「系统设置 → 键盘 → 文本替换」里加了 1 条后，马上再跑 TRProbe：`count=2`。新数据还在 `TextReplacements.db-wal` 里（主文件修改时间没变），只读打开也能读到。`sqlite3` 也是 2，`defaults read -g NSUserDictionaryReplacementItems` 也是 2 条。
+- 宿主机（任务 2）：同样不用授权，读到 11 条。
+- **对设计的影响**：不需要引导用户去「隐私与安全性」授权（设计第 7 节那一行可以去掉，但保留「读不了时给出说明」作为兜底）。正式应用签名后、或者以后开沙盒时，行为可能不同，到时候再验证。
