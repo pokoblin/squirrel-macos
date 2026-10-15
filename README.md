@@ -6,7 +6,7 @@
 
 ## 现在在哪个阶段
 
-**第一版设计已确认，阶段 0（待验证项）已完成。** 还没有应用代码，下一步是阶段 1（工程骨架、方案清单、下载）。
+**第一版设计已确认，阶段 0（待验证项）、阶段 1（方案清单和下载缓存）已完成。** 下一步是阶段 2（生成配置）。还没有图形界面。
 
 这些调研来自上一个项目 [squirrel-wubi86](../squirrel-wubi86)。那个项目只为我自己的“极点五笔 + 拼音混输”做配置，所有步骤都是手动在终端里完成的。这里的结论都在虚拟机或真机上实际验证过。
 
@@ -26,3 +26,11 @@
 ## 测试环境
 
 所有会改动系统的测试（安装鼠须管、启用输入法、改 `~/Library/Rime`）都在**虚拟 Mac** 里做，不碰自己的电脑。工具在 [tools/vm/](tools/vm/)，用法见 [tools/vm/README.md](tools/vm/README.md)。
+
+## 开发
+
+Swift Package（需要 Xcode 27）：`RimeKit` 是全部逻辑，`rimectl` 是命令行入口。
+
+- 跑测试（只用临时目录，不碰真实配置）：`swift test`
+- 联网检查上游结构有没有变：`RIMEKIT_ONLINE=1 swift test --filter OnlineTests`
+- 试用命令行：`swift build && .build/debug/rimectl catalog`；下载时请加 `--data-dir 某个临时目录`
