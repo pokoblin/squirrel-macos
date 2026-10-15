@@ -23,6 +23,18 @@ import Testing
         #expect(catalog.package("rime-ice-dicts")?.anchor == "cn_dicts/8105.dict.yaml")
     }
 
+    @Test func 极点五笔有拼音词库选项默认用雾凇() throws {
+        let wubi = try #require(try Catalog.builtIn().package("wubi86-jidian"))
+        let option = try #require(wubi.options.first { $0.id == "pinyinDictionary" })
+        #expect(option.defaultChoice == "rime-ice")
+        let ice = try #require(option.choice("rime-ice"))
+        #expect(ice.dependencies == ["rime-ice-dicts"])
+        #expect(ice.generatedDicts.map(\.name) == ["pinyin_ext"])
+        #expect(ice.patches["pinyin_simp"] == ["translator/dictionary": "pinyin_ext"])
+        #expect(ice.patches["wubi86_jidian_pinyin"] == ["reverse_lookup/dictionary": "pinyin_ext"])
+        #expect(option.choice("builtin")?.dependencies == [])
+    }
+
     @Test func GPL的包都标了许可证() throws {
         let catalog = try Catalog.builtIn()
         #expect(catalog.package("rime-ice")?.license == "GPL-3.0")

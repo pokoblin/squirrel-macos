@@ -9,6 +9,8 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
     case requiredFileNotIncluded(package: String, file: String)
     case unknownPackage(String)
     case builtInMissing
+    case unknownDefaultChoice(package: String, option: String)
+    case patchForUnknownSchema(package: String, schema: String)
 
     public var description: String {
         switch self {
@@ -28,6 +30,10 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
             return "清单里没有这个包：\(id)"
         case .builtInMissing:
             return "应用里找不到内置的方案清单 catalog.json"
+        case let .unknownDefaultChoice(package, option):
+            return "包 \(package) 的选项 \(option) 的默认值不在可选项里"
+        case let .patchForUnknownSchema(package, schema):
+            return "包 \(package) 的选项要改方案 \(schema)，但这个方案不属于这个包"
         }
     }
 }

@@ -62,7 +62,46 @@
         { "id": "pinyin_simp", "name": "拼音", "category": "pinyin" },
         { "id": "numbers", "name": "大写数字", "category": "other" }
       ],
-      "dependencies": []
+      "dependencies": [],
+      "options": [
+        {
+          "id": "pinyinDictionary",
+          "name": "拼音词库（拼音混输、拼音反查用）",
+          "defaultChoice": "rime-ice",
+          "choices": [
+            {
+              "id": "builtin",
+              "name": "自带拼音词库（约 10 万词，词比较旧）",
+              "dependencies": [],
+              "generatedDicts": [],
+              "patches": {}
+            },
+            {
+              "id": "rime-ice",
+              "name": "雾凇大词库（约 90 万词，新词多，多下载约 15 MB）",
+              "dependencies": ["rime-ice-dicts"],
+              "generatedDicts": [
+                {
+                  "name": "pinyin_ext",
+                  "importTables": [
+                    { "name": "pinyin_user", "onlyIfPersonal": true },
+                    { "name": "cn_dicts/8105" },
+                    { "name": "cn_dicts/base" },
+                    { "name": "cn_dicts/ext" }
+                  ]
+                }
+              ],
+              "patches": {
+                "pinyin_simp": { "translator/dictionary": "pinyin_ext" },
+                "wubi86_jidian": { "reverse_lookup/dictionary": "pinyin_ext" },
+                "wubi86_jidian_pinyin": { "reverse_lookup/dictionary": "pinyin_ext" },
+                "wubi86_jidian_trad": { "reverse_lookup/dictionary": "pinyin_ext" },
+                "wubi86_jidian_trad_pinyin": { "reverse_lookup/dictionary": "pinyin_ext" }
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

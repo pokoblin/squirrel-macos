@@ -11,6 +11,11 @@ public struct Catalog: Sendable, Equatable, Codable {
         packages.first { $0.id == id }
     }
 
+    /// 这个方案属于哪个包
+    public func packageOwning(schema: String) -> PackageSpec? {
+        packages.first { $0.schemas.contains { $0.id == schema } }
+    }
+
     /// 读取并校验。先只读格式版本号，版本不对就不往下解析。
     public static func decode(_ data: Data) throws -> Catalog {
         struct Header: Decodable { let formatVersion: Int }
@@ -50,6 +55,21 @@ public struct Catalog: Sendable, Equatable, Codable {
             for file in p.requiredFiles {
                 let included = p.include.contains { $0.matches(file) } && !p.exclude.contains { $0.matches(file) }
                 if !included { throw CatalogError.requiredFileNotIncluded(package: p.id, file: file) }
+            }
+        }
+        for p in packages {
+            for option in p.options {
+                guard option.choice(option.defaultChoice) != nil else {
+                    throw CatalogError.unknownDefaultChoice(package: p.id, option: option.id)
+                }
+                for choice in option.choices {
+                    for d in choice.dependencies where !packageIDs.contains(d) {
+                        throw CatalogError.unknownDependency(package: p.id, dependency: d)
+                    }
+                    for schema in choice.patches.keys.sorted() where !p.schemas.contains(where: { $0.id == schema }) {
+                        throw CatalogError.patchForUnknownSchema(package: p.id, schema: schema)
+                    }
+                }
             }
         }
     }
@@ -104,6 +124,29 @@ public struct PackageSpec: Sendable, Equatable, Codable {
     public let requiredFiles: [String]
     public let schemas: [SchemaSpec]
     public let dependencies: [String]
+    /// 包的可选项；JSON 里可以不写
+    public let options: [PackageOption]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, summary, license, homepage, source, anchor, include, exclude, requiredFiles, schemas, dependencies, options
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        summary = try c.decode(String.self, forKey: .summary)
+        license = try c.decode(String.self, forKey: .license)
+        homepage = try c.decode(URL.self, forKey: .homepage)
+        source = try c.decode(PackageSource.self, forKey: .source)
+        anchor = try c.decode(String.self, forKey: .anchor)
+        include = try c.decode([FileGlob].self, forKey: .include)
+        exclude = try c.decode([FileGlob].self, forKey: .exclude)
+        requiredFiles = try c.decode([String].self, forKey: .requiredFiles)
+        schemas = try c.decode([SchemaSpec].self, forKey: .schemas)
+        dependencies = try c.decode([String].self, forKey: .dependencies)
+        options = try c.decodeIfPresent([PackageOption].self, forKey: .options) ?? []
+    }
 }
 
 public struct SchemaSpec: Sendable, Equatable, Codable {
