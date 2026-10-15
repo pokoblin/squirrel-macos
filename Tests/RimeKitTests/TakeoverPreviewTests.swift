@@ -72,6 +72,19 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: e.dir.url.appending(path: "staging").path).isEmpty)
     }
 
+    @Test func 改过的上游词库和方案文件会提醒() throws {
+        // 常见做法：照上游说明在词库的 import_tables 里加自己的词库。接管后换成上游版本，就不再导入了
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.wubiSample(e.packages, into: e.rime)
+        try F.put("---\nname: wb\nversion: \"1\"\nsort: by_weight\nimport_tables:\n  - wb_mine\n...\n一\tg\t100\n", "wb.dict.yaml", in: e.rime)
+        try F.put(GenFixtures.dict("wb_mine", ["我的词\tqqqq"]), "wb_mine.dict.yaml", in: e.rime)
+        try F.put(F.upstream("wubi", "wb.schema.yaml") + "# 自己改过\n", "wb.schema.yaml", in: e.rime)
+        let v = try preview(e, try F.analyze(e))
+        #expect(v.kept.contains("wb_mine.dict.yaml"))
+        #expect(v.warnings.contains { $0.contains("wb.dict.yaml") && $0.contains("wb_mine") })
+        #expect(v.warnings.contains { $0.contains("wb.schema.yaml") })
+    }
+
     @Test func 用户直接改过的上游文件会被换掉() throws {
         let e = try F.env(); defer { e.dir.remove() }
         try F.wubiSample(e.packages, into: e.rime)
