@@ -30,6 +30,15 @@ public struct RimeLocations: Sendable, Equatable {
         FileManager.default.isExecutableFile(atPath: deployerBinary.path)
     }
 
+    /// 已安装的鼠须管版本（Info.plist 的 CFBundleVersion；1.1.2 没有 CFBundleShortVersionString）
+    public var installedSquirrelVersion: String? {
+        let plist = squirrelApp.appending(path: "Contents/Info.plist")
+        guard let data = try? Data(contentsOf: plist),
+              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return (dict["CFBundleVersion"] as? String) ?? (dict["CFBundleShortVersionString"] as? String)
+    }
+
     /// 用 passwd 里的家目录（sudo -u 运行时 $HOME 可能还是原来的用户）
     static func homeDirectory() -> URL {
         if let pw = getpwuid(getuid()) {
