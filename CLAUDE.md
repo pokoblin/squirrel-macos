@@ -34,3 +34,4 @@
 - 在测试机里跑 `rimectl apply/restore` 要用桌面会话（`open` 和 `--reload` 需要）：`sudo launchctl asuser $(id -u) sudo -u tester '/Volumes/My Shared Files/project/.build/debug/rimectl' … --data-dir /tmp/rk`。测试机的 `/tmp/rk` 是阶段 3 实测用的应用数据目录。
 - `rimectl takeover` 也要用桌面会话（`--confirm` 会通知鼠须管）。测试机里试接管时用新的数据目录（如 `/tmp/rk5`），别动 `/tmp/rk`。
 - `rimectl export/import` 也要用桌面会话（要退出、启动鼠须管来导出、合并输入习惯）。测试机里的共享文件夹是只读的：导出要先写到测试机自己的目录（如 `/tmp`），再用 `vm.sh ssh … cat` 拷出来。
+- 宿主机重新编译后，测试机里直接运行共享文件夹里的 rimectl 可能被系统杀掉（退出码 137）。先把 `.build/debug/rimectl` 和旁边的 `SquirrelMacOS_RimeKit.bundle` 一起复制到测试机的 `/tmp/rimectl-bin/` 再运行。
