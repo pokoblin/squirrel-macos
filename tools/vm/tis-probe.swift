@@ -46,6 +46,28 @@ case "enable", "select":
         let err = cmd == "enable" ? TISEnableInputSource(s) : TISSelectInputSource(s)
         print("\(cmd) \(describe(s)) -> OSStatus \(err)")
     }
+case "watch":   // watch <pump|sleep> <秒数>：同一个进程里反复查主输入源有没有启用
+    let mode = filter ?? "pump"
+    let seconds = Int(args.dropFirst(2).first ?? "120") ?? 120
+    func mainEnabled() -> Bool {
+        let main = sources(includeAll: true).first { (prop($0, kTISPropertyInputSourceID) as String?) == "im.rime.inputmethod.Squirrel" }
+        return main.map { (prop($0, kTISPropertyInputSourceIsEnabled) as Bool?) ?? false } ?? false
+    }
+    var last: Bool? = nil
+    for i in 0..<seconds {
+        let now = mainEnabled()
+        if now != last {
+            print("\(i)s [\(mode)] enabled=\(now)")
+            fflush(stdout)
+            last = now
+        }
+        if mode == "pump" {
+            _ = CFRunLoopRunInMode(.defaultMode, 1.0, false)
+        } else {
+            Thread.sleep(forTimeInterval: 1.0)
+        }
+    }
+    print("结束 [\(mode)] enabled=\(mainEnabled())")
 default:
-    print("用法: tis-probe list [关键字] | enabled | current | enable <ID关键字> | select <ID关键字>")
+    print("用法: tis-probe list [关键字] | enabled | current | enable <ID关键字> | select <ID关键字> | watch <pump|sleep> <秒数>")
 }
