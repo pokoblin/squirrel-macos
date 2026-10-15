@@ -41,6 +41,7 @@ public struct ExportManifest: Sendable, Equatable, Codable {
 public enum TransferError: Error, Equatable, Sendable, CustomStringConvertible {
     case noSettings
     case targetExists(String)
+    case targetNotAFile(String)
     case notAnExport(String)
     case unsupportedFormat(Int)
     case badSettings(String)
@@ -52,6 +53,8 @@ public enum TransferError: Error, Equatable, Sendable, CustomStringConvertible {
             return "还没有设置，没什么可导出的。先 rimectl takeover 接管已有配置，或 rimectl settings init 选一个起步方案"
         case .targetExists(let path):
             return "\(path) 已经有了。要覆盖就加 --force"
+        case .targetNotAFile(let path):
+            return "\(path) 是文件夹（或别的不是普通文件的东西），不能当导出文件。请写一个文件名，例如 \(path)/squirrel-macos-导出.zip"
         case .notAnExport(let path):
             return "\(path) 不是 squirrel-macos 的导出文件"
         case .unsupportedFormat(let v):

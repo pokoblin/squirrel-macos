@@ -58,6 +58,20 @@ import Testing
         #expect(try T.files(in: try unzip(target, m)).contains("manifest.json"))
     }
 
+    @Test func 目标是目录时不管加不加force都不动它() async throws {
+        // 照着「已经有了，要覆盖就加 --force」去做，不能把整个目录删掉
+        let m = try T.machine(); defer { m.dir.remove() }
+        let folder = m.dir.url.appending(path: "Desktop", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("重要".utf8).write(to: folder.appending(path: "important.txt"))
+        for overwrite in [false, true] {
+            await #expect(throws: TransferError.targetNotAFile(folder.path)) {
+                try await m.exporter().export(to: folder, packages: [], overwrite: overwrite)
+            }
+        }
+        #expect(try String(contentsOf: folder.appending(path: "important.txt"), encoding: .utf8) == "重要")
+    }
+
     @Test func 个人词库在应用外改过时提醒() async throws {
         let m = try T.machine(); defer { m.dir.remove() }
         try Ledger(entries: ["py_user.dict.yaml": LedgerEntry(sha256: "0", origin: "personal")]).save(m.paths)

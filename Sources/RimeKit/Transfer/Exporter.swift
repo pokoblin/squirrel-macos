@@ -23,7 +23,11 @@ public struct Exporter: Sendable {
 
     public func export(to target: URL, packages: [ExportManifest.Package], overwrite: Bool = false) async throws -> ExportReport {
         let fm = FileManager.default
-        if fm.fileExists(atPath: target.path), !overwrite { throw TransferError.targetExists(target.path) }
+        // 已经有东西时：只有普通文件才可以覆盖（目录、链接等一律不动，加 --force 也不行）
+        if let type = (try? fm.attributesOfItem(atPath: target.path))?[.type] as? FileAttributeType {
+            guard type == .typeRegular else { throw TransferError.targetNotAFile(target.path) }
+            if !overwrite { throw TransferError.targetExists(target.path) }
+        }
         // 和应用改动互斥：导出输入习惯时要退出鼠须管
         let lock = try ApplyLock.acquire(paths)
         defer { withExtendedLifetime(lock) {} }
@@ -62,8 +66,11 @@ public struct Exporter: Sendable {
         let zip = work.appending(path: "export.zip")
         try Zipper().zip(content, to: zip)
         try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
-        try fm.moveItem(at: zip, to: target)
+        if fm.fileExists(atPath: target.path) {
+            _ = try fm.replaceItemAt(target, withItemAt: zip)   // 原子地换掉旧文件，不会先删
+        } else {
+            try fm.moveItem(at: zip, to: target)
+        }
         return ExportReport(file: target, manifest: manifest, warnings: warnings)
     }
 }
