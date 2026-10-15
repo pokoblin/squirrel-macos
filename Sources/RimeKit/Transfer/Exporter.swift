@@ -57,7 +57,9 @@ public struct Exporter: Sendable {
             warnings.append("Rime 目录里的 \(edited.joined(separator: "、")) 在应用外改过，导出的是应用里保存的版本。要带上外面的修改，先运行 rimectl apply --adopt-personal")
         }
 
-        let userDBNames = try await userDB?.exportAll(into: content.appending(path: "userdb", directoryHint: .isDirectory)) ?? []
+        let userDBResult = try await userDB?.exportAll(into: content.appending(path: "userdb", directoryHint: .isDirectory))
+        let userDBNames = userDBResult?.names ?? []
+        if let warning = userDBResult?.warning { warnings.append(warning) }
         let manifest = ExportManifest(formatVersion: ExportManifest.currentFormatVersion, exportedAt: now(), settings: settings.withoutTextReplacementRecord,
                                       packages: packages, personalDicts: personal.dicts.map(\.lastPathComponent),
                                       phrases: personal.phrases.count, userDB: userDBNames)

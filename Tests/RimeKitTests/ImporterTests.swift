@@ -105,4 +105,42 @@ import Testing
         let saved = try #require(try SettingsStore(paths: b.paths).load())
         #expect(saved.textReplacement.syncedEntries == TextReplacementSync.entryHashes([tr]))
     }
+
+    @Test func 已经由应用管理时_导入前的备份是普通的() async throws {
+        let b = try T.machine(); defer { b.dir.remove() }
+        let a = try await archive(for: b)   // 同一个导出文件导入两次
+        _ = try await importer(b).run(a, catalog: b.catalog, packages: b.packages, textReplacement: [])
+        let report = try await importer(b).run(a, catalog: b.catalog, packages: b.packages, textReplacement: [])
+        guard case .applied(let applied) = report.outcome else { Issue.record("没有写入"); return }
+        #expect(!applied.backup.permanent)
+        #expect(applied.backup.reason == "导入前")
+    }
+
+    @Test func 另存的导入前文件只留最近10个_同一秒也不覆盖() async throws {
+        let b = try T.machine(); defer { b.dir.remove() }
+        let fm = FileManager.default
+        try fm.createDirectory(at: b.paths.beforeImport, withIntermediateDirectories: true)
+        for i in 0..<12 {
+            let old = b.paths.beforeImport.appending(path: "2020010\(i % 10)-00000\(i).zip")
+            try Data("旧".utf8).write(to: old)
+            try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: Double(1_000 + i))], ofItemAtPath: old.path)
+        }
+        // importer(b) 的 now 是固定的：两次导入在「同一秒」
+        let a = try await archive(for: b)
+        let first = try await importer(b).run(a, catalog: b.catalog, packages: b.packages, textReplacement: [])
+        let second = try await importer(b).run(a, catalog: b.catalog, packages: b.packages, textReplacement: [])
+        #expect(first.previous != second.previous)
+        let left = try fm.contentsOfDirectory(atPath: b.paths.beforeImport.path)
+        #expect(left.count == 10)
+        #expect(left.contains(try #require(second.previous).lastPathComponent))
+    }
+
+    @Test func 部署没完成时不合并输入习惯() async throws {
+        let b = try T.machine(withSettings: false, userDB: [:]); defer { b.dir.remove() }
+        b.squirrel.reloadError = .commandFailed("reload", "测试")   // 通知失败：看不到部署完成
+        b.squirrel.launchError = .commandFailed("open", "测试")
+        let report = try await importer(b).run(try await archive(for: b), catalog: b.catalog, packages: b.packages, textReplacement: [])
+        #expect(report.mergedUserDB.isEmpty)
+        #expect(report.userDBError?.contains("部署") == true)
+    }
 }

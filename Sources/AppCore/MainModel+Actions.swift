@@ -295,6 +295,7 @@ extension MainModel {
             let report = try await offMain { try await importer.run(archive, catalog: catalog, packages: packages, textReplacement: phrases) }
             if let previous = report.previous { lines.append("原来的设置和个人内容另存在：\(previous.path)") }
             if let error = report.userDBError { lines.append("输入习惯没有合并上：\(error)。配置已经导入好了，可以再导入一次") }
+            lines += report.warnings
             switch report.outcome {
             case .applied(let applied):
                 if let note = reloadSettingsAfterImport() { lines.append(note) }

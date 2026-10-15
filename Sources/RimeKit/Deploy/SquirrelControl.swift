@@ -48,7 +48,15 @@ public struct SquirrelControl: SquirrelControlling {
     /// 重装不一定有用：postinstall 认为「已经注册过」就跳过注册
     /// 只退出当前用户的鼠须管；没在运行时 killall 返回 1，不算错
     public func quit() throws {
-        _ = try Shell.run("/usr/bin/killall", ["-u", NSUserName(), "Squirrel"])
+        let r = try Shell.run("/usr/bin/killall", ["-u", NSUserName(), "Squirrel"])
+        if Self.quitFailed(status: r.status, stderr: r.stderr) {
+            throw SquirrelError.commandFailed("退出鼠须管", r.stderr)
+        }
+    }
+
+    /// killall 没找到进程时返回 1（鼠须管本来就没在运行），这不算失败
+    static func quitFailed(status: Int32, stderr: String) -> Bool {
+        status != 0 && !stderr.contains("No matching processes")
     }
 
     public func registerInputSource() throws {

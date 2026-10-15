@@ -523,6 +523,7 @@ struct Rimectl {
         if let previous = report.previous { out.line("应用里原来的设置和个人内容另存在：\(previous.path)") }
         let code = printApplyOutcome(report.outcome, out)
         if !report.mergedUserDB.isEmpty { out.line("已合并输入习惯：\(report.mergedUserDB.joined(separator: "、"))") }
+        for warning in report.warnings { out.line("注意：\(warning)") }
         if let error = report.userDBError {
             out.error("输入习惯没有合并上：\(error)。配置已经导入好了；可以再运行一次 rimectl import（配置不会重复写，输入习惯是合并）")
             return 1

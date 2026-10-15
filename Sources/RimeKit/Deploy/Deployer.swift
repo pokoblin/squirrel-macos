@@ -8,8 +8,12 @@ public struct ApplyOptions: Sendable, Equatable {
     public var adoptPersonalChanges: Bool
     /// 不为空时这次的备份永久保留，说明写这个（例如「导入前」）。Rime 目录里没有配置文件时不用永久保留
     public var permanentBackupReason: String?
+    /// 普通备份的说明（不为空时代替「应用改动前」）
+    public var backupReason: String?
 
-    public init(overwriteExternalChanges: Bool = false, adoptPersonalChanges: Bool = false, permanentBackupReason: String? = nil) {
+    public init(overwriteExternalChanges: Bool = false, adoptPersonalChanges: Bool = false, permanentBackupReason: String? = nil,
+                backupReason: String? = nil) {
+        self.backupReason = backupReason
         self.overwriteExternalChanges = overwriteExternalChanges
         self.adoptPersonalChanges = adoptPersonalChanges
         self.permanentBackupReason = permanentBackupReason
@@ -147,7 +151,7 @@ public struct Deployer: Sendable {
         } else {
             // 永久保留只要一份：还原到第一次应用前再应用时，不再加新的永久备份
             keep = first && !existing.isEmpty && !backups.list().contains(where: \.permanent)
-            reason = first ? "第一次应用前" : "应用改动前"
+            reason = options.backupReason ?? (first ? "第一次应用前" : "应用改动前")
         }
         let backup = try backups.create(from: rime, reason: reason, permanent: keep, ledger: ledger)
 

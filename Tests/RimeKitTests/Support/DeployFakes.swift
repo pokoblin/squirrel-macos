@@ -19,6 +19,9 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
     /// 重新注册输入源时调用（测试里用来改假的输入法服务的状态）
     var onRegister: (@Sendable () -> Void)?
     var registerError: SquirrelError?
+    /// 不为空时 launch / reload 抛这个错（模拟通知鼠须管失败）
+    var launchError: SquirrelError?
+    var reloadError: SquirrelError?
 
     init(locations: RimeLocations, running: Bool) {
         self.locations = locations
@@ -31,6 +34,7 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
 
     func reload() throws {
         lock.withLock { log.append("reload") }
+        if let reloadError { throw reloadError }
         try simulateDeploy()
     }
 
@@ -39,6 +43,7 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
             log.append("launch")
             running = true
         }
+        if let launchError { throw launchError }
         try simulateDeploy()
     }
 

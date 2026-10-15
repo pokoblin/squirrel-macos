@@ -281,6 +281,7 @@ public final class SetupFlow {
             }
             if let previous = report.previous { notes.append("应用里原来的设置和个人内容另存在：\(previous.path)") }
             if let error = report.userDBError { notes.append("输入习惯没有合并上：\(error)。配置已经导入好了，可以再导入一次") }
+            notes += report.warnings
             finish(report.outcome, notes: notes)
         } catch {
             step = .failed(Self.failure(error))
