@@ -49,4 +49,34 @@ enum Fixtures {
     static func commitJSON(sha: String) -> Data {
         Data(#"{"sha":"\#(sha)","commit":{"message":"x"}}"#.utf8)
     }
+
+    // MARK: 测试 zip
+
+    /// base：没有顶层目录；有一个要排除的文件、一个不该装的 README
+    static func baseZip() throws -> Data {
+        try ZipFixture.make([
+            "base.schema.yaml": "base",
+            "dicts/a.dict.yaml": "a",
+            "dicts/sub/b.dict.yaml": "b",
+            "dicts/skip.txt": "skip",
+            "README.md": "readme",
+        ], topFolder: nil)
+    }
+
+    /// app：有顶层目录 app-<sha>/（像 codeload 的 zip）
+    static func appZip(sha: String) throws -> Data {
+        try ZipFixture.make(["app.schema.yaml": "app", "notes.txt": "n"], topFolder: "app-\(sha)")
+    }
+
+    /// 把 base 和 app 的接口、下载地址都设置好
+    static func stubAll(_ http: FakeHTTPClient, baseVersion: String = "2026-10-05T13:38:43Z", appSHA: String = "abc123") throws {
+        http.stub(baseReleaseURL, .success(releaseJSON(assets: [("base.zip", baseZipURL, baseVersion)])))
+        http.stub(baseZipURL, .success(try baseZip()))
+        http.stub(appCommitURL, .success(commitJSON(sha: appSHA)))
+        http.stub(appZipURL(appSHA), .success(try appZip(sha: appSHA)))
+    }
+
+    static func paths(_ dir: TempDir) -> AppPaths {
+        AppPaths(root: dir.url.appending(path: "data", directoryHint: .isDirectory))
+    }
 }
