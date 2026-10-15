@@ -16,6 +16,9 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
     private var buildTime = 1_000
     private var log: [String] = []
     var errorLine: String?
+    /// 重新注册输入源时调用（测试里用来改假的输入法服务的状态）
+    var onRegister: (@Sendable () -> Void)?
+    var registerError: SquirrelError?
 
     init(locations: RimeLocations, running: Bool) {
         self.locations = locations
@@ -37,6 +40,12 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
             running = true
         }
         try simulateDeploy()
+    }
+
+    func registerInputSource() throws {
+        lock.withLock { log.append("register") }
+        if let registerError { throw registerError }
+        onRegister?()
     }
 
     private func simulateDeploy() throws {

@@ -54,7 +54,7 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 
 | 参数 | 作用 | 验证 |
 |---|---|---|
-| `--register-input-source` | 向系统注册输入法 | 实测 |
+| `--register-input-source` | 向系统注册输入法。只要「简体」子模式还启用着，就打印 `User already registered …` 跳过、退出码 0；输入源整个从系统里消失时运行它，马上就回来（之前加过的仍是 enabled）。`rimectl activate` 发现没注册时会先跑它 | 实测（squirrel-dev，阶段 5 和之后） |
 | `--enable-input-source` | 启用（**只能启用到「简体」子模式，本体启用不了**，见第 2 节） | 实测 |
 | `--select-input-source` | 切换到鼠须管（本体没启用时会失败：`Selection fails for input source`） | 实测 |
 | `--disable-input-source` | 停用 | 查看（`strings`），未实测 |

@@ -543,7 +543,9 @@ struct Rimectl {
             squirrel: context.squirrel ?? SquirrelControl(locations: locations),
             watcher: DeployWatcher(locations: locations, timeout: context.deployTimeout, sleep: context.sleep),
             timeout: timeout)
-        let outcome = try await activator.activate(onWaiting: {
+        let outcome = try await activator.activate(onRegistering: {
+            out.line("系统里没有鼠须管的输入源，正在重新注册……")
+        }, onWaiting: {
             out.line("已打开系统设置的键盘页。请在「文字输入 → 输入法 → 编辑… → + → 简体中文 → 鼠须管」里添加，")
             out.line("添加好后这里会自动继续（最多等 \(Int(timeout)) 秒）……")
         })
@@ -556,7 +558,7 @@ struct Rimectl {
             out.error("等了 \(Int(timeout)) 秒，还没看到鼠须管被添加。添加好后再运行一次 rimectl activate")
             return 1
         case .notRegistered:
-            out.error("系统里没有鼠须管的输入源，可能没装好。请运行 rimectl install --force 重新安装")
+            out.error("重新注册了鼠须管的输入源，系统里还是没有。可以试试注销再登录后再运行 rimectl activate，或者运行 rimectl install --force 重新安装")
             return 1
         }
     }

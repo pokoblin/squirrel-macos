@@ -8,6 +8,7 @@ import Testing
         let dir: TempDir
         let locations: RimeLocations
         let input: FakeInputSource
+        let squirrel: FakeSquirrel
         let privileged: FakePrivileged
         let output: Output
         let context: Rimectl.Context
@@ -24,14 +25,15 @@ import Testing
         http.stub(InstallFixtures.pkgURL("1.1.2"), .success(Data("pkg".utf8)))
         let fakeInput = FakeInputSource(input)
         let privileged = FakePrivileged(app: locations.squirrelApp, version: "1.1.2")
+        let squirrel = FakeSquirrel(locations: locations, running: false)
         let output = Output(echo: false)
         let catalog = try Catalog.builtIn()
         let context = Rimectl.Context(
             http: http, retry: .immediate, catalog: { catalog }, defaultPaths: Fixtures.paths(dir), output: output,
-            locations: locations, compiler: FakeCompiler(), squirrel: FakeSquirrel(locations: locations, running: false),
+            locations: locations, compiler: FakeCompiler(), squirrel: squirrel,
             deployTimeout: .milliseconds(20), sleep: { _ in },
             inputSource: fakeInput, privileged: privileged, verifier: FakeVerifier(), activationTimeout: 3)
-        return Env(dir: dir, locations: locations, input: fakeInput, privileged: privileged, output: output, context: context)
+        return Env(dir: dir, locations: locations, input: fakeInput, squirrel: squirrel, privileged: privileged, output: output, context: context)
     }
 
     @Test func install装上() async throws {
@@ -61,6 +63,23 @@ import Testing
         let e = try env(installed: "1.1.2"); defer { e.dir.remove() }
         #expect(await e.run(["activate", "--timeout", "2"]) == 1)
         #expect(e.output.text.contains("还没看到鼠须管被添加"))
+    }
+
+    @Test func activate重新注册输入源() async throws {
+        let e = try env(installed: "1.1.2", input: InputSourceState(registered: false, enabled: false, selected: false))
+        defer { e.dir.remove() }
+        let input = e.input
+        e.squirrel.onRegister = { input.changeOnNextPump(to: InputSourceState(registered: true, enabled: true, selected: false)) }
+        #expect(await e.run(["activate"]) == 0)
+        #expect(e.output.text.contains("系统里没有鼠须管的输入源，正在重新注册"))
+        #expect(e.output.text.contains("鼠须管可以用了"))
+    }
+
+    @Test func activate重新注册也没用() async throws {
+        let e = try env(installed: "1.1.2", input: InputSourceState(registered: false, enabled: false, selected: false))
+        defer { e.dir.remove() }
+        #expect(await e.run(["activate"]) == 1)
+        #expect(e.output.text.contains("重新注册了鼠须管的输入源，系统里还是没有"))
     }
 
     @Test func doctor() async throws {

@@ -41,6 +41,15 @@ import Testing
         #expect(checks.first { $0.name == "Rime 目录" }?.level == .warning)
     }
 
+    @Test func 输入源从系统里丢了() async throws {
+        // install --force 不一定有用（postinstall 认为已经注册过就跳过），activate 会重新注册
+        let dir = try TempDir(); defer { dir.remove() }
+        let (d, _) = try doctor(dir, installed: "1.1.2", input: InputSourceState(registered: false, enabled: false, selected: false), running: true)
+        let checks = await d.run()
+        #expect(checks.first { $0.name == "输入法" } == DoctorCheck(
+            name: "输入法", level: .problem, message: "系统里没有鼠须管的输入源", hint: "运行 rimectl activate（会重新注册输入源）"))
+    }
+
     @Test func 一切正常() async throws {
         let dir = try TempDir(); defer { dir.remove() }
         let (d, l) = try doctor(dir, installed: "1.1.2", input: InputSourceState(registered: true, enabled: true, selected: true), running: true,

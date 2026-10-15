@@ -67,6 +67,7 @@ final class FakePrivileged: PrivilegedInstalling, @unchecked Sendable {
 final class FakeInputSource: InputSourceControlling, @unchecked Sendable {
     private let lock = NSLock()
     private var current: InputSourceState
+    private var pending: InputSourceState?
     private var pumps = 0
     private var log: [String] = []
     /// 等了这么多次之后，变成用户已经添加好
@@ -94,6 +95,11 @@ final class FakeInputSource: InputSourceControlling, @unchecked Sendable {
         lock.withLock { log.append("open") }
     }
 
+    /// 下次 pump 时变成这个状态（模拟系统通知进来后 TIS 的缓存才更新）
+    func changeOnNextPump(to state: InputSourceState) {
+        lock.withLock { pending = state }
+    }
+
     func pump(_ seconds: Double) async {
         recordPump()
     }
@@ -101,6 +107,10 @@ final class FakeInputSource: InputSourceControlling, @unchecked Sendable {
     private func recordPump() {
         lock.withLock {
             pumps += 1
+            if let pending {
+                current = pending
+                self.pending = nil
+            }
             if let n = enableAfterPumps, pumps >= n { current.enabled = true }
         }
     }

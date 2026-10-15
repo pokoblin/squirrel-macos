@@ -1,11 +1,12 @@
 import Darwin
 import Foundation
 
-/// 控制鼠须管：看在不在运行、通知重新部署、启动
+/// 控制鼠须管：看在不在运行、通知重新部署、启动、重新注册输入源
 public protocol SquirrelControlling: Sendable {
     func isRunning() -> Bool
     func reload() throws
     func launch() throws
+    func registerInputSource() throws
 }
 
 public enum SquirrelError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -39,5 +40,12 @@ public struct SquirrelControl: SquirrelControlling {
     public func launch() throws {
         let r = try Shell.run("/usr/bin/open", [locations.squirrelApp.path])
         guard r.status == 0 else { throw SquirrelError.commandFailed("open 鼠须管", r.stderr) }
+    }
+
+    /// 输入源从系统里消失时用（阶段 5 测试机实测：运行这条命令马上就回来了）。
+    /// 重装不一定有用：postinstall 认为「已经注册过」就跳过注册
+    public func registerInputSource() throws {
+        let r = try Shell.run(locations.squirrelBinary.path, ["--register-input-source"])
+        guard r.status == 0 else { throw SquirrelError.commandFailed("Squirrel --register-input-source", r.stderr) }
     }
 }

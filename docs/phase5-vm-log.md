@@ -49,6 +49,15 @@
 
 结论：根因不明，先记下。值得以后改进的地方：输入源没注册时，`doctor` 建议的 `install --force` 不一定有用（postinstall 如果认为「已经注册过」就跳过注册）；`activate` 可以先跑一次 `Squirrel --register-input-source` 再等用户添加。
 
+**后续（已改）**：`rimectl activate` 发现系统里没有鼠须管的输入源时，先运行 `Squirrel --register-input-source`，让 run loop 转一下再查（最多 5 秒）；回来了就照常继续（没添加就打开系统设置等，然后切换、启动），还是没有才报错，建议注销再登录或 `install --force`。`doctor` 的建议改成 `rimectl activate`。
+
+想复现没成功（squirrel-dev）：
+- 退出鼠须管，把 `Squirrel.app` 移出 `/Library/Input Methods`：30 秒内三个输入源都还在。
+- 再删掉 `$(getconf DARWIN_USER_CACHE_DIR)/com.apple.IntlDataCache.le*`、杀掉 `TextInputMenuAgent`/`TextInputSwitcher`：三个输入源仍列着，只是名字变成 `?`，本体 enabled=false；缓存文件没有马上重建。
+- 把 `Squirrel.app` 移回去：马上恢复正常（名字和 enabled 都回来）。之后把缓存文件也放回原样。
+- 注意到原来那份缓存文件的修改时间正好是 16:29（发现输入源丢失的时间）。猜测和登录时重建输入源缓存有关，但测登录要用户输密码，没继续。
+- 在正常状态下实测：`Squirrel --register-input-source` 打印「User already registered」、退出码 0；新的 `rimectl activate`、`doctor` 结果正常。「没注册 → 重新注册」这条路只有单元测试覆盖。
+
 ## 4. 宿主机真实配置（只读，经用户同意）
 
 复制 `~/Library/Rime` 到临时目录（删掉 `build/`），只跑预览，跑完删掉副本。只记录设置、文件名和条数。

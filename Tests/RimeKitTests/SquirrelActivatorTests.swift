@@ -43,11 +43,50 @@ import Testing
         #expect(!input.calls.contains("select"))
     }
 
-    @Test func 系统里没有注册鼠须管() async throws {
+    @Test func 没注册时先重新注册再继续() async throws {
+        // 测试机实测：输入源整个从系统里消失过，运行 Squirrel --register-input-source 就回来了（用户之前加过的还是 enabled）
         let dir = try TempDir(); defer { dir.remove() }
         let input = FakeInputSource(InputSourceState(registered: false, enabled: false, selected: false))
-        let (activator, _) = try make(dir, input, running: false)
+        let (activator, squirrel) = try make(dir, input, running: true)
+        squirrel.onRegister = { input.changeOnNextPump(to: InputSourceState(registered: true, enabled: true, selected: false)) }
+        let registering = Flag()
+        let outcome = try await activator.activate(onRegistering: { registering.set() })
+        #expect(outcome == .ready(openedSettings: false, launched: false))
+        #expect(squirrel.calls == ["register"])
+        #expect(registering.isSet)
+        #expect(input.pumpCount == 1)   // 注册后要让 run loop 转一下，TIS 的缓存才会更新
+        #expect(input.calls == ["select"])
+    }
+
+    @Test func 重新注册后还没添加就去等用户添加() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let input = FakeInputSource(InputSourceState(registered: false, enabled: false, selected: false))
+        let (activator, squirrel) = try make(dir, input, running: true)
+        squirrel.onRegister = { input.changeOnNextPump(to: InputSourceState(registered: true, enabled: false, selected: false)) }
+        input.enableAfterPumps = 3
+        let outcome = try await activator.activate()
+        #expect(outcome == .ready(openedSettings: true, launched: false))
+        #expect(input.calls == ["open", "select"])
+    }
+
+    @Test func 重新注册后还是没有() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let input = FakeInputSource(InputSourceState(registered: false, enabled: false, selected: false))
+        let (activator, squirrel) = try make(dir, input, running: false)
         #expect(try await activator.activate() == .notRegistered)
+        #expect(squirrel.calls == ["register"])
+        #expect(input.pumpCount == 5)   // 最多等 5 秒
+        #expect(input.calls.isEmpty)
+    }
+
+    @Test func 注册命令失败要报出来() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let input = FakeInputSource(InputSourceState(registered: false, enabled: false, selected: false))
+        let (activator, squirrel) = try make(dir, input, running: false)
+        squirrel.registerError = .commandFailed("Squirrel --register-input-source", "boom")
+        await #expect(throws: SquirrelError.commandFailed("Squirrel --register-input-source", "boom")) {
+            try await activator.activate()
+        }
     }
 
     @Test func 没装鼠须管() async throws {

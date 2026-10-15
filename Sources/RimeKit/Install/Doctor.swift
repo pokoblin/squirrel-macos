@@ -73,7 +73,7 @@ public struct Doctor: Sendable {
     private func inputCheck() -> DoctorCheck {
         let s = inputSource.state()
         if !s.registered {
-            return DoctorCheck(name: "输入法", level: .problem, message: "系统里没有鼠须管的输入源", hint: "运行 rimectl install --force 重新安装")
+            return DoctorCheck(name: "输入法", level: .problem, message: "系统里没有鼠须管的输入源", hint: "运行 rimectl activate（会重新注册输入源）")
         }
         if !s.enabled {
             return DoctorCheck(name: "输入法", level: .problem, message: "还没有在系统设置里添加鼠须管", hint: "运行 rimectl activate")
