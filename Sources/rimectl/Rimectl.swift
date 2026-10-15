@@ -26,6 +26,8 @@ struct Rimectl {
         var activationTimeout: Double = 600
         /// 读 macOS 文本替换；测试时换成假的
         var textReplacements: @Sendable () throws -> [Phrase] = { try TextReplacementReader().read() }
+        /// 空就用鼠须管自带的 rime_dict_manager
+        var userDBTool: (any UserDBTool)? = nil
     }
 
     static let usage = """
@@ -40,6 +42,8 @@ struct Rimectl {
       rimectl generate --out 目录 [--cache-only]                按设置生成一份 Rime 配置（只往空目录写）
       rimectl apply [--cache-only] [--overwrite] [--adopt-personal]   把设置应用到 Rime 目录并通知鼠须管部署
       rimectl takeover [--confirm] [--force] [--cache-only]    认出已有的 Rime 配置并预览；加 --confirm 才真的接管（先完整备份）
+      rimectl export <文件> [--no-userdb] [--force]           把设置、个人内容、输入习惯打成一个文件（--force 覆盖已有文件）
+      rimectl import <文件> [--no-userdb] [--cache-only]      从导出文件还原：下载最新上游包、写入配置、合并输入习惯
       rimectl status                                           查看鼠须管、Rime 目录、外部改动、备份
       rimectl restore --list | <备份 id>                        列出备份 / 还原到某个备份
       rimectl install [--force] [--gui-auth]                   下载、检查、安装鼠须管（--gui-auth 弹系统授权框，否则用免密 sudo）
@@ -72,6 +76,7 @@ struct Rimectl {
         var offline = false
         var timeout: Double?
         var confirm = false
+        var noUserDB = false
         var positional: [String] = []
         var i = 0
         while i < args.count {
@@ -104,6 +109,9 @@ struct Rimectl {
                 guard i + 1 < args.count, let seconds = Double(args[i + 1]) else { out.error(usage); return 2 }
                 timeout = seconds
                 i += 2
+            case "--no-userdb":
+                noUserDB = true
+                i += 1
             case "--confirm":
                 confirm = true
                 i += 1
@@ -147,6 +155,12 @@ struct Rimectl {
             case "takeover":
                 return try await takeover(confirm: confirm, force: force, cacheOnly: cacheOnly,
                                           paths: paths, locations: locations, context)
+            case "export":
+                return try await export(Array(positional.dropFirst()), includeUserDB: !noUserDB, force: force,
+                                        paths: paths, locations: locations, context)
+            case "import":
+                return try await importCommand(Array(positional.dropFirst()), includeUserDB: !noUserDB, cacheOnly: cacheOnly,
+                                               paths: paths, locations: locations, context)
             case "status":
                 return try status(paths: paths, locations: locations, context)
             case "restore":
@@ -378,6 +392,79 @@ struct Rimectl {
         let outcome = try await TakeoverApplier(deployer: deployer(paths: paths, locations: locations, context))
             .confirm(proposal, catalog: catalog, packages: packages, textReplacement: textReplacement, force: force)
         return printApplyOutcome(outcome, out)
+    }
+
+    private static func userDB(_ locations: RimeLocations, _ context: Context) -> UserDBTransfer {
+        UserDBTransfer(tool: context.userDBTool ?? RimeDictManager(locations: locations),
+                       squirrel: context.squirrel ?? SquirrelControl(locations: locations), sleep: context.sleep)
+    }
+
+    private static func export(_ args: [String], includeUserDB: Bool, force: Bool, paths: AppPaths, locations: RimeLocations,
+                               _ context: Context) async throws -> Int32 {
+        let out = context.output
+        guard args.count == 1 else { out.error(usage); return 2 }
+        let target = URL(fileURLWithPath: args[0])
+        guard let settings = try SettingsStore(paths: paths).load() else {
+            out.error(TransferError.noSettings.description)
+            return 1
+        }
+        let catalog = try context.catalog()
+        let store = PackageStore(paths: paths, http: context.http, retry: context.retry)
+        let versions = try settings.requiredPackages(catalog).compactMap { spec in
+            store.latestCached(for: spec).map { ExportManifest.Package(id: spec.id, version: $0.info.version) }
+        }
+        if includeUserDB { out.line("导出输入习惯时会暂时退出鼠须管，几秒后自动启动") }
+        let exporter = Exporter(paths: paths, locations: locations, userDB: includeUserDB ? userDB(locations, context) : nil)
+        let report = try await exporter.export(to: target, packages: versions, overwrite: force)
+        for warning in report.warnings { out.line("注意：\(warning)") }
+        let m = report.manifest
+        out.line("已导出到 \(report.file.path)")
+        out.line("方案 \(m.settings.schemas.count) 个，个人词库 \(m.personalDicts.count) 个，手动短语 \(m.phrases) 条，输入习惯 \(m.userDB.count) 份（文本替换生成的短语不导出）")
+        return 0
+    }
+
+    private static func importCommand(_ args: [String], includeUserDB: Bool, cacheOnly: Bool, paths: AppPaths,
+                                      locations: RimeLocations, _ context: Context) async throws -> Int32 {
+        let out = context.output
+        guard args.count == 1 else { out.error(usage); return 2 }
+        let catalog = try context.catalog()
+        let work = paths.staging.appending(path: "import-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: work) }
+        let archive = try ImportArchive.open(URL(fileURLWithPath: args[0]), catalog: catalog, into: work)
+        let settings = archive.manifest.settings
+        out.line("导出时间：\(archive.manifest.exportedAt.formatted(date: .numeric, time: .standard))")
+        out.line("方案 \(settings.schemas.count) 个，个人词库 \(archive.personalDicts.count) 个，手动短语 \(archive.phrases.count) 条，输入习惯 \(archive.userDB.count) 份")
+        for warning in archive.warnings { out.line("注意：\(warning)") }
+        guard locations.squirrelInstalled else {
+            out.error("还没装鼠须管。先运行 rimectl install 安装，再 rimectl activate 添加输入法，然后再导入")
+            return 1
+        }
+        let store = PackageStore(paths: paths, http: context.http, retry: context.retry)
+        var packages: [String: CachedPackage] = [:]
+        for spec in try settings.requiredPackages(catalog) {
+            guard let pkg = try await obtain(spec, cacheOnly: cacheOnly, store: store, out) else { return 1 }
+            packages[spec.id] = pkg
+        }
+        var textReplacement: [Phrase] = []
+        if settings.textReplacement.sync {
+            do {
+                textReplacement = try context.textReplacements()
+            } catch {
+                out.line("注意：\(error)。这次先不带文本替换的短语")
+            }
+        }
+        if includeUserDB, !archive.userDB.isEmpty { out.line("合并输入习惯时会暂时退出鼠须管，几秒后自动启动") }
+        let importer = Importer(deployer: deployer(paths: paths, locations: locations, context),
+                                userDB: includeUserDB ? userDB(locations, context) : nil)
+        let report = try await importer.run(archive, catalog: catalog, packages: packages, textReplacement: textReplacement)
+        if let previous = report.previous { out.line("应用里原来的设置和个人内容另存在：\(previous.path)") }
+        let code = printApplyOutcome(report.outcome, out)
+        if !report.mergedUserDB.isEmpty { out.line("已合并输入习惯：\(report.mergedUserDB.joined(separator: "、"))") }
+        if let error = report.userDBError {
+            out.error("输入习惯没有合并上：\(error)。配置已经导入好了；可以再运行一次 rimectl import（配置不会重复写，输入习惯是合并）")
+            return 1
+        }
+        return code
     }
 
     /// 只打印设置、文件名和条数，不打印词库和短语的内容
