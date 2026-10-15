@@ -111,7 +111,7 @@ public final class SetupFlow {
                 step = .failed("系统里没有鼠须管的输入源，重新注册也没用。请重新安装鼠须管")
             }
         } catch {
-            step = .failed("\(error)")
+            step = .failed(Self.failure(error))
         }
     }
 
@@ -159,7 +159,7 @@ public final class SetupFlow {
             step = .chooseStart(.existing(TakeoverSummary.make(proposal, preview: preview, catalog: env.catalog,
                                                                blockedReason: blocked)))
         } catch {
-            step = .failed("\(error)")
+            step = .failed(Self.failure(error))
         }
     }
 
@@ -200,7 +200,7 @@ public final class SetupFlow {
             }
             finish(outcome, notes: [])
         } catch {
-            step = .failed("\(error)")
+            step = .failed(Self.failure(error))
         }
     }
 
@@ -225,7 +225,7 @@ public final class SetupFlow {
             pendingTakeover = nil
             finish(outcome, notes: [])
         } catch {
-            step = .failed("\(error)")
+            step = .failed(Self.failure(error))
         }
     }
 
@@ -267,8 +267,13 @@ public final class SetupFlow {
             if let error = report.userDBError { notes.append("输入习惯没有合并上：\(error)。配置已经导入好了，可以再导入一次") }
             finish(report.outcome, notes: notes)
         } catch {
-            step = .failed("\(error)")
+            step = .failed(Self.failure(error))
         }
+    }
+
+    /// 失败页上显示的原因（rimectl 的说法换成界面上的做法）
+    static func failure(_ error: Error) -> String {
+        AppWording.forApp("\(error)")
     }
 
     /// 重活（读写文件、复制方案包、等部署）放到后台做，界面不卡

@@ -24,8 +24,9 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     public init(kind: Kind, title: String, lines: [String], action: Action? = nil, actionTitle: String? = nil) {
         self.kind = kind
-        self.title = title
-        self.lines = lines
+        // RimeKit 的提示里有 rimectl 的说法，显示前换成界面上的做法
+        self.title = AppWording.forApp(title)
+        self.lines = lines.map(AppWording.forApp)
         self.action = action
         self.actionTitle = actionTitle
     }
