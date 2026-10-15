@@ -1,0 +1,203 @@
+import Darwin
+import Foundation
+
+public struct ApplyOptions: Sendable, Equatable {
+    /// 外部改动、应用不管的文件也照样覆盖（先备份）
+    public var overwriteExternalChanges: Bool
+    /// 在应用外改过的个人词库，收回到 personal/ 当正本
+    public var adoptPersonalChanges: Bool
+
+    public init(overwriteExternalChanges: Bool = false, adoptPersonalChanges: Bool = false) {
+        self.overwriteExternalChanges = overwriteExternalChanges
+        self.adoptPersonalChanges = adoptPersonalChanges
+    }
+}
+
+public struct ApplyReport: Sendable, Equatable {
+    public let backup: BackupInfo
+    public let written: [String]
+    public let unchanged: Int
+    public let removed: [String]
+    /// 鼠须管原来没运行，这次启动了它
+    public let launched: Bool
+    public let deploy: DeployOutcome
+    public let warnings: [String]
+}
+
+public enum ApplyOutcome: Sendable, Equatable {
+    case applied(ApplyReport)
+    /// 有外部改动，没让覆盖，什么都没写
+    case externalChanges([ExternalChange])
+    /// 暂存区编译失败（已翻译），什么都没写
+    case compileFailed([String])
+}
+
+/// 把设置应用到真实的 ~/Library/Rime（设计 6.1）
+public struct Deployer: Sendable {
+    public let paths: AppPaths
+    public let locations: RimeLocations
+    let compiler: any RimeCompiler
+    let squirrel: any SquirrelControlling
+    let watcher: DeployWatcher
+    let now: @Sendable () -> Date
+
+    public init(
+        paths: AppPaths,
+        locations: RimeLocations,
+        compiler: any RimeCompiler,
+        squirrel: any SquirrelControlling,
+        watcher: DeployWatcher,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.paths = paths
+        self.locations = locations
+        self.compiler = compiler
+        self.squirrel = squirrel
+        self.watcher = watcher
+        self.now = now
+    }
+
+    public func apply(_ input: GenerationInput, options: ApplyOptions = ApplyOptions()) async throws -> ApplyOutcome {
+        guard locations.squirrelInstalled else { throw ApplyError.squirrelNotInstalled }
+        let lock = try ApplyLock.acquire(paths)
+        defer { withExtendedLifetime(lock) {} }
+        let fm = FileManager.default
+        let rime = locations.rimeDirectory
+        let ledger = try Ledger.load(paths)
+        var input = input
+
+        // 1. 已管理的文件有没有在应用外被改过；需要的话把个人词库的修改收回来
+        var changes = ledger.externalChanges(in: rime)
+        if options.adoptPersonalChanges {
+            let adopted = try adoptPersonal(changes, ledger: ledger)
+            if !adopted.isEmpty {
+                input.personal = try PersonalContent.load(from: paths)
+                changes.removeAll { adopted.contains($0.path) }
+            }
+        }
+
+        // 2. 在暂存区生成
+        let work = paths.staging.appending(path: "apply-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? fm.removeItem(at: work) }
+        let generated = work.appending(path: "generated", directoryHint: .isDirectory)
+        let result = try ConfigGenerator().generate(input, into: generated)
+        let newPaths = result.files.map(\.path)
+        changes += ledger.unmanagedOverwrites(newPaths, in: rime)
+        if !changes.isEmpty, !options.overwriteExternalChanges {
+            return .externalChanges(changes)
+        }
+
+        // 3. 拼出完整的目录编译：现有的、应用不管也不会覆盖的配置文件 + 新生成的
+        let full = work.appending(path: "full", directoryHint: .isDirectory)
+        let existing = try RimeFiles.configFiles(in: rime)
+        let newSet = Set(newPaths)
+        for path in existing where ledger.entries[path] == nil && !newSet.contains(path) {
+            try Self.copy(rime.appending(path: path), to: full.appending(path: path))
+        }
+        for path in newPaths {
+            try Self.copy(generated.appending(path: path), to: full.appending(path: path))
+        }
+        let compiled = try compiler.compile(full)
+        guard compiled.succeeded else { return .compileFailed(RimeLog.explain(compiled.errors)) }
+
+        // 4. 备份
+        let backups = BackupStore(paths: paths, now: now)
+        let first = ledger.entries.isEmpty
+        let backup = try backups.create(from: rime, reason: first ? "第一次应用前" : "应用改动前",
+                                        permanent: first && !existing.isEmpty, ledger: ledger)
+
+        // 5. 写入；出错就用刚才的备份还原
+        var written: [String] = []
+        var unchanged = 0
+        var removed: [String] = []
+        do {
+            try fm.createDirectory(at: rime, withIntermediateDirectories: true)
+            var newLedger = Ledger(appliedAt: now())
+            for file in result.files {
+                let source = generated.appending(path: file.path)
+                let sha = try Hashing.sha256(of: source)
+                newLedger.entries[file.path] = LedgerEntry(sha256: sha, origin: file.origin.ledgerValue)
+                let target = rime.appending(path: file.path)
+                if ledger.entries[file.path]?.sha256 == sha, (try? Hashing.sha256(of: target)) == sha {
+                    unchanged += 1
+                    continue
+                }
+                try Self.replace(target, with: source)
+                written.append(file.path)
+            }
+            for path in ledger.entries.keys.sorted() where newLedger.entries[path] == nil {
+                let url = rime.appending(path: path)
+                if Ledger.exists(url) {
+                    try fm.removeItem(at: url)
+                    removed.append(path)
+                }
+            }
+            try newLedger.save(paths)
+        } catch {
+            let restored = (try? backups.restore(backup.id, to: rime)) != nil
+            if restored { try? ledger.save(paths) }
+            throw ApplyError.writeFailed(String(describing: error), restored: restored)
+        }
+        _ = try? backups.prune()
+
+        // 6. 通知鼠须管，等部署完
+        let (launched, deploy, notifyWarnings) = await notifySquirrel()
+        return .applied(ApplyReport(backup: backup, written: written, unchanged: unchanged, removed: removed,
+                                    launched: launched, deploy: deploy, warnings: result.warnings + notifyWarnings))
+    }
+
+    // MARK: 内部
+
+    /// 在运行就 --reload，没运行就启动；然后等部署完
+    func notifySquirrel() async -> (launched: Bool, deploy: DeployOutcome, warnings: [String]) {
+        let previous = watcher.lastBuildTime()
+        let snapshot = watcher.snapshot()
+        var launched = false
+        var warnings: [String] = []
+        do {
+            if squirrel.isRunning() {
+                try squirrel.reload()
+            } else {
+                try squirrel.launch()
+                launched = true
+            }
+        } catch {
+            warnings.append("通知鼠须管失败：\(error)")
+        }
+        let deploy = await watcher.wait(previousBuildTime: previous, since: snapshot)
+        return (launched, deploy, warnings)
+    }
+
+    /// 把在应用外改过的个人词库复制回 personal/dicts/，返回收回的路径
+    private func adoptPersonal(_ changes: [ExternalChange], ledger: Ledger) throws -> [String] {
+        var adopted: [String] = []
+        for case .modified(let path) in changes where ledger.entries[path]?.origin == FileOrigin.personal.ledgerValue {
+            let target = paths.personalDicts.appending(path: (path as NSString).lastPathComponent)
+            try FileManager.default.createDirectory(at: paths.personalDicts, withIntermediateDirectories: true)
+            try Self.replace(target, with: locations.rimeDirectory.appending(path: path))
+            adopted.append(path)
+        }
+        return adopted
+    }
+
+    static func copy(_ source: URL, to target: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.copyItem(at: source, to: target)
+    }
+
+    /// 先复制成同目录下的临时文件，再 rename 过去：不会出现写了一半的文件
+    static func replace(_ target: URL, with source: URL) throws {
+        let fm = FileManager.default
+        let parent = target.deletingLastPathComponent()
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+        let temp = parent.appending(path: ".\(target.lastPathComponent).squirrel-macos-tmp")
+        try? fm.removeItem(at: temp)
+        try fm.copyItem(at: source, to: temp)
+        guard rename(temp.path, target.path) == 0 else {
+            let code = errno
+            try? fm.removeItem(at: temp)
+            throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
+        }
+    }
+}

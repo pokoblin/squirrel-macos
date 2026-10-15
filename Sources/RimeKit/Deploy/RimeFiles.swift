@@ -10,6 +10,7 @@ public enum RimeFiles {
         if path == "installation.yaml" || path == "user.yaml" { return true }
         if first.hasSuffix(".userdb") || name.hasSuffix(".userdb.txt") { return true }
         if name == ".DS_Store" { return true }
+        if name.hasPrefix(".") && name.hasSuffix(".squirrel-macos-tmp") { return true }
         return false
     }
 
