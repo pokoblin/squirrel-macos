@@ -7,7 +7,7 @@
 | 1 | 系统设置键盘页链接 | **能** | `x-apple.systempreferences:com.apple.Keyboard-Settings.extension` 直接打开「键盘」页，「文字输入 → 输入法 → 编辑…」就在页面上。用户在这里添加鼠须管后，本体 enabled=true，切换成功。另外发现：用 TIS 切换后鼠须管进程不会马上启动，要用 `open` 启动 |
 | 2 | 授权弹窗安装时 postinstall 拿到桌面用户 | **能** | `osascript … with administrator privileges` 弹出系统授权框，输密码后安装成功（约 9 秒）。postinstall 以桌面用户身份注册、启用了 `Squirrel.Hans`，状态和 `sudo installer` 完全一样（本体仍 enabled=false，选中失败）。见「过程」 |
 | 3 | 独立 .app 读文本替换数据库 | | |
-| 4 | `ditto` 解压 GitHub zip | | |
+| 4 | `ditto` 解压 GitHub zip | **能** | 干净测试机里 `/usr/bin/ditto -x -k` 解压三个 zip 全部 `exit=0`。结构见 [upstream-layouts.md](upstream-layouts.md)：极点五笔 zip 带顶层目录 `rime-wubi86-jidian-master/`；雾凇 `full.zip` 没有顶层目录，并自带 `default.yaml`、`squirrel.yaml`、`custom_phrase.txt` |
 | 5 | 鼠须管运行时 `rime_dict_manager` 导出/合并 | | |
 | 6 | 雾凇全拼、小鹤双拼在鼠须管 1.1.2 上部署和打字 | | |
 
@@ -34,3 +34,11 @@
 - 用户在这一页手动添加鼠须管后：本体 `im.rime.inputmethod.Squirrel` enabled=true；`tis-probe select "=…Squirrel.Hans"` → OSStatus 0，`selected=true`。
 - **新发现**：切换成功后等了 30 多秒，鼠须管进程**一直没有启动**，`~/Library/Rime` 也没生成（之前的记录里进程是在用户实际打字时才启动的）。用 `open "/Library/Input Methods/Squirrel.app"` 后 4 秒内启动，自动生成了 `build/`、`installation.yaml`、`user.yaml`。
   → 应用在用户添加好输入法、切换过去之后，应该主动 `open` 一次鼠须管，不要等它自己启动。
+
+### 验证 4：下载和解压（任务 6）
+
+- 测试机里 `curl` 下载：`jidian.zip` 1.9 MB、`full.zip` 16.0 MB、`cn_dicts.zip` 14.7 MB。
+- `/usr/bin/ditto -x -k <zip> <目录>`：三个都 `exit=0`。干净的 macOS 27 上 `ditto` 自带可用。
+- 目录结构整理在 [upstream-layouts.md](upstream-layouts.md)。对设计有影响的两点：
+  - 雾凇 `full.zip` 自带 `custom_phrase.txt`，和应用要生成的同名文件冲突。
+  - 雾凇 `full.zip` 自带 `default.yaml`、`squirrel.yaml`，放进用户目录后会覆盖鼠须管自带的默认设置。应用的外观、方案列表仍然通过 `*.custom.yaml` 补丁改，不受影响，但「上游默认值」要从这两个文件读。
