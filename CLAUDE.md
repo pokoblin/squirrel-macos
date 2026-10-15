@@ -16,7 +16,7 @@
 
 - 用简单直白的中文写文档和说明；代码、命令、标识符保持原样。
 - 提交、推送前先问用户，用户同意了再做。
-- 发布：`./tools/release/build-release.sh`，步骤见 `docs/release.md`。打 tag、建 GitHub Release、改仓库简介前先问用户。
+- 发布：`./tools/release/build-release.sh`，发布包一律用 dmg（0.2.0 起，用户定的），步骤见 `docs/release.md`。打 tag、建 GitHub Release、改仓库简介前先问用户。
 - 应用（SquirrelMacOSApp）不在宿主机上运行，只编译和跑单元测试；用 `./tools/vm/install-app.sh <测试机>` 放进测试机打开。测试机里 SSH 会话进不了 `~/Downloads` 等隐私保护目录，要给应用的文件放在 `/Users/Shared`。
 - **不要碰宿主机的真实配置**：`~/Library/Rime`、`/Library/Input Methods`、输入法启用状态都不要改。需要验证时：
   - 配置和打字效果：复制一份 `~/Library/Rime` 到临时目录，用 librime 模拟（方法见 `docs/verified-facts.md`「用 librime 模拟打字」）。

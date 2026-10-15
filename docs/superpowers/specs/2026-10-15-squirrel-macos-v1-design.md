@@ -357,7 +357,7 @@ userdb/           # 输入习惯快照 <词典名>.userdb.txt（rime_dict_manage
 ### 8.3 界面
 
 - 逻辑放在 `AppCore`（不含 SwiftUI），在宿主机用假依赖测；视图在 `AppUI`。**不在宿主机上运行应用**（它会读写真实的 `~/Library/Rime`）。
-- 打包：不建 Xcode 工程。SwiftPM 的可执行目标 `SquirrelMacOSApp` + `tools/app/build-app.sh` 拼成 `.app`（RimeKit 的资源包放在 `Contents/Resources`），开发期间临时签名；用 `tools/vm/install-app.sh <测试机>` 放进测试机打开（阶段 8a 定下）。发布用 `tools/release/build-release.sh`：release 编译、Developer ID 签名（hardened runtime）、公证、钉票据。
+- 打包：不建 Xcode 工程。SwiftPM 的可执行目标 `SquirrelMacOSApp` + `tools/app/build-app.sh` 拼成 `.app`（RimeKit 的资源包放在 `Contents/Resources`），开发期间临时签名；用 `tools/vm/install-app.sh <测试机>` 放进测试机打开（阶段 8a 定下）。发布用 `tools/release/build-release.sh`：release 编译、Developer ID 签名（hardened runtime）、公证、钉票据，做成 dmg（dmg 也签名、公证）。
 - 每个阶段结束时，在 `squirrel-dev` 里运行真实应用，按检查清单由用户过一遍。
 - 主窗口（阶段 8b）：左边栏 6 页（方案、外观、文本替换、导入导出、备份、诊断）；逻辑在 AppCore 的 MainModel，宿主机用假依赖测。
 
@@ -396,5 +396,7 @@ userdb/           # 输入习惯快照 <词典名>.userdb.txt（rime_dict_manage
 | 应用本身用什么许可证 | MIT（版权人 Pokoblin）。应用不打包 GPL 方案；第三方声明见 `THIRD-PARTY-NOTICES.md` |
 | 苹果开发者账号（Developer ID 签名 + 公证） | 用 TONDA K.K. 的 Developer ID（`VS555M5VA8`），打开 hardened runtime，不加 entitlement；公证后钉票据 |
 | 第一个公开版本 | 0.1.0，GitHub 上标成预发布；只出 Apple 芯片版本；没有自己的图标 |
+| 发布包格式 | dmg（0.2.0 起）：打开后是应用和「应用程序」快捷方式；应用和 dmg 都公证、都钉票据。0.1.0、0.1.1 是 zip |
+| 正式版 | 0.2.0 起在 GitHub 上发成正式版（不加 `--prerelease`），版本号仍是 0.x；0.1.0、0.1.1 是预发布 |
 
 发布方式：Developer ID 签名 + 公证，放在 GitHub Release。不开沙盒，不上 App Store（要写 `~/Library/Rime`、运行安装程序、调用鼠须管的工具）。发布步骤见 [docs/release.md](../../release.md)。

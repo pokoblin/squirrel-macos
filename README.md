@@ -4,7 +4,7 @@
 
 # 鼠须管助手（SquirrelHelper）
 
-[![Release](https://img.shields.io/github/v/release/pokoblin/squirrel-macos?include_prereleases&label=release)](https://github.com/pokoblin/squirrel-macos/releases)
+[![Release](https://img.shields.io/github/v/release/pokoblin/squirrel-macos?label=release)](https://github.com/pokoblin/squirrel-macos/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%2027%2B%20%C2%B7%20Apple%20silicon-lightgrey)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
@@ -14,7 +14,7 @@
 *A GUI companion for [Squirrel](https://github.com/rime/squirrel) (Rime input method on macOS): install Squirrel, pick schemas, tweak appearance, sync macOS text replacements, and export/import your whole setup — no YAML editing required. The UI is Chinese-only for now.*
 
 > [!NOTE]
-> 这是个人项目，**不是**鼠须管 / Rime 官方出品。目前是预发布版本（0.1.x），欢迎试用和反馈。
+> 这是个人项目，**不是**鼠须管 / Rime 官方出品。欢迎试用和反馈。
 
 ## 目录
 
@@ -56,8 +56,8 @@
 
 **要求**：macOS 27 或更新，Apple 芯片的 Mac。
 
-1. 到 [Releases](https://github.com/pokoblin/squirrel-macos/releases) 下载 `SquirrelHelper-版本号.zip`。
-2. 解压后把「鼠须管助手」拖进「应用程序」文件夹，然后打开。
+1. 到 [Releases](https://github.com/pokoblin/squirrel-macos/releases) 下载 `SquirrelHelper-版本号.dmg`（0.1.1 及更早的版本是 `.zip`，解压即可）。
+2. 打开 dmg，把「鼠须管助手」拖到旁边的「应用程序」文件夹，然后从「应用程序」里打开。
 3. 应用用 Developer ID 签名，并通过了苹果公证。第一次打开时系统会问「是从互联网下载的，确定要打开吗」，点「打开」。
 
 装好鼠须管后，如果输入法菜单里看不到鼠须管、或者打出来还是英文，请注销再登录一次（刚装好时 macOS 有时要这样才认得出它）。
@@ -65,7 +65,7 @@
 想核对下载的文件，可以对比 Release 附件里的 `.sha256`：
 
 ```bash
-shasum -a 256 SquirrelHelper-0.1.1.zip
+shasum -a 256 SquirrelHelper-版本号.dmg
 ```
 
 应用名跟着系统语言：中文系统里显示「鼠须管助手」，其他语言显示 SquirrelHelper。
