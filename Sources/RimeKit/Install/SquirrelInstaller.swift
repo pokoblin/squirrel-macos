@@ -30,7 +30,7 @@ public struct SquirrelInstaller: Sendable {
         defer { withExtendedLifetime(lock) {} }
         let current = locations.installedSquirrelVersion
         let release = try await SquirrelReleaseSource(http: http, retry: retry).latest()
-        if !force, let current, let have = SquirrelVersion(current), let latest = SquirrelVersion(release.version), have >= latest {
+        if !force, let current, Self.isUpToDate(current: current, latest: release.version) {
             return .alreadyInstalled(current)
         }
 
@@ -38,16 +38,30 @@ public struct SquirrelInstaller: Sendable {
         let work = paths.staging.appending(path: "install-\(UUID().uuidString)", directoryHint: .isDirectory)
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
-        let pkg = work.appending(path: "Squirrel-\(release.version).pkg")
+        // 文件名固定：版本号里可能有 / 之类的字符
+        let pkg = work.appending(path: "Squirrel.pkg")
         let http = self.http
         try await withRetry(retry) { try await http.download(release.downloadURL, to: pkg) }
         try verifier.verify(pkg, sha256: release.sha256)
         try await privileged.installPackage(pkg, sha256: release.sha256)
 
         let after = locations.installedSquirrelVersion
-        guard let after, let installed = SquirrelVersion(after), let expected = SquirrelVersion(release.version), installed == expected else {
+        guard let after, Self.sameVersion(after, release.version) else {
             throw InstallError.versionMismatch(expected: release.version, found: after)
         }
         return .installed(after, previous: current)
     }
+
+    /// 版本号都是数字时按数字比；认不出（rc、beta 等）时按原文比是否相同
+    static func isUpToDate(current: String, latest: String) -> Bool {
+        if let have = SquirrelVersion(current), let new = SquirrelVersion(latest) { return have >= new }
+        return trimmed(current) == trimmed(latest)
+    }
+
+    static func sameVersion(_ a: String, _ b: String) -> Bool {
+        if let x = SquirrelVersion(a), let y = SquirrelVersion(b) { return x == y }
+        return trimmed(a) == trimmed(b)
+    }
+
+    static func trimmed(_ v: String) -> String { v.hasPrefix("v") ? String(v.dropFirst()) : v }
 }

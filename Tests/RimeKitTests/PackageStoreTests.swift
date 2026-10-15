@@ -199,4 +199,8 @@ final class Clock: @unchecked Sendable {
         #expect(store.cached("base", version: "a:b") != nil)
         #expect(store.cached("base", version: "a-b") == nil)
     }
+
+    @Test func 找包根目录按目录层数取最浅的() {
+        #expect(PackageStore.locateRoot(in: ["abcdefgh/x.yaml", "a/b/x.yaml"], anchor: "x.yaml") == "abcdefgh/")
+    }
 }

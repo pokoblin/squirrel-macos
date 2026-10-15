@@ -34,7 +34,7 @@ import Testing
         let e = try env(); defer { e.dir.remove() }
         #expect(try await e.installer.install() == .installed("1.1.2", previous: nil))
         #expect(e.verifier.checkedSHA256 == ["abc123"])
-        #expect(e.privileged.installedPackages == ["Squirrel-1.1.2.pkg"])
+        #expect(e.privileged.installedPackages == ["Squirrel.pkg"])
         let staging = (try? FileManager.default.contentsOfDirectory(atPath: e.paths.staging.path)) ?? []
         #expect(staging.isEmpty)
     }
@@ -59,7 +59,7 @@ import Testing
     @Test func 加force时同版本也重装() async throws {
         let e = try env(installed: "1.1.2"); defer { e.dir.remove() }
         #expect(try await e.installer.install(force: true) == .installed("1.1.2", previous: "1.1.2"))
-        #expect(e.privileged.installedPackages == ["Squirrel-1.1.2.pkg"])
+        #expect(e.privileged.installedPackages == ["Squirrel.pkg"])
     }
 
     @Test func 检查不过就不安装() async throws {
@@ -92,6 +92,18 @@ import Testing
         let held = try ApplyLock.acquire(e.paths)
         await #expect(throws: ApplyError.busy) { try await e.installer.install() }
         _ = held
+    }
+
+
+    @Test func 版本号不是纯数字时_相同就不重装() async throws {
+        let e = try env(latest: "1.2.0-rc1", installed: "1.2.0-rc1"); defer { e.dir.remove() }
+        #expect(try await e.installer.install() == .alreadyInstalled("1.2.0-rc1"))
+    }
+
+    @Test func 版本号不是纯数字时也能装_装完不报版本不对() async throws {
+        let e = try env(latest: "1.2.0-rc1"); defer { e.dir.remove() }
+        #expect(try await e.installer.install() == .installed("1.2.0-rc1", previous: nil))
+        #expect(e.privileged.installedPackages == ["Squirrel.pkg"])
     }
 
 }

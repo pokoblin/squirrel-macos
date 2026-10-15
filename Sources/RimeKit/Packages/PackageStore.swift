@@ -178,7 +178,7 @@ public struct PackageStore: Sendable {
         subpaths
             .filter { $0 == anchor || $0.hasSuffix("/" + anchor) }
             .map { String($0.dropLast(anchor.count)) }
-            .min { $0.count < $1.count }
+            .min { ($0.filter { $0 == "/" }.count, $0) < ($1.filter { $0 == "/" }.count, $1) }   // 按目录层数取最浅的
     }
 
     /// 按安装规则把根目录下的普通文件复制出来；符号链接、目录都跳过。返回复制了的相对路径。
