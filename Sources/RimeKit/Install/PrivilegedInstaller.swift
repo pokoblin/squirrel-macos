@@ -116,3 +116,26 @@ public struct AuthorizationPromptInstaller: PrivilegedInstalling {
             + " with administrator privileges"
     }
 }
+
+/// 应用里用：用 osascript 子进程弹系统授权框，执行和 AuthorizationPromptInstaller 一样的脚本。
+/// 不在应用的主线程里跑 NSAppleScript，等用户输密码时界面不会卡住
+public struct OsascriptPrivilegedInstaller: PrivilegedInstalling {
+    public init() {}
+
+    public func installPackage(_ pkg: URL, sha256: String?) async throws {
+        let script = AuthorizationPromptInstaller.appleScript(for: pkg, sha256: sha256)
+        let r = try Shell.run("/usr/bin/osascript", ["-e", script])
+        guard r.status == 0 else { throw Self.error(stderr: r.stderr) }
+    }
+
+    /// osascript 失败时 stderr 末尾是「(错误号)」：-128 是用户点了取消，其余是提权脚本的退出码
+    static func error(stderr: String) -> InstallError {
+        let message = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard message.hasSuffix(")"), let open = message.lastIndex(of: "("),
+              let code = Int32(message[message.index(after: open)..<message.index(before: message.endIndex)]) else {
+            return .installerFailed(message)
+        }
+        if code == -128 { return .cancelled }
+        return PrivilegedInstallScript.error(status: code, message: message)
+    }
+}
