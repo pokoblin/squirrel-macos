@@ -29,7 +29,7 @@
 | 词库 | `rime_ice.dict.yaml`、`cn_dicts/`（`8105`、`41448`、`base`、`ext`、`others`、`tencent`）、`en_dicts/`、`melt_eng.dict.yaml`、`radical_pinyin.dict.yaml` |
 | Lua | `lua/`（约 30 个 `.lua` 文件、`lua/cold_word_drop/` 子目录、`lunar.db`）。**没有 `rime.lua`**（用新写法直接引用 `lua/` 里的模块） |
 | OpenCC | `opencc/`（`emoji.json`、`emoji.txt`、`others.txt`） |
-| **会覆盖鼠须管自带设置的文件** | `default.yaml`、`squirrel.yaml`（放在用户目录里，优先于鼠须管自带的同名文件）、`symbols_v.yaml`、`symbols_caps_v.yaml` |
+| **会顶替鼠须管自带设置的文件** | `default.yaml`、`squirrel.yaml`（和鼠须管自带的同名；按 Rime 的查找规则用户目录优先，没有单独实测）、`symbols_v.yaml`、`symbols_caps_v.yaml` |
 | **自带的短语文件** | `custom_phrase.txt`（上游自带的默认短语）。和应用要生成的 `custom_phrase.txt` **同名冲突**，阶段 2 设计生成规则时要处理（合并上游的和用户的，或者让用户的短语用另一个文件名） |
 | 不需要装的 | `weasel.yaml`（Windows 用）、`LICENSE`（保留在缓存里供展示） |
 

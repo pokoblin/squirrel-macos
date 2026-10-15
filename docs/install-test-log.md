@@ -50,7 +50,7 @@
 | `open` 启动鼠须管程序 | 进程起来了，自动生成 `~/Library/Rime`，但仍然切换不了 |
 | `killall TextInputMenuAgent`（会自动重启），再重新注册、启用 | 还是切换不了 |
 | **注销，再登录** | 状态**完全一样**：本体 enabled=false，菜单里看不到，切换返回 -50 |
-| 用户在系统设置里手动添加鼠须管（列表里能找到，没有弹窗） | 本体变成 enabled=true，**切换成功（OSStatus 0）**，鼠须管进程自动启动 |
+| 用户在系统设置里手动添加鼠须管（列表里能找到，没有弹窗） | 本体变成 enabled=true，**切换成功（OSStatus 0）**，鼠须管进程启动了（当时用户紧接着就在打字。2026-10-15 在 squirrel-dev 上发现：只切换、不打字时，进程不会自己启动，见 [phase0-log.md](phase0-log.md)） |
 | 从共享文件夹运行 `restore.sh` 恢复配置 | 配置复制成功，部署成功；但调用 python3 时打印 `xcode-select: note: No developer tools were found, requesting install.`，桌面弹出安装开发者工具的窗口（用户点了取消） |
 | 实际打字 | 全部正常 |
 
@@ -69,5 +69,5 @@
 - 用图形界面双击 pkg 安装（不是 `installer` 命令），最后的“注销”按钮能不能跳过。
 - 安装时不在桌面登录状态（比如只有 SSH 会话）会怎样：postinstall 用 `stat -f%Su /dev/console` 取当前桌面用户。
 - 已经装过旧版鼠须管的电脑上升级。
-- 打开系统设置键盘页的链接是否有效（`x-apple.systempreferences:com.apple.Keyboard-Settings.extension`）。
-- 前端 .app 自己读取 `TextReplacements.db` 会不会被隐私权限拦住。
+- ~~打开系统设置键盘页的链接是否有效~~：已验证能用，见 [phase0-log.md](phase0-log.md)。
+- ~~前端 .app 自己读取 `TextReplacements.db` 会不会被隐私权限拦住~~：已验证不会被拦（未签名、不开沙盒），见 [phase0-log.md](phase0-log.md)。

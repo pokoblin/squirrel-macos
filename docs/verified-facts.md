@@ -19,7 +19,7 @@
 | 签名 | `Developer ID Installer: Yuncao Liu (28HU5A7B46)`，已通过苹果公证 | 实测（`pkgutil --check-signature`、`spctl -a -t install`） |
 | 安装位置 | `/Library/Input Methods/Squirrel.app`（系统目录，**要管理员密码**） | 实测 |
 | 安装命令 | `sudo installer -pkg Squirrel-1.1.2.pkg -target /`，虚拟机里只用了 8 秒 | 实测 |
-| 用系统授权弹窗安装 | 在桌面会话里运行 `osascript -e 'do shell script "installer -pkg … -target /" with administrator privileges'`（应用里用 `NSAppleScript` 做同样的事）：弹出系统授权框，输密码后约 9 秒装完。postinstall 照样以桌面用户身份注册、启用 `Squirrel.Hans`，结果和 `sudo installer` 完全一样 | 实测（squirrel-dev，2026-10-15，详见 [phase0-log.md](phase0-log.md)） |
+| 用系统授权弹窗安装 | 在桌面会话里运行 `osascript -e 'do shell script "installer -pkg … -target /" with administrator privileges'`（应用里用 `NSAppleScript` 做同样的事）：弹出系统授权框，输密码后约 9 秒装完。安装后 tester 的输入法状态和用 `sudo installer` 装的**完全一致**（`Squirrel.Hans` enabled=true，本体 enabled=false），postinstall 日志是 `User already registered/enabled …`。注意：这次是在 SSH 里用 `launchctl asuser` + `osascript` 模拟的，不是真的在应用进程里调用 `NSAppleScript`，阶段 4 做安装功能时要在真实应用里再确认一次 | 实测（squirrel-dev，2026-10-15，详见 [phase0-log.md](phase0-log.md)） |
 | Homebrew | cask `squirrel-app` 只是下载同一个 pkg 再运行，没有额外步骤。**不需要 Homebrew** | 查看（`brew info --cask --json=v2`） |
 | 自动更新 | 鼠须管自带 Sparkle 2.6.2，自己会更新，前端不用管升级 | 查看（pkg 的 PackageInfo） |
 | 许可证 | GPL-3.0 | 查看 |
@@ -100,7 +100,7 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | **注销再登录：也没用** | 实测 |
 | 用户在「系统设置 → 键盘 → 文字输入 → 输入法 → 编辑… → + → 简体中文 → 鼠须管」**手动添加**后，本体立即 enabled=true，**马上能切换**，不用注销，也没有任何弹窗 | 实测（两台全新虚拟机） |
 | 对照：用同样的程序方法切换系统自带的日文输入法，正常 | 实测（排除测试方法本身的问题） |
-| 切换到鼠须管后，鼠须管进程才会启动；或者用 `open "/Library/Input Methods/Squirrel.app"` 手动启动 | 实测 |
+| 鼠须管进程要等用户**实际打字**（有输入框用到它）时才启动；只用 TIS 切换过去不会启动（等 30 多秒也没有，见下面第 2 节新增那条）。应用要主动用 `open "/Library/Input Methods/Squirrel.app"` 启动它 | 实测（install-test-log；squirrel-dev，2026-10-15） |
 | 判断“用户添加好了没有”：看本体 `im.rime.inputmethod.Squirrel` 的 `kTISPropertyInputSourceIsEnabled` | 实测 |
 | 在宿主机上，`com.apple.HIToolbox` 偏好里的 `AppleEnabledInputSources` **找不到**鼠须管（只在 `AppleInputSourceHistory` 里），但 TIS 显示已启用。所以**别用读偏好文件的方法判断启用状态**，要用 TIS API | 实测 |
 | 打开系统设置键盘页的链接 `x-apple.systempreferences:com.apple.Keyboard-Settings.extension`：直接停在「键盘」页，「文字输入 → 输入法 → 编辑…」和「文本替换…」都在这一页 | 实测（squirrel-dev，2026-10-15） |
@@ -152,7 +152,7 @@ PackageInfo 里写着 `postinstall-action="logout"`，所以安装程序会提�
 | 极点五笔 86 有“四码唯一自动上屏” | 实测 |
 | 自定义短语：在方案里加一个 `table_translator@custom_phrase`（`db_class: stabledb`、`initial_quality: 100`），数据来自 `custom_phrase.txt`（格式：`短语<Tab>编码<Tab>权重`），候选排第一位 | 实测 |
 | 雾凇全拼（`rime_ice`）、小鹤双拼（`double_pinyin_flypy`）在鼠须管 1.1.2 上：部署约 9 秒、`4 success, 0 failure`、没有 ERROR；Lua（`rq` 日期、`sj` 时间）和 OpenCC（emoji）都正常。WARNING 里只有上游词库的英文重复词和 `radical_pinyin` 的循环依赖提示，不影响使用 | 实测（squirrel-dev，2026-10-15，用户实际打字 + 打字检查工具） |
-| 雾凇 `full.zip` 自带 `default.yaml`、`squirrel.yaml`、`custom_phrase.txt`，放进用户目录会覆盖鼠须管自带的同名文件；其中 `custom_phrase.txt` 和应用要生成的文件同名 | 实测（见 [upstream-layouts.md](upstream-layouts.md)） |
+| 雾凇 `full.zip` 里有 `default.yaml`、`squirrel.yaml`、`custom_phrase.txt`（实测，见 [upstream-layouts.md](upstream-layouts.md)）。前两个和鼠须管 `SharedSupport` 里的文件同名，按 Rime 的查找规则用户目录优先，所以会顶替鼠须管自带的默认设置（按规则推断，没有单独实测）。`custom_phrase.txt` 鼠须管本身没有，但和应用要生成的文件同名 | 实测 + 推断 |
 
 ---
 
