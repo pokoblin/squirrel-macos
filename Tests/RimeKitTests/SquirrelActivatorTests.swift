@@ -96,6 +96,16 @@ import Testing
         let (activator, _) = try make(dir, input, running: true)
         await #expect(throws: InputSourceError.selectFailed(-50)) { try await activator.activate() }
     }
+
+    @Test func 启动鼠须管前告诉界面() async throws {
+        // 加好输入法后还要启动鼠须管、等第一次部署（最长两分钟），界面要换成「正在启动」
+        let dir = try TempDir(); defer { dir.remove() }
+        let input = FakeInputSource(InputSourceState(registered: true, enabled: true, selected: true))
+        let (activator, _) = try make(dir, input, running: false)
+        let launching = Flag()
+        _ = try await activator.activate(onLaunching: { launching.set() })
+        #expect(launching.isSet)
+    }
 }
 
 /// 线程安全的「发生过没有」

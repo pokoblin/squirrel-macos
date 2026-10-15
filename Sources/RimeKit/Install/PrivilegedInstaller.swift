@@ -64,6 +64,9 @@ public enum PrivilegedInstallScript {
         case signatureInvalid: return .recheckFailed("安装前再次核对时，安装包的签名或公证不对（可能被替换），没有安装")
         case wrongTeam: return .recheckFailed("安装前再次核对时，安装包不是鼠须管作者签名的（可能被替换），没有安装")
         case copyFailed: return .recheckFailed("安装前复制安装包到安全目录失败，没有安装")
+        // 系统授权框的错误号（osascript 原样带出英文消息）
+        case -60005: return .installerFailed("授权没通过：密码不对，或者这个账户不是管理员")
+        case -60007: return .installerFailed("现在弹不出系统授权框，请在已经登录的桌面里操作")
         default: return .installerFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
@@ -83,7 +86,7 @@ public struct SudoPackageInstaller: PrivilegedInstalling {
     }
 }
 
-/// 弹出系统授权框，用户输一次密码（应用里用；测试机里 rimectl --gui-auth 也可以用）
+/// 弹出系统授权框，用户输一次密码：rimectl --gui-auth 用（应用里用的是下面的 OsascriptPrivilegedInstaller）
 public struct AuthorizationPromptInstaller: PrivilegedInstalling {
     public init() {}
 

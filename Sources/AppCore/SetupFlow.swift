@@ -17,7 +17,8 @@ public enum StartChoice: Sendable, Equatable {
 public final class SetupFlow {
     public enum Step: Equatable {
         case checking
-        case needInstall
+        /// 附带说明（例如取消了授权）
+        case needInstall(String?)
         /// 附带说明（例如等超时了）
         case needInputMethod(String?)
         case waitingForInputMethod
@@ -51,13 +52,14 @@ public final class SetupFlow {
         busy = true
         defer { busy = false }
         step = .checking
+        fallbackNotes = []
         let managed = (try? Ledger.load(env.paths))?.entries.isEmpty == false
         if managed, (try? SettingsStore(paths: env.paths).load()) != nil {
             step = .done(["鼠须管已经由这个应用管理了"])
             return
         }
         guard env.locations.squirrelInstalled else {
-            step = .needInstall
+            step = .needInstall(nil)
             return
         }
         let state = env.inputSource.state()
@@ -82,9 +84,11 @@ public final class SetupFlow {
             _ = try await offMain { try await install() }
             step = .needInputMethod(nil)
         } catch InstallError.cancelled {
-            step = .failed("你取消了授权，鼠须管没有安装。准备好了再点「重试」")
+            step = .needInstall("你取消了授权，鼠须管没有安装。准备好了再点「安装鼠须管」")
+        } catch let error as InstallError {
+            step = .failed(error.description)   // 已经带「安装鼠须管失败：」
         } catch {
-            step = .failed("安装鼠须管失败：\(error)")
+            step = .failed("安装鼠须管失败：\(Self.failure(error))")
         }
     }
 
@@ -100,7 +104,12 @@ public final class SetupFlow {
             watcher: DeployWatcher(locations: env.locations, timeout: env.deployTimeout, sleep: env.sleep),
             timeout: env.activationTimeout)
         do {
-            switch try await offMain({ try await activator.activate() }) {
+            switch try await offMain({ try await activator.activate(onLaunching: { [weak self] in
+                // 晚到时引导可能已经往下走了：只在还停在等待页时换
+                Task { @MainActor in
+                    if self?.step == .waitingForInputMethod { self?.step = .working("已经添加好了。正在启动鼠须管，第一次部署要等一会儿……") }
+                }
+            }) }) {
             case .ready:
                 await prepareStart()
             case .timedOut:
@@ -113,6 +122,11 @@ public final class SetupFlow {
         } catch {
             step = .failed(Self.failure(error))
         }
+    }
+
+    /// 等添加输入法时：再打开一次系统设置（用户不小心关掉了）。等的时候 busy 是真，所以不看 busy
+    public func reopenSettings() {
+        try? env.inputSource.openKeyboardSettings()
     }
 
     // MARK: 第三步：看 Rime 目录
@@ -138,7 +152,7 @@ public final class SetupFlow {
                 textReplacement = try env.textReplacements().usable
             } catch {
                 // 读不到就分不出哪些短语来自文本替换：不能接管（和 rimectl takeover 一样）
-                blocked = "读不了 macOS 文本替换（\(error)），分不出哪些短语来自文本替换，暂时不能接管"
+                blocked = "读不了 macOS 文本替换（\(error)），分不出哪些短语来自文本替换，暂时不能接管。可以去「系统设置 → 隐私与安全性」检查权限，然后点「重新检查」"
             }
             step = .working("正在识别已有的配置……")
             let found = packages
@@ -186,6 +200,7 @@ public final class SetupFlow {
         guard !busy else { return }
         busy = true
         defer { busy = false }
+        fallbackNotes = []
         do {
             let packages = try await fetch(try settings.requiredPackages(env.catalog))
             step = .working("正在生成配置、写入、部署……")
@@ -235,6 +250,7 @@ public final class SetupFlow {
         guard !busy else { return }
         busy = true
         defer { busy = false }
+        fallbackNotes = []
         step = .working("正在读取导出文件……")
         let work = env.paths.staging.appending(path: "import-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: work) }

@@ -30,4 +30,11 @@ import Testing
         #expect(OsascriptPrivilegedInstaller.error(stderr: r.stderr)
                 == PrivilegedInstallScript.error(status: PrivilegedInstallScript.signatureInvalid, message: ""))
     }
+
+    @Test func 授权没通过时说中文() {
+        let denied = OsascriptPrivilegedInstaller.error(stderr: "0:139: execution error: The administrator user name or password was incorrect. (-60005)\n")
+        #expect(denied.description.contains("密码不对"))
+        let noUI = OsascriptPrivilegedInstaller.error(stderr: "0:139: execution error: blah (-60007)\n")
+        #expect(noUI.description.contains("弹不出"))
+    }
 }

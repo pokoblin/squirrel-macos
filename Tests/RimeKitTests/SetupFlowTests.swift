@@ -35,19 +35,9 @@ import Testing
             return .installed("1.1.2", previous: nil)
         }))
         await flow.start()
-        #expect(flow.step == .needInstall)
+        #expect(flow.step == .needInstall(nil))
         await flow.install()
         #expect(flow.step == .needInputMethod(nil))
-    }
-
-    @Test func 取消授权时说清楚() async throws {
-        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
-        try FileManager.default.removeItem(at: m.locations.squirrelApp)
-        let flow = SetupFlow(env: m.environment(install: { throw InstallError.cancelled }))
-        await flow.start()
-        await flow.install()
-        guard case .failed(let message) = flow.step else { Issue.record("\(flow.step)"); return }
-        #expect(message.contains("取消"))
     }
 
     @Test func 添加输入法后看Rime目录_空的就选起步方案() async throws {
@@ -207,5 +197,70 @@ import Testing
         await flow.useSettings(Settings(schemas: ["py"]))
         guard case .failed(let message) = flow.step else { Issue.record("\(flow.step)"); return }
         #expect(message.contains("断网了"))
+    }
+
+    @Test func 取消授权时回到安装那一步_说清楚() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        try FileManager.default.removeItem(at: m.locations.squirrelApp)
+        let flow = SetupFlow(env: m.environment(install: { throw InstallError.cancelled }))
+        await flow.start()
+        await flow.install()
+        guard case .needInstall(let note?) = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(note.contains("取消"))
+    }
+
+    @Test func 安装失败的提示不重复前缀() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        try FileManager.default.removeItem(at: m.locations.squirrelApp)
+        let flow = SetupFlow(env: m.environment(install: { throw InstallError.installerFailed("磁盘满了") }))
+        await flow.install()
+        #expect(flow.step == .failed("安装鼠须管失败：磁盘满了"))
+    }
+
+    @Test func 读不了文本替换时提示去隐私与安全性() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        try F.wubiSample(m.packages, into: m.locations.rimeDirectory)
+        struct Unreadable: Error, CustomStringConvertible { var description: String { "没有权限" } }
+        let flow = SetupFlow(env: m.environment(textReplacements: { throw Unreadable() }))
+        await flow.start()
+        guard case .chooseStart(.existing(let summary)) = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(summary.blockedReason?.contains("隐私与安全性") == true)
+        #expect(summary.blockedReason?.contains("重新检查") == true)
+    }
+
+    @Test func 中途失败后_下载失败的提醒不留到下一次() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        final class Switch: @unchecked Sendable { var on = true }
+        let offline = Switch()
+        let failing = Switch()
+        struct SwitchCompiler: RimeCompiler {
+            let failing: Switch
+            func compile(_ directory: URL) throws -> CompileReport {
+                CompileReport(succeeded: !failing.on, errors: failing.on ? ["E20261015 boom"] : [])
+            }
+        }
+        var env = m.environment()
+        let fetch = env.fetchPackage
+        env.fetchPackage = { spec in
+            if offline.on { throw HTTPError.transport("断网了") }
+            return try await fetch(spec)
+        }
+        env.compiler = SwitchCompiler(failing: failing)
+        let flow = SetupFlow(env: env)
+        await flow.useSettings(Settings(schemas: ["py"]))   // 下载失败用了旧版本，然后编译失败
+        guard case .failed = flow.step else { Issue.record("\(flow.step)"); return }
+        offline.on = false
+        failing.on = false
+        await flow.useSettings(Settings(schemas: ["py"]))
+        guard case .done(let lines) = flow.step else { Issue.record("\(flow.step)"); return }
+        #expect(!lines.contains { $0.contains("没下载成") })
+    }
+
+    @Test func 等添加输入法时可以重新打开系统设置() async throws {
+        let m = try T.machine(withSettings: false); defer { m.dir.remove() }
+        let input = FakeInputSource(InputSourceState(registered: true, enabled: false, selected: false))
+        let flow = SetupFlow(env: m.environment(input: input))
+        flow.reopenSettings()
+        #expect(input.calls == ["open"])
     }
 }

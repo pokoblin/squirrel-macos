@@ -5,12 +5,12 @@ import SwiftUI
 
 @main
 struct SquirrelMacOSApp: App {
-    @State private var state: AppState? = try? AppState(env: AppEnvironment.live())
+    @State private var launch = AppState.launch { try AppEnvironment.live() }
 
     var body: some Scene {
         // 只有一个窗口：不会出现两个引导同时在跑
         Window(Self.title, id: "main") {
-            RootView(state: state)
+            RootView(state: launch.state, launchError: launch.error)
         }
         .windowResizability(.contentSize)
     }

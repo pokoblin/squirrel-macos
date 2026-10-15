@@ -16,6 +16,15 @@ public final class AppState {
         setup = SetupFlow(env: env)
     }
 
+    /// 打开应用时建 AppState；建不了时（例如方案清单坏了）返回原因，界面上显示
+    public static func launch(_ make: () throws -> AppEnvironment) -> (state: AppState?, error: String?) {
+        do {
+            return (AppState(env: try make()), nil)
+        } catch {
+            return (nil, "\(error)")
+        }
+    }
+
     /// 打开应用时：已经由应用管理的直接进主窗口
     public func start() async {
         guard main == nil else { return }

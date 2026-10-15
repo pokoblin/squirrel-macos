@@ -72,4 +72,11 @@ import Testing
         #expect(state.main != nil)
         #expect(state.main?.notice == nil)
     }
+
+    @Test func 打开应用时出错_说出真实原因() {
+        struct Broken: Error, CustomStringConvertible { var description: String { "方案清单坏了" } }
+        let launch = AppState.launch { throw Broken() }
+        #expect(launch.state == nil)
+        #expect(launch.error?.contains("方案清单坏了") == true)
+    }
 }

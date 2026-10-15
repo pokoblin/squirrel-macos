@@ -37,7 +37,9 @@ public struct SquirrelActivator: Sendable {
 
     /// onRegistering：输入源不在系统里、开始重新注册时调用一次
     /// onWaiting：打开系统设置、开始等用户添加时调用一次（界面或命令行在这里告诉用户怎么做）
-    public func activate(onRegistering: @Sendable () -> Void = {}, onWaiting: @Sendable () -> Void = {}) async throws -> ActivationOutcome {
+    /// onLaunching：要启动鼠须管、等它第一次部署时调用一次（界面上换成「正在启动」）
+    public func activate(onRegistering: @Sendable () -> Void = {}, onWaiting: @Sendable () -> Void = {},
+                         onLaunching: @Sendable () -> Void = {}) async throws -> ActivationOutcome {
         guard locations.squirrelInstalled else { throw ApplyError.squirrelNotInstalled }
         var state = inputSource.state()
         if !state.registered {
@@ -72,6 +74,7 @@ public struct SquirrelActivator: Sendable {
         if !squirrel.isRunning() {
             let previous = watcher.lastBuildTime()
             let snapshot = watcher.snapshot()
+            onLaunching()
             try squirrel.launch()
             launched = true
             _ = await watcher.wait(previousBuildTime: previous, since: snapshot)   // 等它第一次部署完，~/Library/Rime 就有了
