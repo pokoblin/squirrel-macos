@@ -493,6 +493,33 @@ private final class PageEngines: @unchecked Sendable {
         ])
     }
 
+    @Test func 导入时同一编码两行都选第一个_后面的权重更大() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        // wqiy 下：你 20、仰泳 10
+        var rows = await model.importRows("甲乙\twqiy\n丙丁\twqiy\n")
+        rows[0].position = 1
+        rows[1].position = 1
+        await model.confirmImport(rows)
+        let first = try #require(model.entries[1].weight)
+        let second = try #require(model.entries[2].weight)
+        #expect(model.entries[1].text == "甲乙" && model.entries[2].text == "丙丁")
+        #expect(first == 30)
+        #expect(second > first)
+    }
+
+    @Test func 位置放不进去的行本身还能加_换个位置就行() async throws {
+        let s = try setup(); defer { s.remove() }
+        try s.writePersonal(WubiFixtures.userDict + "\n乙丙\twqiy\t19\n")
+        let model = await loaded(s)
+        var rows = await model.importRows("甲乙\twqiy\n")
+        rows[0].position = 2
+        #expect(model.importProblem(rows[0]) == "这个位置放不进去")
+        #expect(model.importProblem(rows[0], ignoringPosition: true) == nil)
+        rows[0].position = 1
+        #expect(model.importProblem(rows[0]) == nil)
+    }
+
     @Test func 导入时放不进去的行不加_说明原因() async throws {
         let s = try setup(); defer { s.remove() }
         // wqiy 下：你 20、乙丙 19、仰泳 10：第 2 个放不进去

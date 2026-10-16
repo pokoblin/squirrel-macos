@@ -293,8 +293,11 @@ public final class WubiDictModel {
 
     /// 这一行现在加不进去的原因（已经加过了、词库里已经有了、位置放不进去、编码不对……）；能加就是 nil。
     /// 表里用它决定能不能勾（只看这一行和现有的词库，不管同一批里别的行）
-    public func importProblem(_ row: ImportRow) -> String? {
+    /// ignoringPosition：不管用户选的位置（看这一行本身能不能加；位置放不进去时位置菜单还要能改）
+    public func importProblem(_ row: ImportRow, ignoringPosition: Bool = false) -> String? {
         guard let editor else { return notEditable }
+        var row = row
+        if ignoringPosition { row.position = nil }
         guard !row.text.isEmpty, WubiEncoder.isValidCode(row.code) else { return WubiEditProblem.invalidCode.description }
         let position = Self.planPosition(row, editor: editor)
         if case .failure(let problem) = editor.plan(text: row.text, code: row.code, position: position.position) {

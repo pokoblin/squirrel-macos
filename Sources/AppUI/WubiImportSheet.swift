@@ -145,7 +145,9 @@ struct WubiImportSheet: View {
             }
             .labelsHidden()
             .frame(width: 170)
-            .disabled(blocked(value))
+            // 位置放不进去时菜单要留着，让用户换一个位置；只有这一行本身加不了才锁
+            .disabled(wubi.importProblem(value, ignoringPosition: true) != nil
+                      || (value.status == .duplicateInBatch && value.code == originalCodes[value.id]))
         } else {
             Color.clear.frame(width: 170, height: 1)
         }
