@@ -70,21 +70,28 @@ struct PreviewProbeTests {
     @Test func 第一页就有() async throws {
         let fake = FakeEngine(pages: Self.threePages)
         let m = try await PreviewProbe.find("你好", code: "nihao", in: fake)
-        #expect(m == PreviewMatch(page: 0, index: 0, autoCommitted: false))
+        #expect(m == PreviewMatch(page: 0, index: 0, overall: 0, autoCommitted: false))
         #expect(!fake.calls.contains("key:pageDown"))
     }
 
     @Test func 翻页才找到() async throws {
         let fake = FakeEngine(pages: Self.threePages)
         let m = try await PreviewProbe.find("霓", code: "nihao", in: fake)
-        #expect(m == PreviewMatch(page: 2, index: 1, autoCommitted: false))
+        #expect(m == PreviewMatch(page: 2, index: 1, overall: 5, autoCommitted: false))
         #expect(fake.calls.filter { $0 == "key:pageDown" }.count == 2)
+    }
+
+    @Test func 每页五个时总位置() async throws {
+        let pages = ["abcd": [["a1", "a2", "a3", "a4", "a5"], ["b1", "b2", "b3", "b4", "b5"], ["c1", "c2", "c3"]]]
+        let fake = FakeEngine(pages: pages)
+        let m = try await PreviewProbe.find("c2", code: "abcd", in: fake)
+        #expect(m == PreviewMatch(page: 2, index: 1, overall: 11, autoCommitted: false))
     }
 
     @Test func 自动上屏() async throws {
         let fake = FakeEngine(pages: ["yi": [["一"]]], commitOnInput: ["yi": "一"])
         let m = try await PreviewProbe.find("一", code: "yi", in: fake)
-        #expect(m == PreviewMatch(page: 0, index: 0, autoCommitted: true))
+        #expect(m == PreviewMatch(page: 0, index: 0, overall: 0, autoCommitted: true))
     }
 
     @Test func 找不到() async throws {
@@ -119,6 +126,6 @@ struct PreviewProbeIntegrationTests {
         _ = try await session.open(userDir: rime, schema: "py")
         let m = try await PreviewProbe.find("揖", code: "yi", in: session)
         await session.close()
-        #expect(m == PreviewMatch(page: 1, index: 1, autoCommitted: false))
+        #expect(m == PreviewMatch(page: 1, index: 1, overall: 6, autoCommitted: false))
     }
 }
