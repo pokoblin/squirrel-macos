@@ -276,7 +276,7 @@ ORDER BY ZSHORTCUT;
 结论：
 
 - 不管选哪条路，**加载 librime 的那个进程都得有 `disable-library-validation`**。我们自己签名的程序不可能和鼠须管同一个团队，没有别的办法绕开。两条路的区别只是：这个 entitlement 加在主应用上，还是只加在一个小的辅助程序上（主应用保持库验证）。
-- 苹果文档把 `disable-library-validation` 列为 hardened runtime 允许的例外，公证接受；这次没有真的提交公证，第一次打带辅助程序的发布包时确认。
+- 苹果文档把 `disable-library-validation` 列为 hardened runtime 允许的例外，公证接受；0.2.0 已实测通过（见下面）。
 - 同一个进程里 `finalize` 以后，可以换一个用户目录再 `initialize`，换目录生效（不用 `setup` 第二次）。
 - **`select_schema` 遇到不存在的方案也返回成功**（空目录里也一样），只是候选为空。预览前要自己检查方案在不在（看副本的 `build/<方案id>.schema.yaml`）。
 - librime 会往 stderr 打 glog 的 INFO 日志（`Logging before InitGoogleLogging()…`），`min_log_level` 管不住这几行。
@@ -289,7 +289,7 @@ ORDER BY ZSHORTCUT;
   - `ni,`：`,` 先让首选「你」上屏，再返回 0，合起来是「你,」。
   - 有候选时打数字是选词（`yi3` 上屏「医」），返回 1。有编码但没有候选时（词库里没有 `wo`）打 `3` 也返回 1，被 selector 吃掉，什么也不上屏。
 - 候选序号：方案设了 `menu/alternative_select_labels` 时 `select_labels` 才有值；只设 `menu/alternative_select_keys` 时 `select_labels` 是空指针，`menu.select_keys` 是那串键（鼠须管这时拿每个字符当序号）。实测：`py.custom.yaml` 里 `menu/alternative_select_keys: "67890"`，`select_keys` 是 `67890`，打 `yi` 再打 `7` 上屏第二个候选（同上）。
-- 发布签名的应用包里同样成立（squirrel-dev，2026-10-16，详见 [typing-preview-vm-log.md](typing-preview-vm-log.md)）：主程序只有 hardened runtime、没有 `disable-library-validation`；`Contents/Helpers/rime-preview-helper` 带这个 entitlement，直接运行能加载鼠须管的 librime（1.16.0），在应用里试打正常。主程序不需要这个 entitlement。**公证还没试**，第一次正式发版时确认带 entitlement 的辅助程序能过公证，结果记在这里。
+- 发布签名的应用包里同样成立（squirrel-dev，2026-10-16，详见 [typing-preview-vm-log.md](typing-preview-vm-log.md)）：主程序只有 hardened runtime、没有 `disable-library-validation`；`Contents/Helpers/rime-preview-helper` 带这个 entitlement，直接运行能加载鼠须管的 librime（1.16.0），在应用里试打正常。主程序不需要这个 entitlement。**公证通过**：0.2.0 正式版（构建号 4）的应用和 dmg 都 `Accepted`（2026-10-16，submission ec21bac2…、593e82d5…）；测试机里带隔离标记装好后 `spctl` 显示 `accepted`、`source=Notarized Developer ID`，包里的辅助程序照样加载 librime 1.16.0。
 - SwiftUI 在 macOS 上：`.segmented` 的 `Picker` 里，给单个选项加 `.disabled(...)` 没有效果，照样能点。模型拒绝切换时控件还会停在点中的那一段，和实际状态不一致。要禁用就整个控件禁用。
 - 用户目录里有 `rime.lua` 时，就算方案里没用 Lua 也会执行（初始化、开会话、选方案这一步里），顶层的 `print` 写到进程的 stdout（同上）。试打的辅助程序因此先把 stdout 转到 stderr，协议用另外留的一份。
 
