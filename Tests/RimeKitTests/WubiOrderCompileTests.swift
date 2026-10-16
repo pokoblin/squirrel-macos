@@ -110,4 +110,62 @@ struct WubiOrderCompileTests {
         #expect(librime == ["你", "仰泳", "乙", "甲", "丙", "丁"])
         #expect(idx.words(for: "wqiy").map(\.text) == librime)
     }
+
+    static let extraHead = "---\nname: wubi86_jidian_extra\nversion: \"test\"\nsort: by_weight\n...\n"
+
+    /// 编译、打 wqiy，断言 librime 的顺序是 expected，索引算的也一样
+    static func check(user: String, extra: String? = nil, expected: [String]) async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let files = extra.map { [WubiFixtures.extraName: Self.extraHead + $0] } ?? [:]
+        let librime = try await librimeOrder("wqiy", userDict: userHead + user, extraFiles: files, in: dir.url)
+        let idx = try index(userDict: userHead + user, extraFiles: files, in: dir.url)
+        #expect(librime == expected)
+        #expect(idx.words(for: "wqiy").map(\.text) == librime)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func 导入表按列的顺序不按名字() async throws {
+        // extra 在 import_tables 里排最后，按名字却排在 user 前面：同为 12 时个人词库的甲在前
+        try await Self.check(user: "甲\twqiy\t12\n", extra: "戊\twqiy\t12\n",
+                             expected: ["你", "甲", "戊", "仰泳"])
+    }
+
+    @Test(.timeLimit(.minutes(1))) func 权重0不写权重负权重一样大() async throws {
+        // 三种写法换两种行的顺序，结果都跟着行走：说明 0、不写、-5 一样大
+        try await Self.check(user: "丙\twqiy\t0\n乙\twqiy\n甲\twqiy\t-5\n",
+                             expected: ["你", "仰泳", "丙", "乙", "甲"])
+        try await Self.check(user: "甲\twqiy\t-5\n乙\twqiy\n丙\twqiy\t0\n",
+                             expected: ["你", "仰泳", "甲", "乙", "丙"])
+    }
+
+    @Test(.timeLimit(.minutes(1))) func 负权重之间也一样大() async throws {
+        // -100 在 -1 前面：负数不比大小，按行的顺序
+        try await Self.check(user: "甲\twqiy\t-100\n乙\twqiy\t-1\n",
+                             expected: ["你", "仰泳", "甲", "乙"])
+    }
+
+    @Test(.timeLimit(.minutes(1))) func 不写权重的个人词在扩展词库权重0的词前面() async throws {
+        // 「放最后 = 不写权重」不一定真在最后：个人词库在 import_tables 里排在扩展词库前面
+        try await Self.check(user: "甲\twqiy\n", extra: "戊\twqiy\t0\n",
+                             expected: ["你", "仰泳", "甲", "戊"])
+    }
+
+    @Test(.timeLimit(.minutes(2))) func 按算出的权重放进去真的在那个位置() async throws {
+        // 一个一个加：每次用索引算权重，写进个人词库，重新编译，看 librime 把它放在选的位置
+        let dir = try TempDir(); defer { dir.remove() }
+        let pkg = try WubiFixtures.makePackage(in: dir.url.appending(path: "cache"))
+        let personal = dir.url.appending(path: "personal.dict.yaml")
+        var user = try DictFile.parse(Self.userHead)
+        // 甲放第一个前面（30）；乙放你 20、仰泳 10 之间（15）；丙放甲 30、你 20 之间（25）
+        for (step, (text, position, weight)) in [("甲", 0, 30), ("乙", 2, 15), ("丙", 1, 25)].enumerated() {
+            try Data(user.render().utf8).write(to: personal)
+            let idx = try WubiCodeIndex.load(from: pkg, personalUserDict: personal, target: .jidian)
+            let choice = idx.weight(forPosition: position, code: "wqiy")
+            #expect(choice == .weight(weight))
+            guard case .weight(let w) = choice else { return }
+            user.append(DictEntry(text: text, code: "wqiy", weight: w))
+            let librime = try await Self.librimeOrder(
+                "wqiy", userDict: user.render(), in: dir.url.appending(path: "step\(step)"))
+            #expect(librime.firstIndex(of: text) == position, "\(text)：\(librime)")
+        }
+    }
 }
