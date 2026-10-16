@@ -35,6 +35,8 @@ struct Rimectl {
         var catalogURL: URL = CatalogStore.defaultRemote
         /// catalog sign 从这里读私钥
         var readStdin: @Sendable () -> Data = { FileHandle.standardInput.readDataToEndOfFile() }
+        /// 试打用的辅助程序；空就在 rimectl 旁边找 rime-preview-helper
+        var previewHelper: URL? = nil
 
         /// 能用的文本替换
         func textReplacements() throws -> [Phrase] {
@@ -63,6 +65,9 @@ struct Rimectl {
       rimectl install [--force] [--gui-auth]                   下载、检查、安装鼠须管（--gui-auth 弹系统授权框，否则用免密 sudo）
       rimectl activate [--timeout 秒]                           打开系统设置等你添加鼠须管，然后切换过去并启动它
       rimectl doctor [--offline]                               检查环境，告诉你下一步做什么
+      rimectl preview [--pending] [--data-dir <目录>] --schema <方案id> <编码>...
+      rimectl preview [--pending] --list                      列出方案
+      rimectl preview --schema <方案id> --find <词> <编码>      找这个词在第几页第几个
     通用参数：--data-dir 目录（应用数据目录）  --rime-dir 目录（Rime 用户目录，默认 ~/Library/Rime）
     """
 
@@ -91,6 +96,9 @@ struct Rimectl {
         var timeout: Double?
         var confirm = false
         var noUserDB = false
+        var pending = false
+        var schema: String?
+        var find: String?
         var positional: [String] = []
         var i = 0
         while i < args.count {
@@ -129,6 +137,17 @@ struct Rimectl {
             case "--confirm":
                 confirm = true
                 i += 1
+            case "--pending":
+                pending = true
+                i += 1
+            case "--schema":
+                guard i + 1 < args.count else { out.error(usage); return 2 }
+                schema = args[i + 1]
+                i += 2
+            case "--find":
+                guard i + 1 < args.count else { out.error(usage); return 2 }
+                find = args[i + 1]
+                i += 2
             case "--list":
                 listOnly = true
                 i += 1
@@ -195,6 +214,10 @@ struct Rimectl {
                 return try await activate(timeout: timeout ?? context.activationTimeout, locations: locations, context)
             case "doctor":
                 return await doctor(offline: offline, paths: paths, locations: locations, context)
+            case "preview":
+                return await preview(Array(positional.dropFirst()),
+                                     options: PreviewOptions(pending: pending, list: listOnly, schema: schema, find: find),
+                                     paths: paths, locations: locations, context)
             case "fetch":
                 let ids = Array(positional.dropFirst())
                 guard !ids.isEmpty else { out.error(usage); return 2 }
@@ -371,7 +394,7 @@ struct Rimectl {
     }
 
     /// 读设置、取包、读个人内容；失败时已经输出了错误，返回 nil
-    private static func prepareInput(cacheOnly: Bool, paths: AppPaths, _ context: Context,
+    static func prepareInput(cacheOnly: Bool, paths: AppPaths, _ context: Context,
                                      settings override: Settings? = nil) async throws -> GenerationInput? {
         let out = context.output
         guard let settings = try override ?? SettingsStore(paths: paths).load() else {
