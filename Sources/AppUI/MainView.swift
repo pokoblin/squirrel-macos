@@ -49,7 +49,7 @@ struct MainView: View {
         switch model.page {
         case .schemas: SchemasPage(model: model)
         case .preview: PreviewPage(model: model)
-        case .wubiDict: Text("五笔词库")
+        case .wubiDict: WubiDictPage(model: model)
         case .appearance: AppearancePage(model: model)
         case .textReplacement: TextReplacementPage(model: model)
         case .transfer: TransferPage(model: model)
@@ -63,6 +63,15 @@ struct MainView: View {
 struct ApplyBar: View {
     let model: MainModel
 
+    /// 只有五笔词库改了（设置没动、清单没更新）时要说清楚，不然「撤销」找不到、也不知道应用的是什么
+    private var pendingText: String {
+        if model.isDirty { return "有改动还没应用" }
+        if model.catalogNeedsApply {
+            return model.wubiDict.needsApply ? "方案清单更新了，五笔词库也有改动，还没应用" : "方案清单更新了，还没应用"
+        }
+        return "五笔词库有改动还没应用"
+    }
+
     var body: some View {
         if let working = model.working {
             HStack(spacing: 10) {
@@ -74,7 +83,7 @@ struct ApplyBar: View {
             .background(.bar)
         } else if model.hasPendingChanges {
             HStack(spacing: 10) {
-                Label(model.isDirty ? "有改动还没应用" : "方案清单更新了，还没应用", systemImage: "pencil.circle")
+                Label(pendingText, systemImage: "pencil.circle")
                 Spacer()
                 if model.isDirty { Button("撤销") { model.revert() } }
                 Button("应用改动") { Task { await model.apply() } }

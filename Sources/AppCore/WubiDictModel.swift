@@ -112,6 +112,12 @@ public final class WubiDictModel {
     /// 读过（不管结果）
     public var isLoaded: Bool { loadedSettings != nil }
 
+    /// 这个编码下现在出哪些词（按顺序，含个人词）。编码不合法或不能编辑时是空的。给「改编码和位置」用
+    public func words(for code: String) -> [IndexedWord] {
+        guard let editor, WubiEncoder.isValidCode(code) else { return [] }
+        return editor.index.words(for: code)
+    }
+
     /// 搜索后显示的词条序号
     public var visibleIndices: [Int] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
