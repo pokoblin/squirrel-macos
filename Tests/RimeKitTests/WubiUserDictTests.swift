@@ -143,7 +143,9 @@ import Testing
         #expect(env.store.externalChange())
 
         let before = try env.store.load(package: env.package)
-        let (merged, added) = try env.store.mergeExternal(into: before)
+        let result = try env.store.mergeExternal(into: before)
+        let (merged, added) = (result.merged, result.added)
+        #expect(result.sourceSHA256 == sha(Self.rimeWithOutsideWord))
         #expect(added == 1)
         #expect(merged.entries.map(\.text) == ["分组词条", "甲乙丙", "丁戊己"])
         // 原有的行（头部、## 示例 分组行、原来的词条）原样不变，新词在末尾
@@ -152,7 +154,7 @@ import Testing
         #expect(merged.render().hasSuffix("丁戊己\tsdnn\n"))
 
         try env.store.save(merged)
-        try env.store.acknowledgeExternal()
+        try env.store.acknowledgeExternal(expectedSHA256: result.sourceSHA256)
         #expect(!env.store.externalChange())
         let ledger = try Ledger.load(env.paths)
         #expect(!ledger.externalChanges(in: env.rime).map(\.path).contains(WubiFixtures.userName))
@@ -171,7 +173,8 @@ import Testing
         let env = try Env(); defer { env.dir.remove() }
         try env.writeRime(WubiFixtures.userDict + "\n甲乙丙\tlnxy\t5\n无码词\n丁戊己\tsdnn\n丁戊己\tsdnn\n同词异码\tqqqq\n")
         let mine = try DictFile.parse(WubiFixtures.userDict + "\n甲乙丙\tlnxy\n无码词\taaaa\n同词异码\twwww\n")
-        let (merged, added) = try env.store.mergeExternal(into: mine)
+        let result = try env.store.mergeExternal(into: mine)
+        let (merged, added) = (result.merged, result.added)
         // 甲乙丙：同词同码（权重不同也算同一条）；无码词：没写编码只比词；丁戊己：外面写了两遍只加一条
         #expect(added == 2)
         #expect(merged.entries.suffix(2) == [
@@ -181,12 +184,60 @@ import Testing
         #expect(merged.entries.filter { $0.text == "甲乙丙" }.count == 1)
     }
 
+    @Test func 合并后外面又改了不记账() throws {
+        let env = try Env(); defer { env.dir.remove() }
+        try env.writeRime(WubiFixtures.userDict)
+        try env.record(WubiFixtures.userDict)
+        try env.writeRime(Self.rimeWithOutsideWord)
+        let result = try env.store.mergeExternal(into: try DictFile.parse(WubiFixtures.userDict))
+        #expect(result.added == 1)
+
+        // 等用户点按钮的时候，外面又加了一个词
+        let again = Self.rimeWithOutsideWord + "庚辛壬\tyuyu\n"
+        try env.writeRime(again)
+        #expect(throws: WubiUserDictError.changedAgain) {
+            try env.store.acknowledgeExternal(expectedSHA256: result.sourceSHA256)
+        }
+        // 账本没动：还算外部改动
+        #expect(try Ledger.load(env.paths).entries[WubiFixtures.userName]?.sha256 == sha(WubiFixtures.userDict))
+        #expect(env.store.externalChange())
+
+        // 重新合并后可以记账，两个外面的词都收进来了
+        let second = try env.store.mergeExternal(into: result.merged)
+        #expect(second.added == 1)
+        #expect(second.merged.entries.map(\.text) == ["分组词条", "丁戊己", "庚辛壬"])
+        try env.store.acknowledgeExternal(expectedSHA256: second.sourceSHA256)
+        #expect(!env.store.externalChange())
+    }
+
+    @Test func 外面写了编码这边没写编码的要加进来() throws {
+        let env = try Env(); defer { env.dir.remove() }
+        try env.writeRime(WubiFixtures.userDict + "\n手编词\tabcd\n")
+        let mine = try DictFile.parse(WubiFixtures.userDict + "\n手编词\n")
+        let result = try env.store.mergeExternal(into: mine)
+        #expect(result.added == 1)
+        #expect(result.merged.entries.suffix(2) == [
+            DictEntry(text: "手编词"),
+            DictEntry(text: "手编词", code: "abcd"),
+        ])
+    }
+
+    @Test func 外面没写编码这边写了编码的不重复() throws {
+        let env = try Env(); defer { env.dir.remove() }
+        try env.writeRime(WubiFixtures.userDict + "\n手编词\n")
+        let mine = try DictFile.parse(WubiFixtures.userDict + "\n手编词\tabcd\n")
+        let result = try env.store.mergeExternal(into: mine)
+        #expect(result.added == 0)
+        #expect(result.merged == mine)
+    }
+
     @Test func 外面删掉的词不跟着删() throws {
         let env = try Env(); defer { env.dir.remove() }
         // 外面那份把「分组词条」删了
         try env.writeRime("---\nname: wubi86_jidian_user\nversion: \"test\"\nsort: original\n...\n")
         let mine = try DictFile.parse(Self.personalWithWord)
-        let (merged, added) = try env.store.mergeExternal(into: mine)
+        let result = try env.store.mergeExternal(into: mine)
+        let (merged, added) = (result.merged, result.added)
         #expect(added == 0)
         #expect(merged == mine)
         #expect(merged.render() == Self.personalWithWord)
