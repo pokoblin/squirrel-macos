@@ -26,6 +26,8 @@ public struct AppEnvironment: Sendable {
     /// 等用户在系统设置里添加输入法，最多等多少秒
     public var activationTimeout: Double
     public var sleep: @Sendable (Duration) async -> Void
+    /// 新建一个试打引擎（辅助程序）。超时、崩溃以后的会话不能再用，重试时再建一个
+    public var previewEngine: @Sendable () throws -> any PreviewEngine = { throw PreviewError.helperMissing }
 
     public func deployer() -> Deployer {
         Deployer(paths: paths, locations: locations, compiler: compiler, squirrel: squirrel,
@@ -38,7 +40,7 @@ public struct AppEnvironment: Sendable {
         let http = URLSessionHTTPClient()
         let store = PackageStore(paths: paths, http: http, retry: .standard)
         let catalogStore = CatalogStore(paths: paths, http: http)
-        return AppEnvironment(
+        var env = AppEnvironment(
             paths: paths, locations: locations, catalogStore: catalogStore, catalogs: CatalogHolder(try catalogStore.effective()),
             compiler: DeployerCompiler(locations: locations),
             squirrel: SquirrelControl(locations: locations),
@@ -53,5 +55,10 @@ public struct AppEnvironment: Sendable {
             },
             deployTimeout: .seconds(120), activationTimeout: 600,
             sleep: { try? await Task.sleep(for: $0) })
+        env.previewEngine = {
+            guard let helper = PreviewHelperLocator.locate() else { throw PreviewError.helperMissing }
+            return PreviewSession(helper: helper, squirrelApp: locations.squirrelApp)
+        }
+        return env
     }
 }

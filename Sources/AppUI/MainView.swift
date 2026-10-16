@@ -2,7 +2,7 @@ import AppCore
 import RimeKit
 import SwiftUI
 
-/// 主窗口：左边栏 6 页；底部是「应用改动」栏；消息和外部改动用弹窗
+/// 主窗口：左边栏 7 页；底部是「应用改动」栏；消息和外部改动用弹窗
 struct MainView: View {
     @Bindable var model: MainModel
 
@@ -48,6 +48,7 @@ struct MainView: View {
     @ViewBuilder var page: some View {
         switch model.page {
         case .schemas: SchemasPage(model: model)
+        case .preview: Text("试打")   // 任务 8 换成真正的试打页
         case .appearance: AppearancePage(model: model)
         case .textReplacement: TextReplacementPage(model: model)
         case .transfer: TransferPage(model: model)

@@ -64,6 +64,7 @@ extension MainModel {
             case .applied(let report):
                 saved = updated
                 catalogNeedsApply = false
+                preview.markCurrentChanged()
                 if onlySync {
                     draft.textReplacement.lastSyncedHash = updated.textReplacement.lastSyncedHash
                     draft.textReplacement.syncedEntries = updated.textReplacement.syncedEntries
@@ -189,6 +190,7 @@ extension MainModel {
         let deployer = env.deployer()
         do {
             let report = try await offMain { try await deployer.restore(id) }
+            preview.markCurrentChanged()
             // 还原会清掉文本替换的同步记录：重新读设置；没应用的改动留着，只换同步记录
             if let now = try SettingsStore(paths: env.paths).load() {
                 saved = now
@@ -339,6 +341,7 @@ extension MainModel {
             switch report.outcome {
             case .applied(let applied):
                 catalogNeedsApply = false
+                preview.markCurrentChanged()
                 if let note = reloadSettingsAfterImport() { lines.append(note) }
                 refreshColorSchemes()
                 var result = Self.notice(for: applied)

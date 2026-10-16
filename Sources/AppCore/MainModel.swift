@@ -6,13 +6,14 @@ import RimeKit
 @MainActor @Observable
 public final class MainModel {
     public enum Page: String, CaseIterable, Identifiable, Sendable {
-        case schemas, appearance, textReplacement, transfer, backups, diagnostics
+        case schemas, preview, appearance, textReplacement, transfer, backups, diagnostics
 
         public var id: String { rawValue }
 
         public var title: String {
             switch self {
             case .schemas: return "方案"
+            case .preview: return "试打"
             case .appearance: return "外观"
             case .textReplacement: return "文本替换"
             case .transfer: return "导入导出"
@@ -24,6 +25,7 @@ public final class MainModel {
         public var symbol: String {
             switch self {
             case .schemas: return "list.bullet"
+            case .preview: return "keyboard"
             case .appearance: return "textformat.size"
             case .textReplacement: return "text.badge.checkmark"
             case .transfer: return "arrow.up.arrow.down.square"
@@ -64,11 +66,15 @@ public final class MainModel {
     /// 底部要不要显示「应用改动」
     public var hasPendingChanges: Bool { isDirty || catalogNeedsApply }
 
+    /// 「试打」页
+    public let preview: PreviewModel
+
     let env: AppEnvironment
 
     public init(env: AppEnvironment, welcome: [String] = []) throws {
         guard let settings = try SettingsStore(paths: env.paths).load() else { throw TransferError.noSettings }
         self.env = env
+        preview = PreviewModel(env: env)
         catalogStatus = env.catalogs.status
         saved = settings
         draft = settings
@@ -78,14 +84,7 @@ public final class MainModel {
 
     /// 包选项里和默认值一样的项去掉（改回默认值不算改动）
     func normalized(_ settings: Settings) -> Settings {
-        var copy = settings
-        for (packageID, choices) in settings.options {
-            guard let package = catalog.package(packageID) else { continue }
-            let defaults = Dictionary(uniqueKeysWithValues: package.options.map { ($0.id, $0.defaultChoice) })
-            let kept = choices.filter { defaults[$0.key] != $0.value }
-            copy.options[packageID] = kept.isEmpty ? nil : kept
-        }
-        return copy
+        settings.normalized(for: catalog)
     }
 
     public func revert() {
