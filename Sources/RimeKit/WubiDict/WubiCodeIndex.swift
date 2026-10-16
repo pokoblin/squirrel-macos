@@ -116,3 +116,25 @@ public struct WubiCodeIndex: Sendable {
         return WubiCodeIndex(main: main, imports: imports, personalTable: target.userTable)
     }
 }
+
+extension WubiCodeIndex {
+    /// 主词库，和它 `import_tables` 里列的词库（和 `load` 读的一样）。
+    /// 个人词库一定在里面（包里没有这个文件时是个空的），好让调用方换成自己手上的那份
+    static func loadTables(from package: CachedPackage, target: WubiDictTarget) throws
+        -> (main: DictFile, imports: [(name: String, file: DictFile)]) {
+        let dir = package.filesDirectory
+        let main = try DictFile.parse(data: Data(contentsOf: dir.appending(path: target.mainDict)))
+        let fm = FileManager.default
+        var imports: [(name: String, file: DictFile)] = []
+        var seen: Set<String> = [WubiDictTarget.tableName(target.mainDict)]
+        for name in main.importTables where seen.insert(name).inserted {
+            let url = dir.appending(path: name + ".dict.yaml")
+            if fm.fileExists(atPath: url.path) {
+                imports.append((name: name, file: try DictFile.parse(data: Data(contentsOf: url))))
+            } else if name == target.userTable {
+                imports.append((name: name, file: try DictFile.parse("---\nname: \(name)\n...\n")))
+            }
+        }
+        return (main, imports)
+    }
+}

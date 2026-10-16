@@ -32,15 +32,18 @@ extension Rimectl {
                 return 1
             }
             let userDict = WubiUserDict(paths: paths, locations: locations, target: target)
-            let main = try DictFile.parse(data: Data(contentsOf: package.filesDirectory.appending(path: target.mainDict)))
-            let encoder = try? WubiEncoder(mainDict: main)
-            let env = WubiEnvironment(target: target, package: package, userDict: userDict, encoder: encoder)
+            // 个人词库读不了时，encode 不需要它，其余命令抛出原因
+            let loaded = Result { try userDict.load(package: package) }
+            if command == "encode" {
+                let editor = try WubiEditor(package: package, userFile: (try? loaded.get()) ?? DictFile.parse("---\n...\n"))
+                return encode(rest, editor, out)
+            }
+            let editor = try WubiEditor(package: package, userFile: try loaded.get())
+            let env = WubiEnvironment(userDict: userDict, editor: editor)
 
             switch command {
-            case "encode":
-                return encode(rest, env, out)
             case "list":
-                return try list(env, out)
+                return list(env, out)
             case "add":
                 return try add(rest[0], code: rest.count > 1 ? rest[1] : nil, position: position, env, out)
             case "remove":
@@ -60,32 +63,17 @@ extension Rimectl {
     }
 
     private struct WubiEnvironment {
-        let target: WubiDictTarget
-        let package: CachedPackage
         let userDict: WubiUserDict
-        /// 主词库里没有组词规则时是 nil：自动编码用不了
-        let encoder: WubiEncoder?
-
-        /// 编码索引：个人词库用 personal/ 里的版本（有的话）
-        func index() throws -> WubiCodeIndex {
-            try WubiCodeIndex.load(from: package, personalUserDict: userDict.personalFile, target: target)
-        }
-
-        /// 自动算出来的第一个编码；算不出是 nil
-        func autoCode(_ text: String) -> String? {
-            guard let encoder, case .codes(let list) = encoder.encode(text) else { return nil }
-            return list.first
-        }
+        let editor: WubiEditor
     }
 
-    private static let noEncoderMessage = "认不出这个版本的极点五笔词库，自动编码用不了"
     private static let applyHint = "运行 rimectl apply 让它生效"
 
     // MARK: encode
 
-    private static func encode(_ words: [String], _ env: WubiEnvironment, _ out: Output) -> Int32 {
-        guard let encoder = env.encoder else {
-            out.error(noEncoderMessage)
+    private static func encode(_ words: [String], _ editor: WubiEditor, _ out: Output) -> Int32 {
+        guard let encoder = editor.encoder else {
+            out.error(WubiEditProblem.noEncoder.description)
             return 1
         }
         for word in words {
@@ -105,13 +93,13 @@ extension Rimectl {
 
     // MARK: list
 
-    private static func list(_ env: WubiEnvironment, _ out: Output) throws -> Int32 {
-        let file = try env.userDict.load(package: env.package)
+    private static func list(_ env: WubiEnvironment, _ out: Output) -> Int32 {
+        let file = env.editor.userFile
         for entry in file.entries {
             let weight = entry.weight.map(String.init) ?? "-"
             if let code = entry.code, !code.isEmpty {
                 out.line("\(entry.text)\t\(code)\t\(weight)")
-            } else if let code = env.autoCode(entry.text) {
+            } else if let code = env.editor.autoCode(entry.text) {
                 out.line("\(entry.text)\t\(code)（自动）\t\(weight)")
             } else {
                 out.line("\(entry.text)\t算不出\t\(weight)")
@@ -126,62 +114,25 @@ extension Rimectl {
     private static func add(_ word: String, code given: String?, position: Int?, _ env: WubiEnvironment,
                             _ out: Output) throws -> Int32 {
         guard !word.isEmpty else { out.error(usage); return 2 }
+        let editor = env.editor
         let code: String
-        if let given {
-            guard WubiEncoder.isValidCode(given) else {
-                out.error("编码只能是 a–y 的小写字母，1 到 4 个")
-                return 1
-            }
-            code = given
-        } else {
-            guard let encoder = env.encoder else {
-                out.error(noEncoderMessage)
-                return 1
-            }
-            switch encoder.encode(word) {
-            case .codes(let list): code = list[0]
-            case .singleCharacter:
-                out.error("只有一个字的词要自己填编码")
-                return 1
-            case .unknown(let chars):
-                out.error("算不出编码" + (chars.isEmpty ? "" : "（\(chars.map(String.init).joined(separator: "、"))）")
-                          + "，请自己填编码")
-                return 1
-            }
-        }
-
-        var file = try env.userDict.load(package: env.package)
-        if file.entries.contains(where: { $0.text == word && $0.code == code }) {
-            out.error("已经加过了")
+        switch editor.resolveCode(text: word, given: given) {
+        case .success(let codes): code = codes[0]
+        case .failure(let problem):
+            out.error(problem.description)
             return 1
         }
-        let index = try env.index()
-        let found = index.contains(text: word, code: code)
-        if found.inPersonal {
-            out.error("已经加过了")
+        let entry: DictEntry
+        switch editor.plan(text: word, code: code, position: position) {
+        case .success(let planned): entry = planned
+        case .failure(let problem):
+            out.error(problem.description)
             return 1
         }
-        if found.inOthers {
-            out.error("词库里已经有了")
-            return 1
-        }
-
-        var weight: Int?
-        if let position {
-            switch index.weight(forPosition: position - 1, code: code) {
-            case .weight(let w): weight = w
-            case .noWeight: weight = nil
-            case .noRoom:
-                out.error("这个位置放不进去")
-                return 1
-            }
-        }
-        file.append(DictEntry(text: word, code: code, weight: weight))
-        try env.userDict.save(file)
-
-        // 排第几以保存以后重新读出来的顺序为准
-        let after = try env.index().words(for: code)
-        let place = after.firstIndex { $0.text == word && $0.isPersonal }.map { $0 + 1 } ?? after.count
+        let updated = editor.applying([entry])
+        try env.userDict.save(updated.userFile)
+        // 排第几以保存以后的顺序为准
+        let place = updated.position(of: entry) ?? 1
         out.line("已加入：\(word) \(code)（排第 \(place) 个）")
         out.line(applyHint)
         return 0
@@ -190,16 +141,13 @@ extension Rimectl {
     // MARK: remove
 
     private static func remove(_ word: String, code: String?, _ env: WubiEnvironment, _ out: Output) throws -> Int32 {
-        var file = try env.userDict.load(package: env.package)
-        let before = file.entries.count
-        file.removeEntries { $0.text == word && (code == nil || $0.code == code) }
-        let removed = before - file.entries.count
-        guard removed > 0 else {
+        let matches = env.editor.removeMatches(text: word, code: code)
+        guard !matches.isEmpty else {
             out.error("没找到这个词")
             return 1
         }
-        try env.userDict.save(file)
-        out.line("删掉 \(removed) 条")
+        try env.userDict.save(WubiEditor.remove(indices: matches, from: env.editor.userFile))
+        out.line("删掉 \(matches.count) 条")
         out.line(applyHint)
         return 0
     }
@@ -207,25 +155,16 @@ extension Rimectl {
     // MARK: import
 
     private static func importWords(from path: String, _ env: WubiEnvironment, _ out: Output) throws -> Int32 {
-        guard let encoder = env.encoder else {
-            out.error(noEncoderMessage)
-            return 1
-        }
         guard let data = FileManager.default.contents(atPath: path), let text = String(data: data, encoding: .utf8) else {
             out.error("读不了文件（要 UTF-8 文本）：\(path)")
             return 1
         }
-        var file = try env.userDict.load(package: env.package)
-        var rows = WubiImport.parse(text, encoder: encoder, index: try env.index())
-        // 索引读的是 personal/ 里的文件；还没有这个文件时（起点来自别处）也要照文件里的词条查一遍
-        let existing = Set(file.entries.compactMap { e in e.code.map { e.text + "\t" + $0 } })
-        for i in rows.indices where rows[i].selected && existing.contains(rows[i].text + "\t" + rows[i].code) {
-            rows[i].status = .alreadyPersonal
-            rows[i].selected = false
+        guard let rows = env.editor.parseImport(text) else {
+            out.error(WubiEditProblem.noEncoder.description)
+            return 1
         }
         let entries = WubiImport.entries(from: rows)
-        for entry in entries { file.append(entry) }
-        if !entries.isEmpty { try env.userDict.save(file) }
+        if !entries.isEmpty { try env.userDict.save(env.editor.applying(entries).userFile) }
         out.line("加入 \(entries.count) 个")
         for row in rows where !(row.selected && !row.text.isEmpty && WubiEncoder.isValidCode(row.code)) {
             out.line("第 \(row.id) 行：\(reason(row))")
@@ -253,17 +192,13 @@ extension Rimectl {
     private static func check(settings: Settings, env: WubiEnvironment, paths: AppPaths, locations: RimeLocations,
                               _ context: Context) async throws -> Int32 {
         let out = context.output
-        guard let schema = WubiCheck.checkSchema(in: settings, target: env.target) else { return 1 }
-        let file = try env.userDict.load(package: env.package)
-        guard !file.entries.isEmpty else {
+        let editor = env.editor
+        guard let schema = WubiCheck.checkSchema(in: settings, target: editor.target) else { return 1 }
+        // 没写编码的用自动算的第一个编码检查；算不出的没有编码可打
+        let entries = editor.entriesWithCodes
+        guard !entries.isEmpty else {
             out.line("个人词库里还没有词")
             return 0
-        }
-        // 没写编码的用自动算的第一个编码检查；算不出的没有编码可打
-        let entries = file.entries.map { e -> DictEntry in
-            var e = e
-            if e.code?.isEmpty ?? true { e.code = env.autoCode(e.text) }
-            return e
         }
 
         var copy: PreviewCopy?
@@ -277,14 +212,6 @@ extension Rimectl {
             out.error("没有方案「\(schema)」。可以试打的方案：" + copy.schemas.map(\.id).joined(separator: "、"))
             return 1
         }
-        // 索引不收没写编码的词；把自动算出的编码补上，放进副本里的临时文件再读，预期的位置才算得对
-        var coded = file
-        for (i, e) in entries.enumerated() where file.entries[i].code?.isEmpty ?? true && e.code != nil {
-            coded.replaceEntry(at: i, with: e)
-        }
-        let codedFile = copy.root.appending(path: "check-\(env.target.userDict)")
-        try Data(coded.render().utf8).write(to: codedFile)
-        let index = try WubiCodeIndex.load(from: env.package, personalUserDict: codedFile, target: env.target)
         guard let helper = context.previewHelper ?? PreviewHelperLocator.locate() else {
             out.error(PreviewError.helperMissing.description)
             return 1
@@ -292,7 +219,7 @@ extension Rimectl {
         let session = PreviewSession(helper: helper, squirrelApp: locations.squirrelApp)
         let results: [CheckResult]
         do {
-            results = try await WubiCheck.run(entries, index: index, engine: session, userDir: copy.userDir, schema: schema)
+            results = try await WubiCheck.run(entries, index: editor.index, engine: session, userDir: copy.userDir, schema: schema)
             await session.close()
         } catch {
             await session.close()

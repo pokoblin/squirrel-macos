@@ -126,6 +126,24 @@ private struct WubiEnv {
         #expect(e.output.text.contains("已经加过了"))
     }
 
+    @Test func 没写编码的词按自动编码查重() async throws {
+        let e = try WubiEnv(); defer { e.dir.remove() }
+        try e.writePersonal(WubiFixtures.userDict + "\n张三丰\n")
+        let before = try e.personalText()
+        #expect(await e.run(["add", "张三丰"]) == 1)
+        #expect(e.output.text.contains("已经加过了"))
+        #expect(await e.run(["add", "张三丰", "xddh"]) == 1)
+        #expect(try e.personalText() == before)
+    }
+
+    @Test func 词里有制表符或换行不能加() async throws {
+        let e = try WubiEnv(); defer { e.dir.remove() }
+        #expect(await e.run(["add", "甲\t乙", "wqiy"]) == 1)
+        #expect(await e.run(["add", "甲\n乙", "wqiy"]) == 1)
+        #expect(e.output.text.contains("不能含有制表符或换行"))
+        #expect(!FileManager.default.fileExists(atPath: e.personalFile.path))
+    }
+
     @Test func 主词库里有的退出码1() async throws {
         let e = try WubiEnv(); defer { e.dir.remove() }
         #expect(await e.run(["add", "仰泳"]) == 1)
@@ -169,6 +187,14 @@ private struct WubiEnv {
         #expect(!text.contains("abcd"))
     }
 
+    @Test func 删词指定编码也匹配没写编码的词() async throws {
+        let e = try WubiEnv(); defer { e.dir.remove() }
+        try e.writePersonal(WubiFixtures.userDict + "\n张三丰\n")
+        #expect(await e.run(["remove", "张三丰", "abcd"]) == 1)   // 自动编码是 xddh
+        #expect(await e.run(["remove", "张三丰", "xddh"]) == 0)
+        #expect(!(try e.personalText().contains("张三丰")))
+    }
+
     @Test func 没找到退出码1() async throws {
         let e = try WubiEnv(); defer { e.dir.remove() }
         #expect(await e.run(["remove", "不存在"]) == 1)
@@ -191,6 +217,18 @@ private struct WubiEnv {
         #expect(text.contains("张三丰\txddh"))
         #expect(text.contains("甲乙\twqiy\t30"))
         #expect(!text.contains("丁丁"))
+    }
+
+    @Test func 导入按自动编码查重() async throws {
+        let e = try WubiEnv(); defer { e.dir.remove() }
+        try e.writePersonal(WubiFixtures.userDict + "\n张三丰\n")
+        let file = e.dir.url.appending(path: "words.txt")
+        try Data("张三丰\n甲乙\twqiy\n张三丰\txddh\n".utf8).write(to: file)
+        #expect(await e.run(["import", file.path]) == 0)
+        #expect(e.lines[0] == "加入 1 个")
+        #expect(e.lines.contains("第 1 行：已经加过了"))
+        #expect(e.lines.contains("第 3 行：和前面的行重复"))
+        #expect(try e.personalText().components(separatedBy: "张三丰").count == 2)
     }
 
     @Test func 导入没有可加的不写文件() async throws {
