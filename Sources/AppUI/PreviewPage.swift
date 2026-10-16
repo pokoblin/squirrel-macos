@@ -50,14 +50,24 @@ struct PreviewPage: View {
         HStack(spacing: 16) {
             Picker("来源", selection: Binding(
                 get: { preview.source },
-                set: { new in Task { await preview.switchSource(new, draft: model.draft, hasPending: model.hasPendingChanges) } }
+                set: { new in
+                    // 模型不会接受的请求直接忽略，分段控件才不会和实际来源不一致
+                    guard PreviewModel.canSwitch(to: new, hasPending: model.hasPendingChanges) else { return }
+                    Task { await preview.switchSource(new, draft: model.draft, hasPending: model.hasPendingChanges) }
+                }
             )) {
                 Text("当前生效").tag(PreviewModel.Source.current)
                 Text("应用后的样子").tag(PreviewModel.Source.pending)
-                    .disabled(!model.hasPendingChanges)
             }
             .pickerStyle(.segmented)
             .fixedSize()
+            // 分段控件里单个选项的 .disabled 在 macOS 上不生效，所以没有改动时整个锁住
+            .disabled(!preview.sourcePickerEnabled(hasPending: model.hasPendingChanges))
+            .help(model.hasPendingChanges ? "" : "没有未应用的改动")
+
+            if !preview.sourcePickerEnabled(hasPending: model.hasPendingChanges) {
+                Text("没有未应用的改动").font(.caption).foregroundStyle(.secondary)
+            }
 
             if !preview.schemas.isEmpty {
                 Picker("方案", selection: Binding(

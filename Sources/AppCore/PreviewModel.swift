@@ -105,9 +105,20 @@ public final class PreviewModel {
         oldCopy?.remove()
     }
 
+    /// 能不能切到这个来源：没有未应用的改动时，「应用后的样子」没有东西可看
+    public static func canSwitch(to s: Source, hasPending: Bool) -> Bool {
+        s == .current || hasPending
+    }
+
+    /// 「来源」选择器能不能操作：没有未应用的改动、又在「当前生效」时，只有一个有意义的选项，整个锁住。
+    /// 在「应用后的样子」时（改动刚被应用或还原了）保持可用，好切回「当前生效」
+    public func sourcePickerEnabled(hasPending: Bool) -> Bool {
+        hasPending || source == .pending
+    }
+
     public func switchSource(_ s: Source, draft: Settings, hasPending: Bool) async {
         guard s != source else { return }
-        if s == .pending && !hasPending { return }
+        guard Self.canSwitch(to: s, hasPending: hasPending) else { return }
         source = s
         guard entered else { return }
         await load(draft: draft, hasPending: hasPending)

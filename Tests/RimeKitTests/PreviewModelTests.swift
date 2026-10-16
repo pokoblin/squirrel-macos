@@ -187,6 +187,21 @@ final class GatedCompiler: RimeCompiler, @unchecked Sendable {
         await model.leave()
     }
 
+    @Test func 没有未应用的改动时来源不可切() async throws {
+        #expect(PreviewModel.canSwitch(to: .current, hasPending: false))
+        #expect(!PreviewModel.canSwitch(to: .pending, hasPending: false))
+        #expect(PreviewModel.canSwitch(to: .pending, hasPending: true))
+        let s = try setup(); defer { s.remove() }
+        let model = PreviewModel(env: s.env)
+        await model.enter(draft: draft, hasPending: false)
+        #expect(!model.sourcePickerEnabled(hasPending: false))
+        #expect(model.sourcePickerEnabled(hasPending: true))
+        await model.switchSource(.pending, draft: draft, hasPending: false)
+        #expect(model.source == .current)
+        #expect(await s.engine.opens.count == 1)
+        await model.leave()
+    }
+
     @Test func 打字和上屏累加() async throws {
         let s = try setup(); defer { s.remove() }
         let model = PreviewModel(env: s.env)
