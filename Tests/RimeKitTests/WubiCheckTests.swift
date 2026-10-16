@@ -87,6 +87,13 @@ struct WubiCheckTests {
         #expect(WubiCheck.checkSchema(
             in: Settings(schemas: ["rime_ice", "wubi86_jidian_pinyin", "wubi86_jidian"]), target: t)
             == "wubi86_jidian_pinyin")
+        // 简入繁出方案会把简体词转成繁体，只在没有别的极点方案时才用
+        #expect(WubiCheck.checkSchema(
+            in: Settings(schemas: ["wubi86_jidian_trad", "wubi86_jidian_pinyin"]), target: t)
+            == "wubi86_jidian_pinyin")
+        #expect(WubiCheck.checkSchema(
+            in: Settings(schemas: ["wubi86_jidian_trad_pinyin", "rime_ice"]), target: t)
+            == "wubi86_jidian_trad_pinyin")
         #expect(WubiCheck.checkSchema(in: Settings(schemas: ["rime_ice"]), target: t) == nil)
         #expect(WubiCheck.checkSchema(in: Settings(schemas: []), target: t) == nil)
     }

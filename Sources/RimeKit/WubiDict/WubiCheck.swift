@@ -44,8 +44,12 @@ public enum WubiCheck {
         return results
     }
 
-    /// 检查用哪个方案：已启用的方案里第一个以 target.schemaPrefix 开头的
+    /// 检查用哪个方案：已启用的方案里第一个以 target.schemaPrefix 开头、且不是简入繁出的。
+    /// 简入繁出方案（id 以 `_trad` 结尾或含 `_trad_`）会把简体词转成繁体，检查会把简体词报成打不出来，
+    /// 所以只在没有别的极点方案时才用它
     public static func checkSchema(in settings: Settings, target: WubiDictTarget) -> String? {
-        settings.schemas.first { $0.hasPrefix(target.schemaPrefix) }
+        let candidates = settings.schemas.filter { $0.hasPrefix(target.schemaPrefix) }
+        return candidates.first { !($0.hasSuffix("_trad") || $0.contains("_trad_")) }
+            ?? candidates.first
     }
 }
