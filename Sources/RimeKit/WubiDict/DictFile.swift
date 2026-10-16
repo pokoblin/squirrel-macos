@@ -44,6 +44,14 @@ public struct DictFile: Equatable, Sendable {
     private var crlf: Bool
     private var endsWithNewline: Bool
 
+    /// 头部 `---` 和 `...` 之间的 YAML 原文（只读，给读 `encoder` 这类段用）
+    public var headerYAML: String {
+        guard let start = headerLines.firstIndex(where: { Self.isMarker($0, "---") }),
+            let end = headerLines[(start + 1)...].firstIndex(where: { Self.isMarker($0, "...") })
+        else { return "" }
+        return headerLines[(start + 1)..<end].map(Self.stripCR).joined(separator: "\n")
+    }
+
     public static let defaultColumns = ["text", "code", "weight"]
 
     public var entries: [DictEntry] {

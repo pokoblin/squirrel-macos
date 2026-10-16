@@ -141,4 +141,9 @@ import Testing
         let plain = Data(Self.sample.utf8)
         #expect(Data(try DictFile.parse(data: plain).render().utf8) == plain)
     }
+
+    @Test func 头部的YAML原文() throws {
+        let f = try DictFile.parse("# 注释\r\n---\r\nname: x\r\nencoder:\r\n  rules: []\r\n...\r\n词\r\n")
+        #expect(f.headerYAML == "name: x\nencoder:\n  rules: []")
+    }
 }
