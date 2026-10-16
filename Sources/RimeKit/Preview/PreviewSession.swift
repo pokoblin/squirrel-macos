@@ -320,7 +320,7 @@ public actor PreviewSession: PreviewEngine {
         if grace > .zero, case let .value(status) = await running.exit.next(timeout: grace) { return status }
         if running.process.isRunning { running.process.terminate() }
         if case let .value(status) = await running.exit.next(timeout: .seconds(2)) { return status }
-        Darwin.kill(running.process.processIdentifier, SIGKILL)
+        if running.process.isRunning { Darwin.kill(running.process.processIdentifier, SIGKILL) }
         if case let .value(status) = await running.exit.next(timeout: .seconds(2)) { return status }
         return nil
     }

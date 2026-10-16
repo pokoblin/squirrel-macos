@@ -76,7 +76,7 @@ struct PreviewSessionTests {
         await #expect(throws: PreviewError.timedOut) {
             try await s.open(userDir: dir.url, schema: "py")
         }
-        #expect(clock.now - start < .seconds(5))
+        #expect(clock.now - start < .seconds(10))   // 卡住的话要等 30 秒；留够并行时的余量
         // 进程已经停了，之后的请求都报 helperDied
         try await expectHelperDied { _ = try await s.input("a") }
         await s.close()
@@ -86,7 +86,7 @@ struct PreviewSessionTests {
         // sh 先 fork 一个 sleep 再等它（不是 exec）：杀掉 sh 以后 sleep 还拿着 stdout，
         // 读不到 EOF。会话不能因此卡住
         let dir = try TempDir(); defer { dir.remove() }
-        let fake = try PreviewFixtures.fakeHelper(in: dir.url, script: "read line\nsleep 3")
+        let fake = try PreviewFixtures.fakeHelper(in: dir.url, script: "read line\nsleep 30")
         let s = PreviewSession(helper: fake, openTimeout: .milliseconds(300), requestTimeout: .milliseconds(300))
         let clock = ContinuousClock()
         let start = clock.now
@@ -94,7 +94,8 @@ struct PreviewSessionTests {
             try await s.open(userDir: dir.url, schema: "py")
         }
         await s.close()
-        #expect(clock.now - start < .seconds(2))
+        // 卡住的话要等 sleep 30 结束；10 秒的上限留够了测试并行时的余量
+        #expect(clock.now - start < .seconds(10))
     }
 
     @Test func 中途退出() async throws {
@@ -137,7 +138,7 @@ struct PreviewSessionTests {
         let clock = ContinuousClock()
         let start = clock.now
         try await expectHelperDied { _ = try await s.open(userDir: dir.url, schema: "py") }
-        #expect(clock.now - start < .seconds(5))
+        #expect(clock.now - start < .seconds(10))   // 卡住的话要等 30 秒；留够并行时的余量
         await s.close()
     }
 
