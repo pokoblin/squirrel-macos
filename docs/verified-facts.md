@@ -261,6 +261,34 @@ ORDER BY ZSHORTCUT;
 
 现在有现成的 C 版工具 [tools/vm/rime-type-probe.c](../tools/vm/rime-type-probe.c)（`./tools/vm/build-probes.sh` 编译），用法 `rime-type-probe <用户目录副本> <方案id> <编码>...`，传真实的 `~/Library/Rime` 会直接拒绝。它会加载鼠须管自带的插件，**Lua 和 OpenCC 都能用**（雾凇 `rq` 出日期、`xiaolian` 出 emoji）。实测：宿主机参考配置副本、squirrel-dev，2026-10-15。
 
+### 8.1 签了名的应用能不能加载 librime（试打预览的小试验，squirrel-dev，2026-10-16）
+
+同一份 `rime-type-probe.c`，用不同方式签名后在测试机里跑（鼠须管 1.1.2，librime 和插件的团队是 `28HU5A7B46`，我们的是 `VS555M5VA8`）：
+
+| 签名方式 | 结果 |
+|---|---|
+| Developer ID + hardened runtime，不加 entitlement（发布版应用现在就是这样） | **加载失败**：`dlopen` 报 `mapping process and mapped file (non-platform) have different Team IDs` |
+| 临时签名（`-s -`）+ hardened runtime | 同样失败 |
+| 临时签名，不开 hardened runtime（`build-app.sh` 默认的 debug 包就是这样） | 能加载。**所以测试机里装 debug 包试不出这个问题，必须装 Developer ID + hardened runtime 签名的包来测** |
+| Developer ID + hardened runtime + `com.apple.security.cs.disable-library-validation` | 能加载，Lua、OpenCC 插件也正常（`rq` 出日期、`xiaolian` 出 emoji） |
+| 主程序 hardened、不加 entitlement；它启动的辅助程序 hardened + 上面的 entitlement | 主程序自己 `dlopen` 失败，辅助程序能正常出候选 |
+
+结论：
+
+- 不管选哪条路，**加载 librime 的那个进程都得有 `disable-library-validation`**。我们自己签名的程序不可能和鼠须管同一个团队，没有别的办法绕开。两条路的区别只是：这个 entitlement 加在主应用上，还是只加在一个小的辅助程序上（主应用保持库验证）。
+- 苹果文档把 `disable-library-validation` 列为 hardened runtime 允许的例外，公证接受；这次没有真的提交公证，第一次打带辅助程序的发布包时确认。
+- 同一个进程里 `finalize` 以后，可以换一个用户目录再 `initialize`，换目录生效（不用 `setup` 第二次）。
+- **`select_schema` 遇到不存在的方案也返回成功**（空目录里也一样），只是候选为空。预览前要自己检查方案在不在（看副本的 `build/<方案id>.schema.yaml`）。
+- librime 会往 stderr 打 glog 的 INFO 日志（`Logging before InitGoogleLogging()…`），`min_log_level` 管不住这几行。
+- 函数表更多下标（实测，雾凇全拼）：`data_size` 是 788（98 个函数指针）；get_current_schema 33、simulate_key_sequence 47（`"women{space}"` 上屏「我们」）、select_candidate 71（按总序号选）、get_version 72（返回 `1.16.0`）、select_candidate_on_current_page 74（按本页序号选，选中即上屏）。
+- `process_key` 直接传 X11 键码就能翻页、删除：Page_Up `0xff55`、Page_Down `0xff56`、BackSpace `0xff08`、Escape `0xff1b`（清空编码）。翻页后 `menu.page_no` 变化，`is_last_page` 表示是否最后一页。雾凇的 `select_labels` 是空指针（用默认的 1–9 数字）。
+
+用临时副本，不和鼠须管抢目录：
+
+- 预览会往用户目录写 `user.yaml` 和 `<方案>.userdb`。用户目录指向副本时，这些都写进副本；前后对比真实 `~/Library/Rime` 所有文件的修改时间和大小，没有变化（鼠须管同时在运行）。
+- 复制整份 `~/Library/Rime`（121 MB，其中 `build/` 73 MB）用 APFS 克隆（`cp -cR`）只要 0.01 秒。
+- 副本里**连 `build/` 一起复制**时不用重新编译，启动 + 选方案 + 打几个编码一共约 0.1 秒；只复制配置文件再用 `rime_deployer --build` 编译雾凇全拼要 9.5 秒。
+
 ---
 
 ## 9. 测试环境本身的事实
