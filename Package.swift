@@ -13,9 +13,15 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", exact: "6.2.2"),
     ],
     targets: [
+        // 两个很小的共用 target：只依赖 Foundation，试打预览的辅助程序也要用，所以不能依赖 RimeKit
+        .target(name: "RimeGuard"),
+        .target(name: "RimePreviewProtocol"),
         .target(
             name: "RimeKit",
-            dependencies: [.product(name: "Yams", package: "Yams")],
+            dependencies: [
+                "RimeGuard", "RimePreviewProtocol",
+                .product(name: "Yams", package: "Yams"),
+            ],
             resources: [.copy("Resources/catalog.json")]
         ),
         .executableTarget(name: "rimectl", dependencies: ["RimeKit"]),
