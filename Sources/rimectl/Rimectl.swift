@@ -68,6 +68,12 @@ struct Rimectl {
       rimectl preview [--pending] [--data-dir <目录>] --schema <方案id> <编码>...
       rimectl preview [--pending] --list                      列出方案
       rimectl preview --schema <方案id> --find <词> <编码>      找这个词在第几页第几个
+      rimectl wubi encode <词>...                              打印自动算出的编码（多个可能时都打印）
+      rimectl wubi list                                        列出个人词库里的词
+      rimectl wubi add <词> [编码] [--position N]              加一个词（N 从 1 起；不写就排在最后）
+      rimectl wubi remove <词> [编码]                          删除
+      rimectl wubi import <文件>                               按「词 [编码 [权重]]」的格式导入（只加可以加的行，其余打印出来）
+      rimectl wubi check                                       检查个人词库里所有的词能不能打出来
     通用参数：--data-dir 目录（应用数据目录）  --rime-dir 目录（Rime 用户目录，默认 ~/Library/Rime）
     """
 
@@ -99,6 +105,7 @@ struct Rimectl {
         var pending = false
         var schema: String?
         var find: String?
+        var position: Int?
         var positional: [String] = []
         var i = 0
         while i < args.count {
@@ -147,6 +154,10 @@ struct Rimectl {
             case "--find":
                 guard i + 1 < args.count else { out.error(usage); return 2 }
                 find = args[i + 1]
+                i += 2
+            case "--position":
+                guard i + 1 < args.count, let n = Int(args[i + 1]), n >= 1 else { out.error(usage); return 2 }
+                position = n
                 i += 2
             case "--list":
                 listOnly = true
@@ -218,6 +229,8 @@ struct Rimectl {
                 return await preview(Array(positional.dropFirst()),
                                      options: PreviewOptions(pending: pending, list: listOnly, schema: schema, find: find),
                                      paths: paths, locations: locations, context)
+            case "wubi":
+                return await wubi(Array(positional.dropFirst()), position: position, paths: paths, locations: locations, context)
             case "fetch":
                 let ids = Array(positional.dropFirst())
                 guard !ids.isEmpty else { out.error(usage); return 2 }
