@@ -418,6 +418,123 @@ private final class PageEngines: @unchecked Sendable {
         #expect(s.personalText() == before)
     }
 
+    @Test func 改和删认词条_不是原来那个就不动() async throws {
+        let s = try setup(); defer { s.remove() }
+        try s.writePersonal(WubiFixtures.userDict + "\n甲乙\twqiy\t15\n丙丁\tabcd\n")
+        let model = await loaded(s)
+        let before = s.personalText()
+        // 用户看到的第 2 个是「丙丁」，但现在第 2 个是「甲乙」
+        let seen = DictEntry(text: "丙丁", code: "abcd")
+        let changed = await model.update(at: 1, expected: seen, code: "abce", position: nil)
+        #expect(!changed)
+        #expect(model.message?.contains("丙丁") == true)
+        await model.remove(at: 1, expected: seen)
+        #expect(model.message?.contains("已经不是") == true)
+        #expect(s.personalText() == before)
+        // 对得上就照常
+        await model.remove(at: 2, expected: seen)
+        #expect(s.personalText() == WubiFixtures.userDict + "\n甲乙\twqiy\t15\n")
+    }
+
+    @Test func 改的时候没动编码和位置就不写() async throws {
+        let s = try setup(); defer { s.remove() }
+        // 没写编码的词条：点「保存」不能把自动编码写进去
+        try s.writePersonal(WubiFixtures.userDict + "\n张三丰\n")
+        let model = await loaded(s)
+        let before = s.personalText()
+        let pending = model.needsApply
+        let code = try #require(model.codes[1])
+        let ok = await model.update(at: 1, code: code, position: model.positions[1])
+        #expect(ok)
+        #expect(s.personalText() == before)
+        #expect(model.entries[1] == DictEntry(text: "张三丰"))
+        #expect(model.needsApply == pending)
+    }
+
+    @Test func 改的时候放不进去_返回没成功() async throws {
+        let s = try setup(); defer { s.remove() }
+        // wqiy 下：你 20、甲乙 19、仰泳 10；丙丁在 abcd 下
+        try s.writePersonal(WubiFixtures.userDict + "\n甲乙\twqiy\t19\n丙丁\tabcd\n")
+        let model = await loaded(s)
+        let before = s.personalText()
+        let ok = await model.update(at: 2, code: "wqiy", position: 2)
+        #expect(!ok)
+        #expect(model.message == "这个位置放不进去")
+        #expect(s.personalText() == before)
+    }
+
+    // MARK: 导入：位置和跳过
+
+    @Test func 导入时每行可以选位置() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        // wqiy 下：你 20、仰泳 10。放第 1 个 = 30，放第 2 个（在仰泳前面）= 15，没选位置 = 不写权重
+        var rows = await model.importRows("甲乙\twqiy\n丙丁\twqiy\n戊己\twqiy\n")
+        rows[0].position = 1
+        rows[1].position = 3
+        await model.confirmImport(rows)
+        #expect(model.entries.suffix(3) == [
+            DictEntry(text: "甲乙", code: "wqiy", weight: 30),
+            DictEntry(text: "丙丁", code: "wqiy"),
+            DictEntry(text: "戊己", code: "wqiy"),
+        ])
+        #expect(model.message == "加入 3 个，可以点「检查能不能打出来」")
+    }
+
+    @Test func 导入时行里写了权重_没选位置就用它_选了位置就按位置() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        var rows = await model.importRows("甲乙\twqiy\t7\n丙丁\twqiy\t8\n")
+        rows[1].position = 1
+        await model.confirmImport(rows)
+        #expect(model.entries.suffix(2) == [
+            DictEntry(text: "甲乙", code: "wqiy", weight: 7),
+            DictEntry(text: "丙丁", code: "wqiy", weight: 30),
+        ])
+    }
+
+    @Test func 导入时放不进去的行不加_说明原因() async throws {
+        let s = try setup(); defer { s.remove() }
+        // wqiy 下：你 20、乙丙 19、仰泳 10：第 2 个放不进去
+        try s.writePersonal(WubiFixtures.userDict + "\n乙丙\twqiy\t19\n")
+        let model = await loaded(s)
+        var rows = await model.importRows("甲乙\twqiy\n丙丁\tabcd\n")
+        rows[0].position = 2
+        #expect(model.importProblem(rows[0]) == "这个位置放不进去")
+        #expect(model.importCount(rows) == 1)
+        await model.confirmImport(rows)
+        #expect(model.entries.map(\.text) == ["分组词条", "乙丙", "丙丁"])
+        #expect(model.message == "加入 1 个，可以点「检查能不能打出来」；跳过 1 个：1 个位置放不进去")
+    }
+
+    @Test func 导入时勾了已有的和重复的行_数目和说明对得上() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        var rows = await model.importRows("仰泳\n甲乙\twqiy\n甲乙\twqiy\n")
+        #expect(rows.map(\.status) == [.alreadyInDict, .ok, .duplicateInBatch])
+        // 用户硬勾上
+        for i in rows.indices { rows[i].selected = true }
+        #expect(model.importProblem(rows[0]) == "词库里已经有了")
+        #expect(model.importProblem(rows[1]) == nil)
+        // 第 3 行是和第 2 行重复的：只算一次
+        #expect(model.importCount(rows) == 1)
+        await model.confirmImport(rows)
+        #expect(model.entries.map(\.text) == ["分组词条", "甲乙"])
+        #expect(model.message == "加入 1 个，可以点「检查能不能打出来」；跳过 2 个：1 个已经有了，1 个和前面的行重复")
+    }
+
+    @Test func 导入的行都跳过时不写文件() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        let before = s.personalText()
+        var rows = await model.importRows("仰泳\n")
+        rows[0].selected = true
+        await model.confirmImport(rows)
+        #expect(s.personalText() == before)
+        #expect(!model.needsApply)
+        #expect(model.message == "没有可以加的词：跳过 1 个：1 个已经有了")
+    }
+
     // MARK: 检查
 
     @Test func 检查结果按序号放() async throws {

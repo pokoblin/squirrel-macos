@@ -12,9 +12,27 @@ struct WubiImportSheet: View {
     @State private var parsing = false
     @State private var choosing = false
     @State private var problem: String?
+    /// 预览时每一行的编码（行 id → 编码）：没改过编码的「已经有了」「重复」行不让勾
+    @State private var originalCodes: [Int: String] = [:]
 
-    /// 勾上的、编码合法的行数
-    private var count: Int { WubiImport.entries(from: rows ?? []).count }
+    /// 现在点「加入」会加几个（和真的加的一致）
+    private var count: Int { wubi.importCount(effectiveRows) }
+
+    /// 这一行勾不上：编码不对、词库里已经有了（用户没改编码时包括和前面的行重复）
+    private func blocked(_ row: ImportRow) -> Bool {
+        if wubi.importProblem(row) != nil { return true }
+        let repeated = row.status == .duplicateInBatch && row.code == originalCodes[row.id]
+        return repeated
+    }
+
+    /// 真正要加的：勾着但勾不上的行不算
+    private var effectiveRows: [ImportRow] {
+        (rows ?? []).map { row in
+            var row = row
+            row.selected = row.selected && !blocked(row)
+            return row
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -44,7 +62,7 @@ struct WubiImportSheet: View {
                 Button("取消", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("加入 \(count) 个") {
-                    let chosen = rows ?? []
+                    let chosen = effectiveRows
                     dismiss()
                     Task { await wubi.confirmImport(chosen) }
                 }
@@ -67,23 +85,24 @@ struct WubiImportSheet: View {
         if list.isEmpty {
             Text("没有认出可以导入的行。").foregroundStyle(.secondary)
         } else {
-            let selected = list.filter(\.selected).count
-            Text("共 \(list.count) 行，勾上了 \(selected) 行。改了编码以后，加入时会再查一次有没有重复。")
+            Text("共 \(list.count) 行，会加入 \(count) 行。可以改编码、选排在第几，已经有了的词不能勾。")
                 .font(.caption).foregroundStyle(.secondary)
             List {
                 ForEach(Binding($rows) ?? .constant([])) { $row in
                     HStack(spacing: 10) {
-                        Toggle("", isOn: $row.selected)
+                        let isBlocked = blocked(row)
+                        Toggle("", isOn: Binding(get: { row.selected && !isBlocked }, set: { row.selected = $0 }))
                             .labelsHidden()
-                            // 没有合法编码的行勾不上，先填编码
-                            .disabled(!WubiEncoder.isValidCode(row.code))
-                        Text(row.text).frame(width: 130, alignment: .leading).lineLimit(1)
+                            // 没有合法编码、词库里已经有了的行勾不上：先改编码
+                            .disabled(isBlocked)
+                        Text(row.text).frame(width: 110, alignment: .leading).lineLimit(1)
                         codeField($row)
-                        Text(Self.statusText(row.status))
-                            .font(.caption)
-                            .foregroundStyle(Self.statusColor(row.status))
+                        positionPicker($row)
+                        statusLabel(row)
                         Spacer()
                     }
+                    // 换了编码，原来选的位置就没意义了
+                    .onChange(of: row.code) { row.position = nil }
                 }
             }
             .listStyle(.bordered)
@@ -104,6 +123,47 @@ struct WubiImportSheet: View {
                 .font(.body.monospaced())
                 .frame(width: 90)
         }
+    }
+
+    /// 排在第几：只有这个编码下已经有词（或者行里写了权重）的行才需要选
+    @ViewBuilder private func positionPicker(_ row: Binding<ImportRow>) -> some View {
+        let value = row.wrappedValue
+        let words = wubi.words(for: value.code)
+        if WubiEncoder.isValidCode(value.code), !words.isEmpty || value.weight != nil {
+            let last = words.count + 1
+            Picker("", selection: Binding(
+                get: { value.position.map { min($0, last) } ?? (value.weight != nil ? 0 : last) },
+                set: { new in
+                    // 0 是「按行里写的权重」；没写权重的行，选「最后」就是没选
+                    row.wrappedValue.position = new == 0 || (new == last && value.weight == nil) ? nil : new
+                }
+            )) {
+                if value.weight != nil { Text("按文件里的权重").tag(0) }
+                ForEach(1...last, id: \.self) { n in
+                    Text(wubiPositionLabel(n, words: words)).tag(n)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 170)
+            .disabled(blocked(value))
+        } else {
+            Color.clear.frame(width: 170, height: 1)
+        }
+    }
+
+    /// 状态：没改过编码就是预览时的状态；改过就是现在这样能不能加
+    private func statusLabel(_ row: ImportRow) -> some View {
+        let changed = row.code != originalCodes[row.id]
+        let problem = wubi.importProblem(row)
+        let text = changed ? (problem ?? "可以加") : Self.statusText(row.status, problem: problem)
+        let color: Color = problem == nil ? (changed ? .secondary : Self.statusColor(row.status)) : .orange
+        return Text(text).font(.caption).foregroundStyle(color)
+    }
+
+    static func statusText(_ status: ImportStatus, problem: String? = nil) -> String {
+        // 位置放不进去这类，状态本身没写，要把原因带出来
+        if let problem, status == .ok || status == .choose { return problem }
+        return statusText(status)
     }
 
     static func statusText(_ status: ImportStatus) -> String {
@@ -131,7 +191,9 @@ struct WubiImportSheet: View {
         parsing = true
         problem = nil
         defer { parsing = false }
-        rows = await wubi.importRows(text)
+        let parsed = await wubi.importRows(text)
+        originalCodes = Dictionary(uniqueKeysWithValues: parsed.map { ($0.id, $0.code) })
+        rows = parsed
     }
 
     private func load(_ result: Result<URL, Error>) {

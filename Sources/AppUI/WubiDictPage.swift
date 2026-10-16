@@ -12,8 +12,10 @@ struct WubiDictPage: View {
     private var wubi: WubiDictModel { model.wubiDict }
     private var busy: Bool { wubi.isSaving || wubi.isLoading || wubi.isChecking }
 
+    /// 点「改」时看到的词条：模型核对第 index 个还是它，不是就不改
     struct EditTarget: Identifiable {
         var id: Int
+        var entry: DictEntry
     }
 
     var body: some View {
@@ -27,7 +29,7 @@ struct WubiDictPage: View {
         .task { await wubi.load(settings: model.draft) }
         .sheet(isPresented: $importing) { WubiImportSheet(wubi: wubi) }
         .sheet(item: $editing) { target in
-            WubiEditSheet(wubi: wubi, index: target.id)
+            WubiEditSheet(wubi: wubi, index: target.id, entry: target.entry)
         }
     }
 
@@ -157,8 +159,12 @@ struct WubiDictPage: View {
     }
 
     @ViewBuilder private func rowActions(_ i: Int) -> some View {
-        Button("改编码和位置……") { editing = EditTarget(id: i) }
-        Button("删除", role: .destructive) { Task { await wubi.remove(at: i) } }
+        // 点的时候就记下这一行的词条：保存、删除时模型核对第 i 个还是它，防止这期间词库变了改错行
+        let entry = wubi.entries[i]
+        Button("改编码和位置……") { editing = EditTarget(id: i, entry: entry) }
+            .disabled(busy)
+        Button("删除", role: .destructive) { Task { await wubi.remove(at: i, expected: entry) } }
+            .disabled(busy)
     }
 
     @ViewBuilder private func checkText(_ result: CheckResult?) -> some View {
@@ -267,7 +273,11 @@ private struct AddWordSection: View {
 private struct WubiEditSheet: View {
     let wubi: WubiDictModel
     let index: Int
+    /// 打开时看到的词条
+    let entry: DictEntry
     @Environment(\.dismiss) private var dismiss
+    @State private var problem: String?
+    @State private var saving = false
     @State private var code = ""
     @State private var position = 1
     @State private var loaded = false
@@ -275,12 +285,10 @@ private struct WubiEditSheet: View {
     @State private var initialCode = ""
     @State private var initialPosition = 1
 
-    private var entry: DictEntry? { wubi.entries.indices.contains(index) ? wubi.entries[index] : nil }
-
     /// 这个编码下除了它自己的词（位置是相对这些词说的）
     private var others: [IndexedWord] {
         var words = wubi.words(for: code)
-        if let text = entry?.text, let at = words.firstIndex(where: { $0.isPersonal && $0.text == text }) {
+        if let at = words.firstIndex(where: { $0.isPersonal && $0.text == entry.text }) {
             words.remove(at: at)
         }
         return words
@@ -290,7 +298,7 @@ private struct WubiEditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("改「\(entry?.text ?? "")」的编码和位置").font(.title3.bold())
+            Text("改「\(entry.text)」的编码和位置").font(.title3.bold())
             HStack {
                 Text("编码")
                 TextField("a–y 的 1 到 4 个字母", text: $code)
@@ -310,18 +318,22 @@ private struct WubiEditSheet: View {
             } else {
                 Text("编码只能是 a 到 y 的小写字母，1 到 4 个").font(.caption).foregroundStyle(.red)
             }
+            // 放不进去、已经有了这类问题留在这里，让用户换个位置或编码再存
+            if let problem {
+                Label(problem, systemImage: "exclamationmark.circle")
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Spacer()
-                Button("取消", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("保存") {
-                    let chosen = position
-                    let newCode = code
+                Button("取消", role: .cancel) {
+                    wubi.message = nil
                     dismiss()
-                    Task { await wubi.update(at: index, code: newCode, position: chosen) }
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!valid || entry == nil)
+                .keyboardShortcut(.cancelAction)
+                Button("保存") { Task { await save() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!valid || saving || wubi.isSaving || wubi.isLoading)
             }
         }
         .padding(20)
@@ -334,10 +346,28 @@ private struct WubiEditSheet: View {
             initialPosition = wubi.positions[index] ?? (others.count + 1)
             position = initialPosition
         }
+        .onChange(of: position) { problem = nil }
         // 换了编码：位置回到「最后」（原来的位置只对原来的编码有意义）；改回原来的编码就回到原来的位置
         .onChange(of: code) { _, new in
             guard loaded else { return }
+            problem = nil
             position = new == initialCode ? initialPosition : (valid ? others.count : 0) + 1
+        }
+    }
+
+    private func save() async {
+        // 编码和位置都没动：直接关，什么都不写
+        if code == initialCode, position == initialPosition {
+            dismiss()
+            return
+        }
+        saving = true
+        defer { saving = false }
+        if await wubi.update(at: index, expected: entry, code: code, position: position) {
+            dismiss()
+        } else {
+            problem = wubi.message ?? "没能保存"
+            wubi.message = nil
         }
     }
 }

@@ -65,7 +65,9 @@ struct ApplyBar: View {
 
     /// 只有五笔词库改了（设置没动、清单没更新）时要说清楚，不然「撤销」找不到、也不知道应用的是什么
     private var pendingText: String {
-        if model.isDirty { return "有改动还没应用" }
+        if model.isDirty {
+            return model.wubiDict.needsApply ? "有改动还没应用（「撤销」只撤销设置，不撤销五笔词库的改动）" : "有改动还没应用"
+        }
         if model.catalogNeedsApply {
             return model.wubiDict.needsApply ? "方案清单更新了，五笔词库也有改动，还没应用" : "方案清单更新了，还没应用"
         }

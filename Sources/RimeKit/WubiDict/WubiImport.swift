@@ -28,9 +28,12 @@ public struct ImportRow: Equatable, Sendable, Identifiable {
     public var weight: Int?
     public var status: ImportStatus
     public var selected: Bool
+    /// 用户在表里选的位置（从 1 起；比这个编码下现有的词数还大就是「最后」）。
+    /// nil 是没选：行里写了权重就用那个权重，没写就排最后（不写权重）
+    public var position: Int?
 
     public init(id: Int, text: String, code: String, choices: [String], weight: Int?,
-                status: ImportStatus, selected: Bool) {
+                status: ImportStatus, selected: Bool, position: Int? = nil) {
         self.id = id
         self.text = text
         self.code = code
@@ -38,6 +41,7 @@ public struct ImportRow: Equatable, Sendable, Identifiable {
         self.weight = weight
         self.status = status
         self.selected = selected
+        self.position = position
     }
 }
 

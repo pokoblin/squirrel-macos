@@ -226,19 +226,33 @@ public final class WubiDictModel {
         // 没写成时 commit 已经把原因放进 message
     }
 
-    /// 改第 i 个词条的编码和位置（位置从 1 起，nil 是最后）
-    public func update(at i: Int, code: String, position: Int?) async {
+    /// 改第 i 个词条的编码和位置（位置从 1 起，nil 是最后）。
+    /// expected 是用户点「改」时看到的那个词条：第 i 个现在不是它了（词库在这期间变了），就不改，说明原因。
+    /// 返回改成了没有（编码和位置都没变也算成功，不写文件；没成时原因在 message 里）
+    @discardableResult
+    public func update(at i: Int, expected: DictEntry? = nil, code: String, position: Int?) async -> Bool {
         guard let editor else {
             message = notEditable
-            return
+            return false
+        }
+        guard entries.indices.contains(i) else {
+            message = WubiEditProblem.noSuchEntry.description
+            return false
+        }
+        guard matches(expected, at: i) else { return false }
+        // 编码、位置都没动：什么都不写（没写编码的词条不能因为点了「保存」就被写上自动编码）
+        if let position, code == codes[i], position == positions[i] {
+            message = nil
+            return true
         }
         switch editor.planUpdate(at: i, code: code, position: position) {
         case .failure(let problem):
             message = problem.description
+            return false
         case .success(let entry):
             message = nil
-            guard entry != editor.userFile.entries[i] else { return }
-            await commit { editor in
+            guard entry != editor.userFile.entries[i] else { return true }
+            return await commit { editor in
                 var file = editor.userFile
                 file.replaceEntry(at: i, with: entry)
                 return editor.replacing(userFile: file)
@@ -246,7 +260,8 @@ public final class WubiDictModel {
         }
     }
 
-    public func remove(at i: Int) async {
+    /// 删第 i 个词条。expected 的意思同 `update`
+    public func remove(at i: Int, expected: DictEntry? = nil) async {
         guard editor != nil else {
             message = notEditable
             return
@@ -255,8 +270,16 @@ public final class WubiDictModel {
             message = WubiEditProblem.noSuchEntry.description
             return
         }
+        guard matches(expected, at: i) else { return }
         message = nil
         await commit { $0.replacing(userFile: WubiEditor.remove(indices: [i], from: $0.userFile)) }
+    }
+
+    /// 第 i 个词条还是用户看到的那个吗（不是就把原因放进 message）
+    private func matches(_ expected: DictEntry?, at i: Int) -> Bool {
+        guard let expected, entries[i] != expected else { return true }
+        message = "词库刚才变了，这一行已经不是「\(expected.text)」了，请重新选一次"
+        return false
     }
 
     // MARK: 批量导入
@@ -268,27 +291,82 @@ public final class WubiDictModel {
         return await Task.detached { editor.parseImport(text) }.value
     }
 
-    /// 把选中的行加进去。用户在表里可能改过编码：再查一次重，重复的跳过
+    /// 这一行现在加不进去的原因（已经加过了、词库里已经有了、位置放不进去、编码不对……）；能加就是 nil。
+    /// 表里用它决定能不能勾（只看这一行和现有的词库，不管同一批里别的行）
+    public func importProblem(_ row: ImportRow) -> String? {
+        guard let editor else { return notEditable }
+        guard !row.text.isEmpty, WubiEncoder.isValidCode(row.code) else { return WubiEditProblem.invalidCode.description }
+        let position = Self.planPosition(row, editor: editor)
+        if case .failure(let problem) = editor.plan(text: row.text, code: row.code, position: position.position) {
+            return problem.description
+        }
+        return nil
+    }
+
+    /// 现在点「加入」会加几个（勾上的、加得进去的、同一批里不重复的）。和 `confirmImport` 实际加的一致，
+    /// 只有同一批里互相挤占位置的情况没算
+    public func importCount(_ rows: [ImportRow]) -> Int {
+        var seen = Set<String>()
+        var count = 0
+        for row in rows where row.selected && importProblem(row) == nil {
+            if seen.insert(row.text + "\t" + row.code).inserted { count += 1 }
+        }
+        return count
+    }
+
+    /// 行里选的位置变成 `plan` 要的位置，以及没选位置时要不要用行里的权重
+    private nonisolated static func planPosition(_ row: ImportRow, editor: WubiEditor) -> (position: Int?, useRowWeight: Bool) {
+        guard let chosen = row.position else { return (nil, true) }
+        let count = WubiEncoder.isValidCode(row.code) ? editor.index.words(for: row.code).count : 0
+        return (chosen > count ? nil : chosen, false)
+    }
+
+    /// 把选中的行加进去。用户在表里可能改过编码、位置：每一行都再查一次重、再算位置和权重；
+    /// 重复的、已有的、位置放不进去的跳过，并在 message 里说明跳过几个、为什么
     public func confirmImport(_ rows: [ImportRow]) async {
-        guard let editor else {
+        guard editor != nil else {
             message = notEditable
             return
         }
-        var kept: [DictEntry] = []
-        var seen = Set<String>()
-        for e in WubiImport.entries(from: rows) {
-            let code = e.code ?? ""
-            let found = editor.index.contains(text: e.text, code: code)
-            guard !found.inPersonal, !found.inOthers, seen.insert(e.text + "\t" + code).inserted else { continue }
-            kept.append(e)
+        message = nil
+        let chosen = rows.filter { $0.selected && !$0.text.isEmpty && WubiEncoder.isValidCode($0.code) }
+        let report = ImportReport()
+        let added: Bool = await commit { editor in
+            var current = editor
+            var pending: [DictEntry] = []
+            var seen = Set<String>()
+            for row in chosen {
+                guard seen.insert(row.text + "\t" + row.code).inserted else {
+                    report.skip(.repeated)
+                    continue
+                }
+                let position = Self.planPosition(row, editor: current)
+                // 这一行要按位置算权重时，前面加的词也要算进去
+                if position.position != nil, !pending.isEmpty {
+                    current = current.applying(pending)
+                    pending = []
+                }
+                switch current.plan(text: row.text, code: row.code, position: position.position) {
+                case .success(var entry):
+                    if position.useRowWeight { entry.weight = row.weight }
+                    pending.append(entry)
+                    report.added += 1
+                case .failure(.noRoom):
+                    report.skip(.noRoom)
+                case .failure(.alreadyPersonal), .failure(.alreadyInDict):
+                    report.skip(.exists)
+                case .failure:
+                    report.skip(.invalid)
+                }
+            }
+            return pending.isEmpty ? current : current.applying(pending)
         }
-        guard !kept.isEmpty else {
-            message = "没有可以加的词"
-            return
-        }
-        let adding = kept
-        if await commit({ $0.applying(adding) }) {
-            message = "加入 \(adding.count) 个，可以点「检查能不能打出来」"
+        let skipped = report.skippedText
+        if added {
+            message = "加入 \(report.added) 个，可以点「检查能不能打出来」" + (skipped.isEmpty ? "" : "；\(skipped)")
+        } else if report.added == 0, message == nil {
+            // 一个都没加成，也没有别的出错说明
+            message = "没有可以加的词" + (skipped.isEmpty ? "" : "：\(skipped)")
         }
     }
 
@@ -510,12 +588,15 @@ public final class WubiDictModel {
         let store = self.store
         let base = self.base
         do {
-            let (snapshot, saved) = try await Task.detached {
+            let result = try await Task.detached { () throws -> (Snapshot, Data)? in
                 try Self.ensureUnchanged(store, base)
                 let updated = make(editor)
+                // 什么都没改（比如导入的行都被跳过）：不写文件
+                if updated.userFile == editor.userFile { return nil }
                 try store.save(updated.userFile)
                 return (Snapshot(updated), Data(updated.userFile.render().utf8))
             }.value
+            guard let (snapshot, saved) = result else { return false }
             guard current == generation else {
                 // 写进去了，但这期间页面重新读了词库：以重新读的为准
                 message = "已经保存；词库刚才重新读过，请看一下刚才的改动"
@@ -615,5 +696,34 @@ public final class WubiDictModel {
             draftProblem = problem.description
             canAdd = false
         }
+    }
+}
+
+
+/// 导入时记下加了几个、跳过几个（在后台线程里填，所以加锁）
+private final class ImportReport: @unchecked Sendable {
+    enum Reason { case repeated, exists, noRoom, invalid }
+    private let lock = NSLock()
+    private var _added = 0
+    private var counts: [Reason: Int] = [:]
+
+    var added: Int {
+        get { lock.withLock { _added } }
+        set { lock.withLock { _added = newValue } }
+    }
+
+    func skip(_ reason: Reason) {
+        lock.withLock { counts[reason, default: 0] += 1 }
+    }
+
+    /// 比如「跳过 3 个：2 个已经有了，1 个位置放不进去」；没跳过是空串
+    var skippedText: String {
+        let parts: [(Reason, String)] = [
+            (.exists, "已经有了"), (.repeated, "和前面的行重复"), (.noRoom, "位置放不进去"), (.invalid, "词或编码不对"),
+        ]
+        let (items, total) = lock.withLock { () -> ([String], Int) in
+            (parts.compactMap { r, text in counts[r].map { "\($0) 个\(text)" } }, counts.values.reduce(0, +))
+        }
+        return total == 0 ? "" : "跳过 \(total) 个：" + items.joined(separator: "，")
     }
 }
