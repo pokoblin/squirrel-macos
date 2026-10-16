@@ -76,11 +76,12 @@ public final class PreviewModel {
 
     // MARK: 进入、离开、换来源
 
-    /// 进入页面：准备副本、打开第一个方案。上次停在「应用后的样子」但已经没有未应用的改动时，用「当前生效」
+    /// 进入页面：总是从「当前生效」开始（设计 4.2），准备副本、打开第一个方案
     public func enter(draft: Settings, hasPending: Bool) async {
         guard !entered else { return }
         entered = true
-        if source == .pending && !hasPending { source = .current }
+        source = .current
+        schema = nil
         await load(draft: draft, hasPending: hasPending)
     }
 

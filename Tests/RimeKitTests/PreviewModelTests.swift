@@ -309,18 +309,42 @@ final class GatedCompiler: RimeCompiler, @unchecked Sendable {
         #expect(model.phase == .idle)
         #expect(s.stagingIsEmpty())
 
-        // 来源停在「应用后的样子」，再进入时离开：一个引擎都没建
+        // 「应用后的样子」重新载入时离开：结果丢掉，不 open
+        await model.enter(draft: draft, hasPending: true)
+        await model.switchSource(.pending, draft: draft, hasPending: true)
+        let engine = try #require(s.engines.all.last)
+        let opensBefore = await engine.opens.count
         s.compiler.block()
-        let entering = Task { await model.enter(draft: draft, hasPending: true) }
+        let reloading = Task { await model.reload(draft: draft, hasPending: true) }
         try await waitUntil { s.compiler.isWaiting }
         await model.leave()
         s.compiler.release()
-        await entering.value
-        #expect(s.engines.all.count == 1)
-        #expect(await s.engine.opens.count == 1)
+        await reloading.value
+        #expect(await engine.opens.count == opensBefore)
+        #expect(await engine.calls.last == .close)
         #expect(model.phase == .idle)
         #expect(s.stagingIsEmpty())
-        #expect(s.compiler.compiled.count == 2)
+        #expect(s.compiler.compiled.count == 3)
+    }
+
+    /// 设计 4.2：进入页面总是从「当前生效」开始，不记上次的来源（免得一进来就编译 10 秒）
+    @Test func 再进入时从当前生效开始() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = PreviewModel(env: s.env)
+        await model.enter(draft: draft, hasPending: true)
+        await model.switchSource(.pending, draft: draft, hasPending: true)
+        #expect(model.source == .pending && s.compiler.compiled.count == 1)
+        await model.leave()
+        await model.enter(draft: draft, hasPending: true)
+        #expect(model.source == .current)
+        #expect(model.phase == .ready)
+        #expect(model.schema == "wb_py")
+        #expect(s.compiler.compiled.count == 1)   // 没有编译
+        let engine = try #require(s.engines.all.last)
+        guard case let .open(dir, _)? = await engine.opens.last else { Issue.record("没有 open"); return }
+        #expect(dir.lastPathComponent == "user")   // 「当前生效」副本的目录
+        await model.leave()
+        #expect(s.stagingIsEmpty())
     }
 
     /// Review Focus 4：辅助程序卡住被杀掉以后，「重试」新建一个引擎重新开始
