@@ -289,6 +289,8 @@ ORDER BY ZSHORTCUT;
   - `ni,`：`,` 先让首选「你」上屏，再返回 0，合起来是「你,」。
   - 有候选时打数字是选词（`yi3` 上屏「医」），返回 1。有编码但没有候选时（词库里没有 `wo`）打 `3` 也返回 1，被 selector 吃掉，什么也不上屏。
 - 候选序号：方案设了 `menu/alternative_select_labels` 时 `select_labels` 才有值；只设 `menu/alternative_select_keys` 时 `select_labels` 是空指针，`menu.select_keys` 是那串键（鼠须管这时拿每个字符当序号）。实测：`py.custom.yaml` 里 `menu/alternative_select_keys: "67890"`，`select_keys` 是 `67890`，打 `yi` 再打 `7` 上屏第二个候选（同上）。
+- 发布签名的应用包里同样成立（squirrel-dev，2026-10-16，详见 [typing-preview-vm-log.md](typing-preview-vm-log.md)）：主程序只有 hardened runtime、没有 `disable-library-validation`；`Contents/Helpers/rime-preview-helper` 带这个 entitlement，直接运行能加载鼠须管的 librime（1.16.0），在应用里试打正常。主程序不需要这个 entitlement。**公证还没试**，第一次正式发版时确认带 entitlement 的辅助程序能过公证，结果记在这里。
+- SwiftUI 在 macOS 上：`.segmented` 的 `Picker` 里，给单个选项加 `.disabled(...)` 没有效果，照样能点。模型拒绝切换时控件还会停在点中的那一段，和实际状态不一致。要禁用就整个控件禁用。
 - 用户目录里有 `rime.lua` 时，就算方案里没用 Lua 也会执行（初始化、开会话、选方案这一步里），顶层的 `print` 写到进程的 stdout（同上）。试打的辅助程序因此先把 stdout 转到 stderr，协议用另外留的一份。
 
 用临时副本，不和鼠须管抢目录：

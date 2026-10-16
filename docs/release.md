@@ -5,6 +5,8 @@
    `xcrun notarytool store-credentials squirrel-helper-notary --apple-id <Apple ID> --team-id VS555M5VA8`
 3. `swift test` 全部通过。
 4. `./tools/release/build-release.sh`：release 编译 → Developer ID 签名（hardened runtime）→ 公证应用、钉票据 → 做 dmg（应用 + 指向「应用程序」的快捷方式）→ 给 dmg 签名 → 公证 dmg、钉票据 → 用 `tools/release/check-dmg.sh` 检查 → `.build/release-out/SquirrelHelper-<版本>.dmg` 和 `.sha256`。要公证两次（应用、dmg），一共要几分钟到十几分钟。只想试签名：`SKIP_NOTARIZE=1 ./tools/release/build-release.sh`。工作区要干净（有没提交的改动会被拒绝；试流程加 `ALLOW_DIRTY=1`）。签名时钥匙串可能问能不能用私钥，点「始终允许」。
+   - 应用里有辅助程序 `Contents/Helpers/rime-preview-helper`（试打预览用），用 `tools/app/preview-helper.entitlements`（`disable-library-validation`）单独签名；主程序不带这个 entitlement。`tools/release/check-entitlements.sh` 会在 `build-release.sh` 和 `check-dmg.sh` 里自动运行，不对就失败。
+   - **第一次公证的正式版**要确认带 entitlement 的辅助程序能过公证，结果记进 [verified-facts.md](verified-facts.md) 8.1。
 5. 在干净的测试机里，从带隔离标记的 dmg 开始走一遍：打开 dmg、把应用拖进「应用程序」、再打开（做法见 [release-vm-log.md](release-vm-log.md)）。中文名、英文名都看一下（改系统语言后要注销再登录）。
 6. 写 `docs/release-notes/<版本>.md`，然后：
    - `git tag v<版本> && git push origin v<版本>`
