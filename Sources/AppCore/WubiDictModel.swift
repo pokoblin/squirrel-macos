@@ -100,6 +100,8 @@ public final class WubiDictModel {
     private var base: Data?
     /// 测试用：合并、保存以后，记账之前调用（模拟这时外面又改了文件）
     var mergeHook: (@Sendable () -> Void)?
+    /// 测试用：读词库、保存改动的后台工作开始时先等它（测试用来卡住后台，确定地检查「正在读」「正在保存」时的行为）
+    var backgroundGate: (@Sendable () async -> Void)?
 
     public init(env: AppEnvironment) {
         self.env = env
@@ -147,7 +149,9 @@ public final class WubiDictModel {
         loadingGeneration = current
         let store = self.store
         let target = self.target
+        let gate = backgroundGate
         let result: Result<Loaded, LoadFailure> = await Task.detached {
+            await gate?()
             let userFile: DictFile
             let base: Data?
             do {
@@ -590,8 +594,10 @@ public final class WubiDictModel {
         let current = generation
         let store = self.store
         let base = self.base
+        let gate = backgroundGate
         do {
-            let result = try await Task.detached { () throws -> (Snapshot, Data)? in
+            let result = try await Task.detached { () async throws -> (Snapshot, Data)? in
+                await gate?()
                 try Self.ensureUnchanged(store, base)
                 let updated = make(editor)
                 // 什么都没改（比如导入的行都被跳过）：不写文件

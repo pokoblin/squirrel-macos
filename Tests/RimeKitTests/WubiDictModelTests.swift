@@ -59,6 +59,43 @@ private final class Counter: @unchecked Sendable {
     func next() -> Int { lock.withLock { n += 1; return n } }
 }
 
+/// 卡住后台工作的闸门：第一个进来的停在这里，直到测试放行；之后进来的直接过
+private final class Gate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var used = false
+    private var released = false
+    private var waiting: CheckedContinuation<Void, Never>?
+
+    /// 有后台工作停在闸门前了
+    var entered: Bool { lock.withLock { used } }
+
+    func pass() async {
+        let first = lock.withLock { () -> Bool in
+            if used { return false }
+            used = true
+            return true
+        }
+        guard first else { return }
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            let now = lock.withLock { () -> Bool in
+                if released { return true }
+                waiting = c
+                return false
+            }
+            if now { c.resume() }
+        }
+    }
+
+    func release() {
+        let c = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            released = true
+            defer { waiting = nil }
+            return waiting
+        }
+        c?.resume()
+    }
+}
+
 /// 记下建过的引擎；打开时看到的 isChecking
 private final class PageEngines: @unchecked Sendable {
     private let lock = NSLock()
@@ -691,20 +728,37 @@ private final class PageEngines: @unchecked Sendable {
 
     // MARK: 同时发生的读、写（审阅修复）
 
-    /// 等到条件成立（最多让出 1000 次）
-    func wait(_ condition: () -> Bool) async {
-        for _ in 0..<1000 where !condition() { await Task.yield() }
+    /// 等到条件成立：每毫秒看一次，5 秒还不成立就记一个清楚的失败并抛错
+    func waitFor(_ what: String, _ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("等了 5 秒，\(what) 还是没有发生")
+                throw CancellationError()
+            }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    /// 给模型装一个闸门：下一次读词库或保存的后台工作会停在闸门前
+    fileprivate func gate(_ model: WubiDictModel) -> Gate {
+        let gate = Gate()
+        model.backgroundGate = { await gate.pass() }
+        return gate
     }
 
     @Test func 正在保存时不接受第二个修改() async throws {
         let s = try setup(); defer { s.remove() }
         let model = await loaded(s)
         model.draftText = "张三丰"
+        let gate = gate(model)
         let first = Task { await model.add() }
-        await wait { model.isSaving }
-        try #require(model.isSaving)
+        // 后台的保存停在闸门前：这时一定还在保存
+        try await waitFor("加词的后台保存开始") { gate.entered }
+        #expect(model.isSaving)
         await model.remove(at: 0)
         #expect(model.message == "正在保存上一个改动，等一下再试")
+        gate.release()
         await first.value
         #expect(!model.isSaving)
         #expect(model.entries.map(\.text) == ["分组词条", "张三丰"])
@@ -715,9 +769,11 @@ private final class PageEngines: @unchecked Sendable {
         let s = try setup(); defer { s.remove() }
         let model = await loaded(s)
         model.draftText = "张三丰"
+        let slowGate = gate(model)
         let slow = Task { await model.load(settings: Self.settings) }
-        await wait { model.isLoading }
-        try #require(model.isLoading)
+        // 后台的读取停在闸门前：这时一定还在读
+        try await waitFor("第一次读取的后台工作开始") { slowGate.entered }
+        #expect(model.isLoading)
         await model.add()
         #expect(model.message == "正在读五笔词库，等读完再试")
         await model.mergeExternal()
@@ -726,14 +782,22 @@ private final class PageEngines: @unchecked Sendable {
 
         // 这时又读了一次（关掉了极点五笔）：前一次的结果不要了，isLoading 也不会卡住
         await model.load(settings: Settings(schemas: ["wb_py"]))
+        #expect(model.availability == .notEnabled)
+        #expect(!model.isLoading)
+        slowGate.release()
         await slow.value
         #expect(model.availability == .notEnabled)
         #expect(!model.isLoading)
 
-        // 两次都是真的读：读完以后不卡在 isLoading
+        // 两次都是真的读：后开始的先读完，先开始的晚回来也不改状态、不卡在 isLoading
+        let aGate = gate(model)
         let a = Task { await model.load(settings: Self.settings) }
-        await wait { model.isLoading }
-        await model.load(settings: Self.settings)
+        try await waitFor("先开始的读取的后台工作开始") { aGate.entered }
+        #expect(model.isLoading)
+        await model.load(settings: Self.settings)   // 闸门只卡第一个，这次直接读完
+        #expect(model.availability == .ready)
+        #expect(!model.isLoading)
+        aGate.release()
         await a.value
         #expect(model.availability == .ready)
         #expect(!model.isLoading)
