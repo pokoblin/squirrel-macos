@@ -2,13 +2,14 @@
 
 鼠须管（Squirrel / Rime）的 macOS 图形前端。阶段 0–8 已完成（待验证项；方案清单和下载缓存；设置和生成配置；写入真实配置、部署、备份还原；安装鼠须管、启用、环境检查；接管已有配置；一键导出导入；文本替换同步；应用骨架和第一次打开的引导；主窗口），已发布 0.1.0、0.1.1（预发布），应用名「鼠须管助手」（英文 SquirrelHelper）；0.2.0（改用 dmg、正式版）的改动已提交，还没打包发布。路线图：`docs/superpowers/plans/2026-10-15-roadmap.md`。
 
-第二版按子项目做，路线图：`docs/superpowers/plans/2026-10-15-v2-roadmap.md`。子项目 1「在线方案清单」已完成（2026-10-16）：清单签名发布在 `catalog/v1/`，第一份编号 2026101501。子项目 2「试打预览」已完成（2026-10-16）。
+第二版按子项目做，路线图：`docs/superpowers/plans/2026-10-15-v2-roadmap.md`。子项目 1「在线方案清单」已完成（2026-10-16）：清单签名发布在 `catalog/v1/`，第一份编号 2026101501。子项目 2「试打预览」已完成（2026-10-16）。子项目 3「五笔个人词库编辑器」已完成（2026-10-16，只做了五笔）。
 
 ## 先读这些
 
 - `docs/superpowers/specs/2026-10-15-squirrel-macos-v1-design.md`：第一版设计（SwiftUI；RimeKit 核心库 + 应用 + `rimectl`；不做 Profile，只做一键导入导出）。
 - `docs/superpowers/specs/2026-10-15-online-catalog-design.md`：在线方案清单设计（签名、防回滚、只在用户点按钮时联网）。
 - `docs/superpowers/specs/2026-10-16-typing-preview-design.md`：试打预览设计（辅助进程加载鼠须管的 librime、在临时副本上打字，不碰真实目录）。
+- `docs/superpowers/specs/2026-10-16-wubi-user-dict-design.md`：五笔个人词库编辑器设计（自动编码、按位置算权重、检查能不能打出来、只管极点五笔的个人词库）。
 - `docs/verified-facts.md`：已验证的事实。改设计、写代码前先看，**别凭印象重新推断**。
 - `docs/install-test-log.md`：首次安装的实测结论（不用注销；必须在系统设置手动添加输入法；新 Mac 没有 python3/git）。
 - `docs/upstream-layouts.md`：极点五笔、雾凇各个 zip 解压后的目录结构（写方案清单时用）。
