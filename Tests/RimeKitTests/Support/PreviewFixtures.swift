@@ -17,14 +17,15 @@ enum PreviewFixtures {
     /// 编码 yi 的 12 个单字，权重从 120 起每个减 10。每页 5 个，第 7 个「揖」在第 2 页第 2 个
     static let yiCharacters = ["一", "衣", "医", "依", "伊", "壹", "揖", "仪", "夷", "宜", "移", "遗"]
 
-    /// 生成 py、wb 两个方案并编译，返回编译好的 Rime 用户目录（在 dir 里面）
-    static func compiledConfig(in dir: URL) throws -> URL {
+    /// 生成 py、wb 两个方案并编译，返回编译好的 Rime 用户目录（在 dir 里面）。
+    /// pageSize：每页候选数，换目录的测试用不同的值区分两份配置
+    static func compiledConfig(in dir: URL, pageSize: Int = 5) throws -> URL {
         let yi = yiCharacters.enumerated().map { "\($1)\tyi\t\(120 - $0 * 10)" }
         let pyDict = GenFixtures.dict("py", ["你\tni\t100", "好\thao\t100", "你好\tni hao\t1000"] + yi)
         let packages = try GenFixtures.makePackages(in: dir.appending(path: "cache"),
                                                     extra: ["pinyin": ["py.dict.yaml": pyDict]])
         var settings = Settings(schemas: ["py", "wb"])
-        settings.appearance.pageSize = 5
+        settings.appearance.pageSize = pageSize
         let out = dir.appending(path: "rime", directoryHint: .isDirectory)
         _ = try ConfigGenerator().generate(try GenFixtures.input(settings, packages: packages), into: out)
         let build = try RimeTools.build(out)

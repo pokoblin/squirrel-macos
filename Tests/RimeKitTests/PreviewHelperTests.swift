@@ -113,17 +113,27 @@ struct PreviewHelperTests {
             let g = try h.send(.input("g"))
             #expect(g.state?.candidates.first?.text == "一", "\(g)")
 
-            let copy = dir.appending(path: "rime-copy", directoryHint: .isDirectory)
-            try FileManager.default.copyItem(at: rime, to: copy)
-            let open = try h.send(.open(userDir: copy.path, schema: "py"))
+            // 第二份配置每页 3 个候选：换目录真的生效了才会看到 3 个
+            let second = try PreviewFixtures.compiledConfig(in: dir.appending(path: "second"), pageSize: 3)
+            let open = try h.send(.open(userDir: second.path, schema: "py"))
             #expect(open.ok && open.librimeVersion != nil, "\(open)")
             #expect(open.state?.candidates.isEmpty == true)
-            #expect(try h.send(.input("nihao")).state?.candidates.first?.text == "你好")
+            let yi3 = try h.send(.input("yi"))
+            #expect(yi3.state?.candidates.map(\.text) == Array(PreviewFixtures.yiCharacters[0..<3]), "\(yi3)")
+            #expect(try h.send(.input("nihao")).ok)
+
+            // 换回第一份，又是每页 5 个
+            #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)
+            let yi5 = try h.send(.input("yi"))
+            #expect(yi5.state?.candidates.map(\.text) == Array(PreviewFixtures.yiCharacters[0..<5]), "\(yi5)")
         }
     }
 
     @Test func 拒绝真实目录() throws {
-        let helper = try HelperProcess(helper: PreviewFixtures.helper)
+        // 用一个空的「鼠须管」，librime 根本加载不了：就算保险失效，测试也不会让 librime 碰真实目录。
+        // 回的是 refusedDirectory 而不是 loadFailed，说明先查目录、再报加载错误
+        let dir = try TempDir(); defer { dir.remove() }
+        let helper = try HelperProcess(helper: PreviewFixtures.helper, arguments: ["--squirrel", dir.url.path])
         let real = NSHomeDirectory() + "/Library/Rime"
         let r = try helper.send(.open(userDir: real, schema: "py"))
         #expect(!r.ok && r.error?.kind == .refusedDirectory, "\(r)")
