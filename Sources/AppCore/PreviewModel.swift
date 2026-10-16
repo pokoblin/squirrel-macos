@@ -140,30 +140,66 @@ public final class PreviewModel {
 
     // MARK: 打字
 
-    public func press(_ p: PreviewKeyPress) async {
-        switch p {
-        case let .text(text): await send { try await $0.input(text) }
-        case let .special(key): await send { try await $0.key(key) }
-        case .ignored: return
+    /// 打字相关的操作（按键、点候选、翻页、清空）。都排进同一个队列，严格按提交的先后执行
+    public enum TypingAction: Sendable {
+        case press(PreviewKeyPress)
+        case choose(Int)
+        case pageUp
+        case pageDown
+        case clearInput
+    }
+
+    /// 排队执行的最后一个任务；新的操作先等它做完
+    private var tail: Task<Void, Never>?
+
+    /// 把一个打字操作排进队列，马上返回（视图用这个，保证按键顺序）。
+    /// 提交时的代号记下来：之后换了来源、重新载入、离开页面，排着的旧操作就丢掉
+    @discardableResult
+    public func submit(_ action: TypingAction) -> Task<Void, Never> {
+        if case .press(.ignored) = action { return Task {} }
+        let current = generation
+        let previous = tail
+        let task = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self, self.generation == current else { return }
+            await self.run(action)
         }
+        tail = task
+        return task
+    }
+
+    public func press(_ p: PreviewKeyPress) async {
+        await submit(.press(p)).value
     }
 
     /// 点候选（本页第几个，从 0 开始）
     public func choose(_ index: Int) async {
-        await send { try await $0.select(index) }
+        await submit(.choose(index)).value
     }
 
     public func pageUp() async {
-        await send { try await $0.key(.pageUp) }
+        await submit(.pageUp).value
     }
 
     public func pageDown() async {
-        await send { try await $0.key(.pageDown) }
+        await submit(.pageDown).value
     }
 
     /// 清空输入区（没上屏的编码）
     public func clearInput() async {
-        await send { try await $0.clear() }
+        await submit(.clearInput).value
+    }
+
+    private func run(_ action: TypingAction) async {
+        switch action {
+        case let .press(.text(text)): await send { try await $0.input(text) }
+        case let .press(.special(key)): await send { try await $0.key(key) }
+        case .press(.ignored): return
+        case let .choose(index): await send { try await $0.select(index) }
+        case .pageUp: await send { try await $0.key(.pageUp) }
+        case .pageDown: await send { try await $0.key(.pageDown) }
+        case .clearInput: await send { try await $0.clear() }
+        }
     }
 
     public func clearCommitted() {

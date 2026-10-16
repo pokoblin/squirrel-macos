@@ -12,9 +12,12 @@ actor FakePreviewEngine: PreviewEngine {
     private(set) var calls: [Call] = []
     var inputState = PreviewState(preedit: "ni", candidates: [PreviewCandidate(text: "你", comment: "")])
     var inputError: PreviewError?
+    /// 收到这些输入以后先停一会儿再回（测试按键顺序用）
+    var inputDelays: [String: Duration] = [:]
 
     func setInput(_ state: PreviewState) { inputState = state }
     func failInput(_ error: PreviewError?) { inputError = error }
+    func setDelays(_ delays: [String: Duration]) { inputDelays = delays }
 
     func open(userDir: URL, schema: String) async throws -> PreviewOpened {
         calls.append(.open(userDir, schema))
@@ -23,6 +26,7 @@ actor FakePreviewEngine: PreviewEngine {
 
     func input(_ text: String) async throws -> PreviewState {
         calls.append(.input(text))
+        if let delay = inputDelays[text] { try? await Task.sleep(for: delay) }
         if let inputError { throw inputError }
         return inputState
     }
@@ -189,6 +193,28 @@ final class GatedCompiler: RimeCompiler, @unchecked Sendable {
         #expect(Array(calls.dropFirst()) == [.input("ni"), .input("a"), .input("b"), .key(.backspace), .clear])
         model.clearCommitted()
         #expect(model.committedText == "")
+        await model.leave()
+    }
+
+    @Test func 快速连按_引擎收到的顺序不变() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = PreviewModel(env: s.env)
+        await model.enter(draft: draft, hasPending: false)
+        // 前面的键让引擎多停一会儿：不排队的话后面的键会先到
+        var delays: [String: Duration] = [:]
+        let letters = (0..<40).map { "k\($0)" }
+        for (i, key) in letters.enumerated() { delays[key] = .milliseconds((40 - i) % 7 * 3) }
+        await s.engine.setDelays(delays)
+        // 像视图那样：一个接一个提交，不等上一个做完
+        for key in letters { model.submit(.press(.text(key))) }
+        model.submit(.press(.special(.backspace)))
+        model.submit(.choose(1))
+        model.submit(.pageDown)
+        model.submit(.clearInput)
+        await model.press(.text("end"))
+        let calls = await s.engine.calls
+        let expected: [FakePreviewEngine.Call] = letters.map { .input($0) } + [.key(.backspace), .select(1), .key(.pageDown), .clear, .input("end")]
+        #expect(Array(calls.dropFirst()) == expected)
         await model.leave()
     }
 

@@ -106,10 +106,8 @@ struct PreviewPage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(state.candidates.enumerated()), id: \.offset) { index, candidate in
                         Button {
-                            Task {
-                                await preview.choose(index)
-                                inputFocused = true
-                            }
+                            preview.submit(.choose(index))
+                            inputFocused = true
                         } label: {
                             HStack(spacing: 6) {
                                 Text("\(label(index, state)).").foregroundStyle(.secondary)
@@ -129,13 +127,13 @@ struct PreviewPage: View {
                     }
                 }
                 HStack(spacing: 8) {
-                    Button("上一页") { Task { await preview.pageUp(); inputFocused = true } }
+                    Button("上一页") { preview.submit(.pageUp); inputFocused = true }
                         .disabled(state.pageNo == 0)
-                    Button("下一页") { Task { await preview.pageDown(); inputFocused = true } }
+                    Button("下一页") { preview.submit(.pageDown); inputFocused = true }
                         .disabled(state.isLastPage)
                     Text("第 \(state.pageNo + 1) 页").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button("清空") { Task { await preview.clearInput(); inputFocused = true } }
+                    Button("清空") { preview.submit(.clearInput); inputFocused = true }
                 }
                 .controlSize(.small)
             }
@@ -149,7 +147,7 @@ struct PreviewPage: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { inputFocused = true }
-        .focusable()
+        .focusable(interactions: .edit)
         .focusEffectDisabled()
         .focused($inputFocused)
         .onKeyPress(phases: .down) { press in
@@ -157,7 +155,8 @@ struct PreviewPage: View {
             let translated = PreviewKeyPress.translate(characters: press.characters, special: Self.specialKey(press.key),
                                                        commandLike: commandLike)
             if translated == .ignored { return .ignored }
-            Task { await preview.press(translated) }
+            // 排进模型的队列，按键顺序不会乱
+            preview.submit(.press(translated))
             return .handled
         }
         .onAppear { inputFocused = true }
