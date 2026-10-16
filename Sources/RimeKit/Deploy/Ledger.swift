@@ -50,6 +50,12 @@ public struct Ledger: Sendable, Equatable, Codable {
         try JSONCoding.encoder.encode(self).write(to: paths.ledgerFile, options: .atomic)
     }
 
+    /// 「外面改过的这份已经看过了」：只把已有条目的哈希改成 sha256，来源不变；账本里没有这个路径就不动
+    public mutating func acknowledge(path: String, sha256: String) {
+        guard let old = entries[path] else { return }
+        entries[path] = LedgerEntry(sha256: sha256, origin: old.origin)
+    }
+
     /// 应用写过的文件里，在应用外被改过或删掉的（按路径排序）
     public func externalChanges(in rimeDirectory: URL) -> [ExternalChange] {
         entries.keys.sorted().compactMap { path in
