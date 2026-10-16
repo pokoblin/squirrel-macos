@@ -93,7 +93,7 @@ RimeKit 依赖 `RimePreviewProtocol`。
 | `op` | 其他字段 | 做什么 |
 |---|---|---|
 | `open` | `userDir`、`schema` | 第一次时 `setup` + `initialize`；目录变了就 `finalize` 后用新目录 `initialize`（8.1 实测可以）。然后建会话、选方案 |
-| `input` | `text` | 每个字符 `process_key(字符, 0)`，只收可打印 ASCII（`0x20`–`0x7e`），其他字符回 `badRequest` |
+| `input` | `text` | 每个字符 `process_key(字符, 0)`，只收可打印 ASCII（`0x20`–`0x7e`），其他字符回 `badRequest`。librime 不处理的字符（返回 0）和鼠须管一样原样上屏，接在 `committed` 后面 |
 | `key` | `name` | 特殊键，见下表 |
 | `select` | `index` | `select_candidate_on_current_page(index)`，本页从 0 开始 |
 | `clear` | — | `clear_composition`，清掉编码 |
@@ -120,7 +120,7 @@ RimeKit 依赖 `RimePreviewProtocol`。
 ```
 
 - `committed`：这次请求以后 `get_commit` 拿到的上屏文字，没有就是 `null`。**先读上屏再读候选**（四码唯一自动上屏时候选为空，不算失败）。
-- `labels`：方案的选择键标签（`select_labels`），没有就是 `null`，界面用 1、2、3……
+- `labels`：方案的选择键标签（`select_labels`）；没有标签但设了选词键（`menu.select_keys`）时用选词键的每个字符；都没有就是 `null`，界面用 1、2、3……
 - `librimeVersion` 只在 `open` 的结果里有。
 
 出错：`{"ok": false, "error": {"kind": "…", "message": "…"}}`，`kind` 是：

@@ -18,8 +18,9 @@ enum PreviewFixtures {
     static let yiCharacters = ["一", "衣", "医", "依", "伊", "壹", "揖", "仪", "夷", "宜", "移", "遗"]
 
     /// 生成 py、wb 两个方案并编译，返回编译好的 Rime 用户目录（在 dir 里面）。
-    /// pageSize：每页候选数，换目录的测试用不同的值区分两份配置
-    static func compiledConfig(in dir: URL, pageSize: Int = 5) throws -> URL {
+    /// pageSize：每页候选数，换目录的测试用不同的值区分两份配置。
+    /// extraFiles：编译前另外写进用户目录的文件（文件名 → 内容），比如 `py.custom.yaml`
+    static func compiledConfig(in dir: URL, pageSize: Int = 5, extraFiles: [String: String] = [:]) throws -> URL {
         let yi = yiCharacters.enumerated().map { "\($1)\tyi\t\(120 - $0 * 10)" }
         let pyDict = GenFixtures.dict("py", ["你\tni\t100", "好\thao\t100", "你好\tni hao\t1000"] + yi)
         let packages = try GenFixtures.makePackages(in: dir.appending(path: "cache"),
@@ -28,6 +29,9 @@ enum PreviewFixtures {
         settings.appearance.pageSize = pageSize
         let out = dir.appending(path: "rime", directoryHint: .isDirectory)
         _ = try ConfigGenerator().generate(try GenFixtures.input(settings, packages: packages), into: out)
+        for (name, content) in extraFiles {
+            try Data(content.utf8).write(to: out.appending(path: name))
+        }
         let build = try RimeTools.build(out)
         guard build.status == 0 else { throw CompileFailed(stderr: build.stderr) }
         return out

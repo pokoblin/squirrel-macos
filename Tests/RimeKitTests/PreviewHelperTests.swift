@@ -8,10 +8,11 @@ struct PreviewHelperTests {
     /// 每个测试一份新编译的配置和一个新的辅助程序
     private func withHelper(
         arguments: [String] = [],
+        extraFiles: [String: String] = [:],
         _ body: (HelperProcess, URL, URL) throws -> Void
     ) throws {
         let dir = try TempDir(); defer { dir.remove() }
-        let rime = try PreviewFixtures.compiledConfig(in: dir.url)
+        let rime = try PreviewFixtures.compiledConfig(in: dir.url, extraFiles: extraFiles)
         let helper = try HelperProcess(helper: PreviewFixtures.helper, arguments: arguments)
         defer { _ = helper.closeInput() }
         try body(helper, rime, dir.url)
@@ -87,6 +88,50 @@ struct PreviewHelperTests {
             let space = try h.send(.input(" "))
             #expect(space.state?.committed == "一", "\(space)")
             #expect(space.state?.candidates.isEmpty == true)
+        }
+    }
+
+    /// librime 不处理的字符（process_key 返回 0），鼠须管会原样交给正在打字的程序：试打里接在上屏文字后面
+    @Test func 不处理的字符原样上屏() throws {
+        try withHelper { h, rime, _ in
+            #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)
+            // 没有编码时打数字、空格、标点（测试方案没有 punctuator）
+            for text in ["3", " ", ",", "."] {
+                let r = try h.send(.input(text))
+                #expect(r.state?.committed == text, "\(text) → \(r)")
+            }
+            // 先上屏的字在前，没处理的字符在后，顺序不乱
+            let mixed = try h.send(.input("yi 3"))
+            #expect(mixed.state?.committed == "一3", "\(mixed)")
+            // 有编码时打标点：express_editor 先把首选上屏，标点照样原样上屏
+            let punct = try h.send(.input("ni,"))
+            #expect(punct.state?.committed == "你,", "\(punct)")
+            #expect(punct.state?.preedit.isEmpty == true)
+            // 有候选时打数字是选词（selector 处理了），不额外上屏数字
+            let pick = try h.send(.input("yi3"))
+            #expect(pick.state?.committed == "医", "\(pick)")
+            // 有编码但没有候选（测试词库里没有 wo）时打数字：selector 照样吃掉，什么也不上屏
+            let none = try h.send(.input("wo3"))
+            #expect(none.state?.committed == nil && none.state?.preedit == "wo", "\(none)")
+        }
+    }
+
+    /// 方案设了 menu/alternative_select_keys、没设 alternative_select_labels：序号用选词键的字符（和鼠须管一样）
+    @Test func 选词键当序号() throws {
+        let patch = "patch:\n  menu/alternative_select_keys: \"67890\"\n"
+        try withHelper(extraFiles: ["py.custom.yaml": patch]) { h, rime, _ in
+            #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)
+            let yi = try h.send(.input("yi"))
+            #expect(yi.state?.labels == ["6", "7", "8", "9", "0"], "\(yi)")
+            // 选词键真的生效：7 选第二个
+            let picked = try h.send(.input("7"))
+            #expect(picked.state?.committed == PreviewFixtures.yiCharacters[1], "\(picked)")
+        }
+        // 都没设：labels 是 nil，界面用 1、2、3……
+        try withHelper { h, rime, _ in
+            #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)
+            let yi = try h.send(.input("yi"))
+            #expect(yi.state?.candidates.isEmpty == false && yi.state?.labels == nil, "\(yi)")
         }
     }
 

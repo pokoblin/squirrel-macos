@@ -87,6 +87,20 @@ import Testing
         #expect(e.output.text.split(separator: "\n").first?.hasPrefix("nihao\t你好") == true)
     }
 
+    /// 和应用一样，用 locations 里的鼠须管（不是辅助程序自己默认的那个）。
+    /// 换成一个空的「鼠须管」，librime 加载不了，说明真的用了它
+    @Test func 用locations里的鼠须管() async throws {
+        var e = try env(); defer { e.dir.remove() }
+        let empty = e.dir.url.appending(path: "Squirrel.app", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        var context = e.context
+        context.locations = RimeLocations(rimeDirectory: e.rime, squirrelApp: empty,
+                                          logDirectory: e.dir.url.appending(path: "logs", directoryHint: .isDirectory))
+        e = Env(dir: e.dir, paths: e.paths, rime: e.rime, output: e.output, context: context)
+        #expect(await e.run(["--schema", "py", "nihao"]) == 1)
+        #expect(e.output.text.contains("加载不了鼠须管的 librime"), "\(e.output.text)")
+    }
+
     @Test func 没带方案也没带list是用法错误() async throws {
         let e = try env(); defer { e.dir.remove() }
         #expect(await e.run([]) == 2)

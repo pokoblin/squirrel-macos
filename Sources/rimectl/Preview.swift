@@ -46,7 +46,8 @@ extension Rimectl {
                 out.error(PreviewError.helperMissing.description)
                 return 1
             }
-            let session = PreviewSession(helper: helper)
+            // 和应用一样用 locations 里的鼠须管（辅助程序自己默认的是 /Library/Input Methods 里那个）
+            let session = PreviewSession(helper: helper, squirrelApp: locations.squirrelApp)
             do {
                 _ = try await session.open(userDir: copy.userDir, schema: schema)
                 let code = try await run(codes, schema: schema, options: options, session: session, out)

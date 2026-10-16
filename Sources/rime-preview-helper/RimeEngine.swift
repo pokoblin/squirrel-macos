@@ -110,10 +110,18 @@ final class RimeEngine {
         guard text.unicodeScalars.allSatisfy({ (0x20...0x7e).contains($0.value) }) else {
             return .failure(.badRequest, "只能输入可打印的 ASCII 字符")
         }
+        // librime 不处理的字符（返回 0），鼠须管会原样交给正在打字的程序（比如没有编码时打数字、空格、标点）。
+        // 这里接在上屏文字后面：先取出这个键之前已经上屏的文字，保证先后顺序
+        var passed = ""
         for byte in text.utf8 {
-            _ = api.pointee.process_key(session, Int32(byte), 0)
+            if api.pointee.process_key(session, Int32(byte), 0) == 0 {
+                passed += takeCommit() ?? ""
+                passed.unicodeScalars.append(Unicode.Scalar(byte))
+            }
         }
-        return .success(snapshot())
+        var state = snapshot()
+        if !passed.isEmpty { state.committed = passed + (state.committed ?? "") }
+        return .success(state)
     }
 
     func key(_ key: PreviewKey) -> PreviewResponse {
@@ -151,13 +159,7 @@ final class RimeEngine {
     private func snapshot() -> PreviewState {
         guard let api else { return .empty }
         var state = PreviewState()
-
-        var commit = RimeCommit()
-        commit.data_size = Int32(MemoryLayout<RimeCommit>.size - MemoryLayout<Int32>.size)
-        if api.pointee.get_commit(session, &commit) != 0 {
-            if let text = commit.text { state.committed = String(cString: text) }
-            _ = api.pointee.free_commit(&commit)
-        }
+        state.committed = takeCommit()
 
         var context = RimeContext()
         context.data_size = Int32(MemoryLayout<RimeContext>.size - MemoryLayout<Int32>.size)
@@ -176,15 +178,29 @@ final class RimeEngine {
                                         comment: c.comment.map { String(cString: $0) } ?? "")
             }
         }
+        let pageSize = Int(max(0, menu.page_size))
         if let labels = context.select_labels {
-            state.labels = (0..<Int(max(0, menu.page_size))).map { i in
+            state.labels = (0..<pageSize).map { i in
                 labels[i].map { String(cString: $0) } ?? ""
             }
+        } else if let keys = menu.select_keys, case let text = String(cString: keys), !text.isEmpty {
+            // 没设 alternative_select_labels、设了 alternative_select_keys：鼠须管拿选词键的字符当序号
+            state.labels = text.prefix(pageSize).map(String.init)
         }
         state.pageNo = Int(menu.page_no)
         state.isLastPage = menu.is_last_page != 0
         state.highlighted = Int(menu.highlighted_candidate_index)
         return state
+    }
+
+    /// 取出 librime 攒着的上屏文字（取过就清掉）；没有返回 nil
+    private func takeCommit() -> String? {
+        guard let api else { return nil }
+        var commit = RimeCommit()
+        commit.data_size = Int32(MemoryLayout<RimeCommit>.size - MemoryLayout<Int32>.size)
+        guard api.pointee.get_commit(session, &commit) != 0 else { return nil }
+        defer { _ = api.pointee.free_commit(&commit) }
+        return commit.text.map { String(cString: $0) }
     }
 
     private func currentSchema() -> String? {
