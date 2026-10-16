@@ -98,6 +98,8 @@ extension MainModel {
                         guard case .modified(let path) = $0 else { return false }
                         return ledger.entries[path]?.origin == FileOrigin.personal.ledgerValue
                     }
+                    // 弹窗里要不要说「采用会换掉五笔词库页里没应用的改动」看这个，先更新
+                    wubiDict.refresh()
                     pendingExternalChanges = changes
                 }
             }

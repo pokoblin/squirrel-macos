@@ -146,4 +146,15 @@ import Testing
         let f = try DictFile.parse("# 注释\r\n---\r\nname: x\r\nencoder:\r\n  rules: []\r\n...\r\n词\r\n")
         #expect(f.headerYAML == "name: x\nencoder:\n  rules: []")
     }
+
+    @Test func 头部有没有version() throws {
+        func has(_ header: String) throws -> Bool { try DictFile.parse("---\nname: x\n\(header)...\n词\tab\n").hasVersion }
+        #expect(try has("version: \"1.0\"\n"))
+        #expect(try has("version: 1.0\n"))
+        #expect(try has("version: 2024-01-01\n"))
+        #expect(try !has(""))
+        #expect(try !has("version:\n"))
+        #expect(try !has("version: [1]\n"))
+        #expect(try !has("version: {a: 1}\n"))
+    }
 }

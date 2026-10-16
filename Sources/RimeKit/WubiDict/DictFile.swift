@@ -35,6 +35,8 @@ public struct DictFile: Equatable, Sendable {
     public private(set) var columns: [String]
     public private(set) var importTables: [String]
     public private(set) var sort: String?
+    /// 头部写了 `version`（有值）。没写的词库 librime 编译时整个忽略（verified-facts 8.2）
+    public private(set) var hasVersion: Bool
 
     /// 头部原文：第一行到 `...` 那一行（含开头的注释）。每行自带的 `\r` 留在行尾，换行符 `\n` 不含
     private var headerLines: [String]
@@ -101,12 +103,15 @@ public struct DictFile: Equatable, Sendable {
         let columns = (parsed["columns"] as? [Any])?.compactMap { $0 as? String } ?? defaultColumns
         let importTables = (parsed["import_tables"] as? [Any])?.compactMap { $0 as? String } ?? []
         let sort = parsed["sort"] as? String
+        // librime 要的是一个值：没写、空的（null）、列表、表都不算
+        let version = parsed["version"]
+        let hasVersion = version != nil && !(version is NSNull) && !(version is [Any]) && !(version is [AnyHashable: Any])
 
         let layout = Layout(columns: columns)
         let body = all[(end + 1)...].map { layout.classify($0) }
 
         return DictFile(
-            columns: columns, importTables: importTables, sort: sort,
+            columns: columns, importTables: importTables, sort: sort, hasVersion: hasVersion,
             headerLines: Array(all[...end]), body: Array(body),
             hasBOM: bom, crlf: crlf, endsWithNewline: endsWithNewline)
     }

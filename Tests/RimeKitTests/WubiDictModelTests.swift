@@ -428,9 +428,11 @@ private final class PageEngines: @unchecked Sendable {
         let model = await loaded(s)
         #expect(model.externallyChanged)
         #expect(model.entries.map(\.text) == ["分组词条", "丁戊己"])   // 起点用 Rime 目录里那份
-        await model.mergeExternal()
+        #expect(await model.mergeExternal())
         #expect(!model.externallyChanged)
         #expect(s.personalText().contains("丁戊己\tsdnn"))
+        // 起点就是外面那份：没有要收的，不说「收进来 0 个词」
+        #expect(model.message == "外面那份里的词这边都有了，不用再收")
     }
 
     // MARK: 导入
@@ -719,11 +721,37 @@ private final class PageEngines: @unchecked Sendable {
         await main.apply()
         #expect(main.pendingExternalChanges == [.modified(WubiFixtures.userName)])
         #expect(main.pendingPersonalChanges)
+        // 页面里没有没应用的改动：采用外面那份不会丢东西，不用多说
+        #expect(main.adoptPersonalWarning == nil)
         // 采用外面那份：personal 换成外面的，页面跟着重新读
         await main.resolveExternalChanges(.adoptPersonal)
         #expect(main.notice?.title == "改动已经生效")
         #expect(model.entries.map(\.text).contains("丁戊己"))
         #expect(!model.externallyChanged)
+    }
+
+    @Test func 采用外面那份前说明会换掉页面里没应用的词() async throws {
+        let s = try setup(); defer { s.remove() }
+        let main = try MainModel(env: s.env)
+        let model = main.wubiDict
+        await model.load(settings: main.draft)
+        model.draftText = "张三丰"
+        await model.add()
+        await main.apply()
+        try s.writeRime(s.rimeText() + "丁戊己\tsdnn\n")
+        // 页面里又加了一个词，还没应用
+        model.draftText = "甲乙"
+        model.draftCode = "wqiy"
+        await model.add()
+        await main.apply()
+        #expect(main.notice?.action == .mergeWubiDict)
+        main.notice = nil
+        await main.apply()
+        #expect(main.pendingPersonalChanges)
+        #expect(main.adoptPersonalWarning == "采用外面那份时，五笔词库页里还没应用的改动（新加、改过、删掉的词）会被换掉")
+        await main.resolveExternalChanges(.adoptPersonal)
+        #expect(main.adoptPersonalWarning == nil)
+        #expect(!model.entries.map(\.text).contains("甲乙"))
     }
 
     // MARK: 同时发生的读、写（审阅修复）
@@ -927,5 +955,103 @@ private final class PageEngines: @unchecked Sendable {
         #expect(model.canAdd)
         await model.add()
         #expect(model.entries.last == DictEntry(text: "丙丁", code: "abcd"))
+    }
+
+    // MARK: 最终审查的修复
+
+    @Test func 重建索引时personal被别处改了_不覆盖() async throws {
+        let s = try setup(); defer { s.remove() }
+        try s.writePersonal(WubiFixtures.userDict + "\n")
+        let model = await loaded(s)
+        model.draftText = "张三丰"
+        let gate = gate(model)
+        let adding = Task { await model.add() }
+        // 新的编辑器已经建好（索引重建完），还没核对、保存：这时 rimectl 写了文件
+        try await waitFor("加词的后台工作建好新的编辑器") { gate.entered }
+        try s.writePersonal(WubiFixtures.userDict + "\n外面词\tabcd\n")
+        gate.release()
+        await adding.value
+        #expect(s.personalText() == WubiFixtures.userDict + "\n外面词\tabcd\n")
+        #expect(model.entries.map(\.text) == ["分组词条", "外面词"])
+        #expect(model.message?.contains("在别处被改过") == true)
+    }
+
+    @Test func 正在应用改动时不写_说明等一下() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        var lock: ApplyLock? = try ApplyLock.acquire(s.paths)
+        model.draftText = "张三丰"
+        await model.add()
+        #expect(model.message == "正在应用改动，等一下再试")
+        #expect(!FileManager.default.fileExists(atPath: s.personalFile.path))
+        #expect(model.entries.map(\.text) == ["分组词条"])
+        #expect(!model.isSaving)
+        withExtendedLifetime(lock) {}
+        lock = nil
+        await model.add()
+        #expect(model.entries.map(\.text) == ["分组词条", "张三丰"])
+        #expect(s.personalText().contains("张三丰\txddh"))
+    }
+
+    @Test func 重新看时文件内容一样_以后写不误报() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)   // 这时还没有 personal 里的文件，起点用包里的
+        // 应用时采用了外面那份，内容正好和起点一样：personal 里有了文件
+        try s.writePersonal(WubiFixtures.userDict)
+        await model.reloadIfChanged(settings: Self.settings)
+        model.draftText = "张三丰"
+        await model.add()
+        #expect(model.message == nil)
+        #expect(s.personalText() == WubiFixtures.userDict + "\n张三丰\txddh\n")
+    }
+
+    @Test func 收的时候词库重新读过_收成了就说收成了() async throws {
+        let s = try setup(); defer { s.remove() }
+        try s.writePersonal(WubiFixtures.userDict + "\n")
+        try s.writeRime(WubiFixtures.userDict + "\n丁戊己\tsdnn\n")
+        try s.record(WubiFixtures.userDict)
+        let model = await loaded(s)
+        let gate = gate(model)
+        let merging = Task { await model.mergeExternal() }
+        try await waitFor("收词的后台工作开始") { gate.entered }
+        await model.load(settings: Self.settings)   // 闸门只卡第一个，这次直接读完
+        gate.release()
+        #expect(await merging.value)
+        #expect(model.message == "外面加的词已经收进来了；词库刚才重新读过，请看一下列表")
+        #expect(s.personalText().contains("丁戊己\tsdnn"))
+        #expect(!model.externallyChanged)
+    }
+
+    @Test func 词库变了以后草稿位置原来是最后的还是最后() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        model.draftText = "甲乙"
+        model.draftCode = "wqiy"
+        #expect(model.existing.map(\.text) == ["你", "仰泳"])
+        #expect(model.draftPosition == 3)   // 最后
+        await model.confirmImport(await model.importRows("丙丁\twqiy\n"))
+        #expect(model.existing.map(\.text) == ["你", "仰泳", "丙丁"])
+        #expect(model.draftPosition == 4)
+        // 不是最后的位置留着
+        model.draftPosition = 2
+        await model.confirmImport(await model.importRows("戊己\twqiy\n"))
+        #expect(model.existing.count == 4)
+        #expect(model.draftPosition == 2)
+    }
+
+    @Test func 个人词库头部没有version时提示() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        #expect(model.headerWarning == nil)
+        try s.writePersonal(WubiFixtures.userDict.replacingOccurrences(of: "version: \"test\"\n", with: ""))
+        await model.load(settings: Self.settings)
+        #expect(model.headerWarning == "个人词库的头部缺少 version，鼠须管会忽略整个个人词库（里面的词都打不出来）")
+        // 空的 version 也一样
+        try s.writePersonal(WubiFixtures.userDict.replacingOccurrences(of: "version: \"test\"", with: "version:"))
+        await model.load(settings: Self.settings)
+        #expect(model.headerWarning != nil)
+        try s.writePersonal(WubiFixtures.userDict.replacingOccurrences(of: "version: \"test\"", with: "version: 1.0"))
+        await model.load(settings: Self.settings)
+        #expect(model.headerWarning == nil)
     }
 }

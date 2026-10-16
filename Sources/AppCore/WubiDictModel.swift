@@ -55,6 +55,8 @@ public final class WubiDictModel {
     public private(set) var isSaving = false
     /// 结果、出错的说明
     public var message: String?
+    /// 个人词库本身的问题（常驻提示）：头部缺少 version 时鼠须管会忽略整个词库（verified-facts 8.2）
+    public private(set) var headerWarning: String?
 
     // MARK: 加一个词的草稿
 
@@ -100,7 +102,8 @@ public final class WubiDictModel {
     private var base: Data?
     /// 测试用：合并、保存以后，记账之前调用（模拟这时外面又改了文件）
     var mergeHook: (@Sendable () -> Void)?
-    /// 测试用：读词库、保存改动的后台工作开始时先等它（测试用来卡住后台，确定地检查「正在读」「正在保存」时的行为）
+    /// 测试用：卡住后台工作，确定地检查「正在读」「正在保存」时的行为。
+    /// 读词库、收外面的词：后台工作一开始先等它；保存改动：新的编辑器建好（索引重建完）以后、核对和写文件之前等它
     var backgroundGate: (@Sendable () async -> Void)?
 
     public init(env: AppEnvironment) {
@@ -155,15 +158,7 @@ public final class WubiDictModel {
             let userFile: DictFile
             let base: Data?
             do {
-                // personal 里有文件时读一次原文，记下来写之前核对；没有时按起点规则读
-                if FileManager.default.fileExists(atPath: store.personalFile.path) {
-                    let data = try Data(contentsOf: store.personalFile)
-                    base = data
-                    userFile = try DictFile.parse(data: data)
-                } else {
-                    base = nil
-                    userFile = try store.load(package: package)
-                }
+                (userFile, base) = try Self.read(store, package: package)
             } catch {
                 return .failure(.personal(Self.reason(error)))
             }
@@ -204,7 +199,9 @@ public final class WubiDictModel {
         }
         if let editor, let package = loadedPackage, let spec = env.catalog.package(target.packageID),
            env.cachedPackage(spec)?.filesDirectory == package.filesDirectory,
-           (try? store.load(package: package))?.render() == editor.userFile.render() {
+           let now = try? Self.read(store, package: package), now.file.render() == editor.userFile.render() {
+            // 内容一样，但文件可能是这期间才有的（比如采用了外面那份）：以后写之前按磁盘上现在的核对
+            base = now.data
             loadedSettings = settings
             return
         }
@@ -394,7 +391,9 @@ public final class WubiDictModel {
         let store = self.store
         let start = self.base
         let hook = mergeHook
+        let gate = backgroundGate
         let outcome: MergeOutcome = await Task.detached {
+            await gate?()
             var file = editor.userFile
             var base = start
             var added = 0
@@ -402,9 +401,8 @@ public final class WubiDictModel {
             for _ in 1...2 {
                 do {
                     let result = try store.mergeExternal(into: file)
-                    try Self.ensureUnchanged(store, base)
                     // 一个词都没加也要写：还没有 personal 里的文件时，起点就是外面那份
-                    try store.save(result.merged)
+                    try Self.saveChecked(store, base: base, result.merged)
                     file = result.merged
                     base = Data(file.render().utf8)
                     added += result.added
@@ -414,6 +412,9 @@ public final class WubiDictModel {
                     break
                 } catch is StaleFile {
                     return .stale
+                } catch ApplyError.busy {
+                    failure = Self.applyBusy
+                    break
                 } catch let error as WubiUserDictError {
                     failure = error.description
                 } catch {
@@ -429,13 +430,15 @@ public final class WubiDictModel {
             return false
         case .done(let snapshot, let base, let added, let failure):
             guard current == generation else {
-                message = "词库刚才重新读过了，请再收一次"
-                return false
+                // 这期间页面重新读了词库：以重新读的为准。收成了就是收成了（已经写进去、记了账）
+                refresh()
+                message = failure ?? "外面加的词已经收进来了；词库刚才重新读过，请看一下列表"
+                return failure == nil
             }
             self.base = base
             adopt(snapshot)
             refresh()
-            message = failure ?? "收进来 \(added) 个词"
+            message = failure ?? (added == 0 ? "外面那份里的词这边都有了，不用再收" : "收进来 \(added) 个词")
             return failure == nil
         }
     }
@@ -523,6 +526,26 @@ public final class WubiDictModel {
     /// personal 里的文件和读的时候不一样了
     private struct StaleFile: Error {}
 
+    /// 读个人词库：personal 里有文件时读一次原文（返回它，写之前核对用）；没有时按起点规则读，原文是 nil
+    nonisolated private static func read(_ store: WubiUserDict, package: CachedPackage) throws -> (file: DictFile, data: Data?) {
+        if FileManager.default.fileExists(atPath: store.personalFile.path) {
+            let data = try Data(contentsOf: store.personalFile)
+            return (try DictFile.parse(data: data), data)
+        }
+        return (try store.load(package: package), nil)
+    }
+
+    /// 拿着应用锁核对、写进 personal：「应用改动」（采用外面那份）和这里不会同时写。
+    /// 正在应用改动时抛 `ApplyError.busy`；文件和 base 不一样时抛 `StaleFile`
+    nonisolated private static func saveChecked(_ store: WubiUserDict, base: Data?, _ file: DictFile) throws {
+        let lock = try ApplyLock.acquire(store.paths)
+        defer { withExtendedLifetime(lock) {} }
+        try ensureUnchanged(store, base)
+        try store.save(file)
+    }
+
+    nonisolated private static let applyBusy = "正在应用改动，等一下再试"
+
     /// 写之前核对：磁盘上的 personal 文件还是 base（不在就是 nil）
     nonisolated private static func ensureUnchanged(_ store: WubiUserDict, _ base: Data?) throws {
         let now = FileManager.default.fileExists(atPath: store.personalFile.path)
@@ -580,9 +603,9 @@ public final class WubiDictModel {
         }
     }
 
-    /// 写进 personal，换上新的编辑器。make 在后台跑（重建索引）
+    /// 写进 personal，换上新的编辑器。make 在后台跑（重建索引）。
+    /// 没写成时（正在读、正在写、正在应用改动、文件在别处被改过、写不了）返回 false，原因放进 message
     @discardableResult
-    /// 没写成时（正在读、正在写、文件在别处被改过、写不了）返回 false，原因放进 message
     private func commit(_ make: @escaping @Sendable (WubiEditor) -> WubiEditor) async -> Bool {
         guard let editor else {
             message = notEditable
@@ -597,12 +620,12 @@ public final class WubiDictModel {
         let gate = backgroundGate
         do {
             let result = try await Task.detached { () async throws -> (Snapshot, Data)? in
-                await gate?()
-                try Self.ensureUnchanged(store, base)
+                // 重建索引要一会儿：核对放在这之后，紧挨着写（这期间别处写了 personal 就不覆盖）
                 let updated = make(editor)
+                await gate?()
                 // 什么都没改（比如导入的行都被跳过）：不写文件
                 if updated.userFile == editor.userFile { return nil }
-                try store.save(updated.userFile)
+                try Self.saveChecked(store, base: base, updated.userFile)
                 return (Snapshot(updated), Data(updated.userFile.render().utf8))
             }.value
             guard let (snapshot, saved) = result else { return false }
@@ -618,6 +641,9 @@ public final class WubiDictModel {
         } catch is StaleFile {
             await reloadAfterStale()
             return false
+        } catch ApplyError.busy {
+            message = Self.applyBusy
+            return false
         } catch {
             message = "没能保存五笔个人词库：\(error)"
             return false
@@ -629,6 +655,8 @@ public final class WubiDictModel {
         entries = snapshot.editor.userFile.entries
         codes = snapshot.codes
         positions = snapshot.positions
+        headerWarning = snapshot.editor.userFile.hasVersion
+            ? nil : "个人词库的头部缺少 version，鼠须管会忽略整个个人词库（里面的词都打不出来）"
         checkResults = [:]
         refreshDraft()
     }
@@ -641,6 +669,7 @@ public final class WubiDictModel {
         entries = []
         codes = []
         positions = [:]
+        headerWarning = nil
         checkResults = [:]
         self.availability = availability
         refreshDraft()
@@ -671,13 +700,15 @@ public final class WubiDictModel {
         updateDraftProblem()
     }
 
-    /// 词库变了（加了、改了、重新读了）：重新算草稿。位置还在范围里就留着
+    /// 词库变了（加了、改了、重新读了）：重新算草稿。原来是最后的还放最后；别的位置还在范围里就留着
     private func refreshDraft() {
         let text = trimmedDraft
         draftEncoding = text.isEmpty ? nil : editor?.encoder?.encode(text)
         if case .codes(let list) = draftEncoding { draftCodeChoices = list } else { draftCodeChoices = [] }
+        // 原来选的是「最后」：词变多了也还是最后，不变成某个词前面
+        let wasLast = draftPosition > existing.count
         existing = editor.flatMap { WubiEncoder.isValidCode(draftCode) ? $0.index.words(for: draftCode) : nil } ?? []
-        if !draftPositions.contains(draftPosition) { draftPosition = existing.count + 1 }
+        if wasLast || !draftPositions.contains(draftPosition) { draftPosition = existing.count + 1 }
         updateDraftProblem()
     }
 

@@ -59,6 +59,7 @@ struct WubiDictPage: View {
             if wubi.availability == .badDict, let text = wubi.availability.message {
                 Note(text: text)
             }
+            if let text = wubi.headerWarning { Note(text: text) }
             if wubi.externallyChanged { externalNotice }
             AddWordSection(wubi: wubi, busy: busy)
             Divider()

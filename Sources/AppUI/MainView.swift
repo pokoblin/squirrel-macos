@@ -41,7 +41,8 @@ struct MainView: View {
             }
             Button("放弃这次改动", role: .cancel) { Task { await model.resolveExternalChanges(.cancel) } }
         } message: {
-            Text((model.pendingExternalChanges ?? []).map(\.description).joined(separator: "\n"))
+            Text(((model.pendingExternalChanges ?? []).map(\.description) + [model.adoptPersonalWarning].compactMap { $0 })
+                .joined(separator: "\n"))
         }
     }
 

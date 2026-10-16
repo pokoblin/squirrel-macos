@@ -52,6 +52,14 @@ public final class MainModel {
     public internal(set) var pendingExternalChanges: [ExternalChange]?
     /// 外部改动里有个人词库被改过（弹窗里多一个「采用」）
     public internal(set) var pendingPersonalChanges = false
+    /// 外部改动弹窗里要多说的一句（设计 4.4）：五笔个人词库在外面被改过、页面里又有没应用的改动时，
+    /// 选「采用」会用外面那份整份替换 personal 里的，页面里的改动就没了
+    public var adoptPersonalWarning: String? {
+        guard pendingPersonalChanges, let changes = pendingExternalChanges,
+              changes.contains(.modified(wubiDict.rimeFileName)), wubiDict.needsApply
+        else { return nil }
+        return "采用外面那份时，五笔词库页里还没应用的改动（新加、改过、删掉的词）会被换掉"
+    }
     /// 上次应用用的选项（用户在弹窗里选了以后再用）；onlySync：只同步文本替换（应用已保存的设置，不带草稿）
     var lastApply = (options: ApplyOptions(), usingCache: false, onlySync: false)
     public internal(set) var colorSchemes: [ColorSchemeInfo] = []
