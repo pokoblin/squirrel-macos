@@ -32,6 +32,11 @@ import Testing
         #expect(e.resolveCode(text: "甲\t乙", given: "ab") == .failure(.invalidText))
         #expect(e.resolveCode(text: "甲\n乙", given: nil) == .failure(.invalidText))
         #expect(e.resolveCode(text: "甲\r\n乙", given: nil) == .failure(.invalidText))
+        // 以 # 开头的写进词库是注释行，加了也打不出来
+        #expect(e.resolveCode(text: "#甲乙", given: "ab") == .failure(.invalidText))
+        #expect(e.plan(text: "#甲乙", code: "ab", position: nil) == .failure(.invalidText))
+        #expect(WubiEditProblem.invalidText.description.contains("#"))
+        #expect(e.plan(text: "甲#乙", code: "ab", position: nil) == .success(DictEntry(text: "甲#乙", code: "ab")))
     }
 
     // MARK: plan
@@ -139,6 +144,45 @@ import Testing
         #expect(e.planUpdate(at: 9, code: "wqiy", position: nil) == .failure(.noSuchEntry))
         let dup = try editor(WubiFixtures.userDict + "\n仰泳\tabcd\n", in: dir)
         #expect(dup.planUpdate(at: 1, code: "wqiy", position: nil) == .failure(.alreadyInDict))
+    }
+
+    // MARK: 大词库
+
+    /// 一份很大的个人词库：一半写了编码，一半没写（要补自动编码）。词都是用夹具里的字拼的三字词
+    static func bigUserDict(_ n: Int) -> String {
+        let chars = Array("张三丰五仰泳一二四六七八九十大小山水火木土")
+        var lines: [String] = []
+        var i = 0
+        outer: for a in chars {
+            for b in chars {
+                for c in chars {
+                    guard lines.count < n else { break outer }
+                    lines.append(i % 2 == 0 ? "\(a)\(b)\(c)" : "\(a)\(b)\(c)\tabc\(["a", "b", "c", "d"][i % 4])")
+                    i += 1
+                }
+            }
+        }
+        return WubiFixtures.userDict + "\n" + lines.joined(separator: "\n") + "\n"
+    }
+
+    @Test func 个人词库很大时读和换都不慢() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let user = Self.bigUserDict(5000)
+        let clock = ContinuousClock()
+        var e: WubiEditor?
+        let made = try clock.measure { e = try editor(user, in: dir) }
+        let editor = try #require(e)
+        #expect(editor.userFile.entries.count == 5001)
+        // 没写编码的补上了自动编码，进了索引
+        #expect(editor.entriesWithCodes.allSatisfy { $0.code != nil })
+        var file = editor.userFile
+        file.append(DictEntry(text: "甲乙", code: "wqiy"))
+        let replaced = clock.measure { _ = editor.replacing(userFile: file) }
+        let matched = clock.measure { _ = editor.removeMatches(text: "张三丰", code: nil) }
+        // 以前随个人词库大小平方增长（5000 条在 debug 下读、换各要 3 秒多）；现在是线性的，debug 下也远不到 1 秒
+        #expect(made < .seconds(1), "读：\(made)")
+        #expect(replaced < .seconds(1), "换：\(replaced)")
+        #expect(matched < .seconds(1), "找要删的：\(matched)")
     }
 
     @Test func 换个人词库_索引跟着变() throws {

@@ -2,7 +2,7 @@ import Foundation
 
 /// 加词、删词、导入、检查时出的问题。`description` 是给人看的原话
 public enum WubiEditProblem: Error, Equatable, Sendable, CustomStringConvertible {
-    /// 词是空的，或者含制表符、换行（写进词库会弄坏那一行）
+    /// 词是空的，或者含制表符、换行（写进词库会弄坏那一行），或者以 # 开头（写进词库是注释行，打不出来）
     case invalidText
     /// 编码不是 1 到 4 个 a–y 的小写字母
     case invalidCode
@@ -27,7 +27,7 @@ public enum WubiEditProblem: Error, Equatable, Sendable, CustomStringConvertible
 
     public var description: String {
         switch self {
-        case .invalidText: return "词不能是空的，也不能含有制表符或换行"
+        case .invalidText: return "词不能是空的，不能含有制表符或换行，也不能以 # 开头"
         case .invalidCode: return "编码只能是 a–y 的小写字母，1 到 4 个"
         case .cannotEncode(let chars):
             return "算不出编码" + (chars.isEmpty ? "" : "（\(chars.map(String.init).joined(separator: "、"))）") + "，请自己填编码"
@@ -55,27 +55,36 @@ public struct WubiEditor: Sendable {
     /// 编码索引：主词库、导入词库，个人词库用 `userFile`（没写编码的按自动编码算）
     public let index: WubiCodeIndex
 
-    private let main: DictFile
-    private let imports: [(name: String, file: DictFile)]
+    /// 主词库、导入词库的词条（读一次留着，换个人词库时不再拆文件）
+    private let mainEntries: [DictEntry]
+    private let importEntries: [(name: String, entries: [DictEntry])]
+    /// userFile.entries（取一次留着：每次取都要把整个文件过一遍）
+    private let userEntries: [DictEntry]
+    /// userEntries 补上自动编码（算不出的还是没有）
+    private let codedEntries: [DictEntry]
 
     public init(package: CachedPackage, userFile: DictFile, target: WubiDictTarget = .jidian) throws {
         let tables = try WubiCodeIndex.loadTables(from: package, target: target)
-        self.init(main: tables.main, imports: tables.imports, userFile: userFile, target: target)
+        self.init(encoder: try? WubiEncoder(mainDict: tables.main), mainEntries: tables.main.entries,
+                  importEntries: tables.imports.map { (name: $0.name, entries: $0.file.entries) },
+                  userFile: userFile, target: target)
     }
 
-    private init(main: DictFile, imports: [(name: String, file: DictFile)], userFile: DictFile, target: WubiDictTarget) {
+    /// 花的时间和词库大小成正比（个人词库的每个词条只看一遍）
+    private init(encoder: WubiEncoder?, mainEntries: [DictEntry], importEntries: [(name: String, entries: [DictEntry])],
+                 userFile: DictFile, target: WubiDictTarget) {
         self.target = target
-        self.main = main
-        self.imports = imports
-        self.userFile = userFile
-        let encoder = try? WubiEncoder(mainDict: main)
         self.encoder = encoder
-        var coded = userFile
-        for (i, e) in Self.fill(userFile.entries, encoder: encoder).enumerated() where userFile.entries[i].code?.isEmpty ?? true && e.code != nil {
-            coded.replaceEntry(at: i, with: e)
-        }
+        self.mainEntries = mainEntries
+        self.importEntries = importEntries
+        self.userFile = userFile
+        let entries = userFile.entries
+        userEntries = entries
+        let coded = Self.fill(entries, encoder: encoder)
+        codedEntries = coded
         self.index = WubiCodeIndex(
-            main: main, imports: imports.map { $0.name == target.userTable ? (name: $0.name, file: coded) : $0 },
+            main: mainEntries,
+            imports: importEntries.map { $0.name == target.userTable ? (name: $0.name, entries: coded) : $0 },
             personalTable: target.userTable)
     }
 
@@ -94,10 +103,11 @@ public struct WubiEditor: Sendable {
     }
 
     /// 个人词库里的词条，没写编码的补上自动编码（算不出的还是没有）。检查时用这个
-    public var entriesWithCodes: [DictEntry] { Self.fill(userFile.entries, encoder: encoder) }
+    public var entriesWithCodes: [DictEntry] { codedEntries }
 
     static func isValidText(_ text: String) -> Bool {
-        !text.isEmpty && !text.contains { $0 == "\t" || $0 == "\n" || $0 == "\r" || $0 == "\r\n" }
+        !text.isEmpty && !text.hasPrefix("#")
+            && !text.contains { $0 == "\t" || $0 == "\n" || $0 == "\r" || $0 == "\r\n" }
     }
 
     /// 这个词可以用的编码：给了就用给的（要合法），没给就自动算（可能有好几个，第一个是默认）
@@ -143,17 +153,17 @@ public struct WubiEditor: Sendable {
     /// 换成另一份个人词库（改了、删了、合并了以后），主词库和导入词库不重新读。
     /// 索引整个重建，花的时间和主词库大小成正比，别在主线程上做
     public func replacing(userFile file: DictFile) -> WubiEditor {
-        WubiEditor(main: main, imports: imports, userFile: file, target: target)
+        WubiEditor(encoder: encoder, mainEntries: mainEntries, importEntries: importEntries, userFile: file, target: target)
     }
 
     /// 改个人词库里第 i 个词条（`userFile.entries` 里的序号）的编码和位置（从 1 起，nil 是最后）。
     /// 查重时不算它自己；编码、位置都没变时原样返回（权重不动）。返回的词条一定写着编码
     public func planUpdate(at i: Int, code: String, position: Int?) -> Result<DictEntry, WubiEditProblem> {
-        let entries = userFile.entries
+        let entries = userEntries
         guard entries.indices.contains(i) else { return .failure(.noSuchEntry) }
         guard WubiEncoder.isValidCode(code) else { return .failure(.invalidCode) }
         let old = entries[i]
-        let coded = entriesWithCodes
+        let coded = codedEntries
         if coded.indices.contains(where: { $0 != i && coded[$0].text == old.text && coded[$0].code == code }) {
             return .failure(.alreadyPersonal)
         }
@@ -183,9 +193,9 @@ public struct WubiEditor: Sendable {
 
     /// 要删的词条在 `userFile.entries` 里的序号：词一样，而且（没给编码，或者编码一样，没写编码的词条按自动编码比）
     public func removeMatches(text: String, code: String?) -> [Int] {
-        let coded = entriesWithCodes
-        return userFile.entries.indices.filter { i in
-            let e = userFile.entries[i]
+        let coded = codedEntries
+        return userEntries.indices.filter { i in
+            let e = userEntries[i]
             guard e.text == text else { return false }
             guard let code else { return true }
             return coded[i].code == code

@@ -42,9 +42,16 @@ public struct WubiCodeIndex: Sendable {
     /// imports：按读的先后排好的导入表；名字是 `personalTable` 的那个算个人词库
     public init(main: DictFile, imports: [(name: String, file: DictFile)],
                 personalTable: String = WubiDictTarget.jidian.userTable) {
+        self.init(main: main.entries, imports: imports.map { (name: $0.name, entries: $0.file.entries) },
+                  personalTable: personalTable)
+    }
+
+    /// 和上面一样，只是直接给词条（已经取出来的，免得每次重建都再拆一遍文件）
+    public init(main: [DictEntry], imports: [(name: String, entries: [DictEntry])],
+                personalTable: String = WubiDictTarget.jidian.userTable) {
         var order = 0
-        func add(_ file: DictFile, personal: Bool) {
-            for e in file.entries {
+        func add(_ entries: [DictEntry], personal: Bool) {
+            for e in entries {
                 // 没写编码的词由 librime 编译时自己算，这里不知道编码，不进索引
                 guard let code = e.code, !code.isEmpty else { continue }
                 byCode[code, default: []].append(
@@ -53,7 +60,7 @@ public struct WubiCodeIndex: Sendable {
             }
         }
         add(main, personal: false)
-        for t in imports { add(t.file, personal: t.name == personalTable) }
+        for t in imports { add(t.entries, personal: t.name == personalTable) }
     }
 
     /// 排序时用的权重：没写和负数都算 0（实测 librime 就是这样，verified-facts 8.2）
