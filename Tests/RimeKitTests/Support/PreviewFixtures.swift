@@ -126,3 +126,16 @@ final class HelperProcess {
         }
     }
 }
+
+extension PreviewFixtures {
+    /// 在 dir 里写一个假的辅助程序（#!/bin/sh 脚本），测试 PreviewSession 不需要 librime
+    static func fakeHelper(in dir: URL, script: String) throws -> URL {
+        let url = dir.appending(path: "fake-helper")
+        try Data(("#!/bin/sh\n" + script + "\n").utf8).write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    /// 假辅助程序回的一行成功结果：preedit 是 "ok"
+    static let okReply = #"{"ok":true,"librimeVersion":"1.16.0","state":{"preedit":"ok","cursor":0,"candidates":[],"pageNo":0,"isLastPage":true,"highlighted":0}}"#
+}
