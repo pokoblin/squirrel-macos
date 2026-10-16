@@ -113,9 +113,17 @@ public final class PreviewModel {
         await load(draft: draft, hasPending: hasPending)
     }
 
-    /// 换方案：同一个辅助程序、同一份副本，只换方案
+    /// 方案下拉框能不能用：能打字的时候，或者出错了但副本还在（第一个方案打不开时还能换别的方案，页面不锁死）
+    public var canSelectSchema: Bool {
+        guard !schemas.isEmpty else { return false }
+        if phase == .ready { return true }
+        return isFailed && copy != nil
+    }
+
+    /// 换方案：同一个辅助程序、同一份副本，只换方案（辅助程序没了就新建一个）。
+    /// 出错的时候选回同一个方案也重新打开一次
     public func selectSchema(_ id: String) async {
-        guard phase == .ready, id != schema, schemas.contains(where: { $0.id == id }) else { return }
+        guard canSelectSchema, phase != .ready || id != schema, schemas.contains(where: { $0.id == id }) else { return }
         generation += 1
         await open(id, generation: generation)
     }

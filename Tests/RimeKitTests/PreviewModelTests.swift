@@ -14,6 +14,12 @@ actor FakePreviewEngine: PreviewEngine {
     var inputError: PreviewError?
     /// 收到这些输入以后先停一会儿再回（测试按键顺序用）
     var inputDelays: [String: Duration] = [:]
+    /// 打开这些方案时抛的错（每次都失败）
+    let openFailures: [String: PreviewError]
+
+    init(openFailures: [String: PreviewError] = [:]) {
+        self.openFailures = openFailures
+    }
 
     func setInput(_ state: PreviewState) { inputState = state }
     func failInput(_ error: PreviewError?) { inputError = error }
@@ -21,12 +27,14 @@ actor FakePreviewEngine: PreviewEngine {
 
     func open(userDir: URL, schema: String) async throws -> PreviewOpened {
         calls.append(.open(userDir, schema))
+        if let error = openFailures[schema] { throw error }
         return PreviewOpened(librimeVersion: "1.16.1", state: .empty)
     }
 
     func input(_ text: String) async throws -> PreviewState {
-        calls.append(.input(text))
+        // 先停再记：记下的是做完的先后。不排队的话，停得久的键会记在后面
         if let delay = inputDelays[text] { try? await Task.sleep(for: delay) }
+        calls.append(.input(text))
         if let inputError { throw inputError }
         return inputState
     }
@@ -55,11 +63,15 @@ actor FakePreviewEngine: PreviewEngine {
 final class FakeEngines: @unchecked Sendable {
     private let lock = NSLock()
     private var made: [FakePreviewEngine] = []
+    private var failures: [String: PreviewError] = [:]
 
     var all: [FakePreviewEngine] { lock.withLock { made } }
 
+    /// 之后建的引擎打开这些方案时都失败
+    func failOpen(_ failures: [String: PreviewError]) { lock.withLock { self.failures = failures } }
+
     func make() -> any PreviewEngine {
-        let engine = FakePreviewEngine()
+        let engine = FakePreviewEngine(openFailures: lock.withLock { failures })
         lock.withLock { made.append(engine) }
         return engine
     }
@@ -397,6 +409,43 @@ final class GatedCompiler: RimeCompiler, @unchecked Sendable {
         #expect(s.stagingIsEmpty())
     }
 
+    /// 第一个方案每次都打不开：页面不能锁死，换第二个方案能用
+    @Test(arguments: [PreviewError.helperDied(status: 6, stderr: []), .timedOut,
+                      .failed(.schemaMissing, "选不了方案 wb_py")])
+    func 第一个方案打不开时换方案(error: PreviewError) async throws {
+        let s = try setup(); defer { s.remove() }
+        s.engines.failOpen(["wb_py": error])
+        let model = PreviewModel(env: s.env)
+        await model.enter(draft: draft, hasPending: false)
+        guard case .failed = model.phase else { Issue.record("应该失败：\(model.phase)"); return }
+        #expect(model.schema == nil)
+        #expect(model.canSelectSchema)
+        // 失败时选回同一个方案也算再试一次
+        await model.selectSchema("wb_py")
+        guard case .failed = model.phase else { Issue.record("应该还是失败：\(model.phase)"); return }
+        await model.selectSchema("py")
+        #expect(model.phase == .ready)
+        #expect(model.schema == "py")
+        await model.press(.text("ni"))
+        #expect(model.state.preedit == "ni")
+        await model.leave()
+        #expect(s.stagingIsEmpty())
+    }
+
+    @Test func 准备副本失败时不能换方案() async throws {
+        let s = try setup(); defer { s.remove() }
+        // 没部署过：准备副本就失败，没有副本可选
+        try FileManager.default.removeItem(at: s.machine.locations.rimeDirectory.appending(path: "build"))
+        let model = PreviewModel(env: s.env)
+        #expect(!model.canSelectSchema)   // 还没进入页面
+        await model.enter(draft: draft, hasPending: false)
+        guard case .failed = model.phase else { Issue.record("应该失败：\(model.phase)"); return }
+        #expect(!model.canSelectSchema)
+        await model.selectSchema("py")
+        guard case .failed = model.phase else { Issue.record("应该还是失败：\(model.phase)"); return }
+        await model.leave()
+    }
+
     @Test func 找不到辅助程序() async throws {
         var s = try setup(); defer { s.remove() }
         s.env.previewEngine = { throw PreviewError.helperMissing }
@@ -453,7 +502,8 @@ final class GatedCompiler: RimeCompiler, @unchecked Sendable {
         #expect(compile.title == "新配置编译不过" && compile.lines == ["第 1 行有问题"])
         let missing = d(PreviewError.failed(.schemaMissing, "副本里没有 build/wb_py.schema.yaml"))
         #expect(missing.title == "副本里找不到方案 wb_py")
-        #expect(missing.lines.contains { $0.contains("重新载入") })
+        // 说的按钮要和界面上的一样（出错时只有「重试」）
+        #expect(missing.canRetry && missing.lines == ["复制配置时鼠须管可能正在部署，点「重试」再试"])
         #expect(d(PreviewError.failed(.schemaMissing, "选不了方案 py")).title == "副本里找不到方案 py")
         let team = d(PreviewError.failed(.loadFailed, "dlopen(...): code signature ... have different Team IDs"))
         #expect(team.title == "应用的签名有问题，试打用不了" && !team.canRetry)

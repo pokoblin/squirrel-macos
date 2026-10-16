@@ -74,7 +74,7 @@ struct PreviewPage: View {
                     }
                 }
                 .fixedSize()
-                .disabled(preview.phase != .ready)
+                .disabled(!preview.canSelectSchema)
             }
             Spacer()
         }
@@ -101,37 +101,42 @@ struct PreviewPage: View {
                 .font(.title3)
                 .foregroundStyle(state.preedit.isEmpty ? .secondary : .primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if !state.candidates.isEmpty {
+            // 有编码就显示「清空」（没有候选时也能清掉打错的编码）；翻页只在有候选时显示
+            if !state.preedit.isEmpty || !state.candidates.isEmpty {
                 Divider()
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(state.candidates.enumerated()), id: \.offset) { index, candidate in
-                        Button {
-                            preview.submit(.choose(index))
-                            inputFocused = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("\(label(index, state)).").foregroundStyle(.secondary)
-                                Text(candidate.text)
-                                if !candidate.comment.isEmpty {
-                                    Text(candidate.comment).font(.caption).foregroundStyle(.secondary)
+                if !state.candidates.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(state.candidates.enumerated()), id: \.offset) { index, candidate in
+                            Button {
+                                preview.submit(.choose(index))
+                                inputFocused = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text("\(label(index, state)).").foregroundStyle(.secondary)
+                                    Text(candidate.text)
+                                    if !candidate.comment.isEmpty {
+                                        Text(candidate.comment).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
                                 }
-                                Spacer(minLength: 0)
+                                .padding(.vertical, 3)
+                                .padding(.horizontal, 6)
+                                .contentShape(Rectangle())
+                                .background(index == state.highlighted ? Color.accentColor.opacity(0.25) : .clear,
+                                            in: RoundedRectangle(cornerRadius: 4))
                             }
-                            .padding(.vertical, 3)
-                            .padding(.horizontal, 6)
-                            .contentShape(Rectangle())
-                            .background(index == state.highlighted ? Color.accentColor.opacity(0.25) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 4))
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 HStack(spacing: 8) {
-                    Button("上一页") { preview.submit(.pageUp); inputFocused = true }
-                        .disabled(state.pageNo == 0)
-                    Button("下一页") { preview.submit(.pageDown); inputFocused = true }
-                        .disabled(state.isLastPage)
-                    Text("第 \(state.pageNo + 1) 页").font(.caption).foregroundStyle(.secondary)
+                    if !state.candidates.isEmpty {
+                        Button("上一页") { preview.submit(.pageUp); inputFocused = true }
+                            .disabled(state.pageNo == 0)
+                        Button("下一页") { preview.submit(.pageDown); inputFocused = true }
+                            .disabled(state.isLastPage)
+                        Text("第 \(state.pageNo + 1) 页").font(.caption).foregroundStyle(.secondary)
+                    }
                     Spacer()
                     Button("清空") { preview.submit(.clearInput); inputFocused = true }
                 }
@@ -172,6 +177,7 @@ struct PreviewPage: View {
         case .delete: return .backspace
         case .escape: return .escape
         case .return: return .return
+        case KeyEquivalent("\u{3}"): return .return   // 小键盘的回车（Enter）
         case .pageUp: return .pageUp
         case .pageDown: return .pageDown
         case .upArrow: return .up

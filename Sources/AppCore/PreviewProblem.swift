@@ -68,7 +68,7 @@ public struct PreviewProblem: Equatable, Sendable {
             let schema = firstMatch(#"(?<=build/).+(?=\.schema\.yaml)"#, in: message)
                 ?? firstMatch(#"(?<=选不了方案 ).+"#, in: message)
             return PreviewProblem(title: schema.map { "副本里找不到方案 \($0)" } ?? "副本里找不到这个方案",
-                                  lines: ["复制配置时鼠须管可能正在部署，点「重新载入」再试"], canRetry: true)
+                                  lines: ["复制配置时鼠须管可能正在部署，点「重试」再试"], canRetry: true)
         case .refusedDirectory:
             return PreviewProblem(title: "试打出错了", lines: [PreviewError.failed(kind, message).description], canRetry: false)
         case .notOpen, .badRequest:
