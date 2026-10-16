@@ -15,4 +15,5 @@ app="$(find "$mount" -maxdepth 1 -name '*.app' | head -1)"
 [ "$(readlink "$mount/Applications")" = "/Applications" ] || { echo "dmg 里没有「应用程序」快捷方式" >&2; exit 1; }
 codesign --verify --deep --strict "$app"
 xcrun stapler validate "$app" >/dev/null
+"$(dirname "$0")/check-entitlements.sh" "$app" --release
 echo "ok：$dmg"

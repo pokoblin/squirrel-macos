@@ -41,6 +41,7 @@ notarize() {
 
 APP="$(CONFIGURATION=release SIGN_IDENTITY="$SIGN_IDENTITY" ./tools/app/build-app.sh | tail -1)"
 codesign --verify --deep --strict --verbose=2 "$APP" >&2
+./tools/release/check-entitlements.sh "$APP" --release >&2
 
 # 1. 公证应用本身，把票据钉在应用上
 if [ "${SKIP_NOTARIZE:-}" = "1" ]; then
