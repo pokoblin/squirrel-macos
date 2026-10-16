@@ -234,10 +234,46 @@ import Testing
         #expect(rows.map(\.text) == ["张三丰"])
     }
 
-    @Test func 没有头部时三个点和横线不影响() throws {
-        // 只有 --- 没有 ...：不跳头部
-        let rows = try parse("张三丰\n李四 sbl")
-        #expect(rows.count == 2)
+    @Test func 只有横线没有三个点不跳头部() throws {
+        let rows = try parse("---\n张三丰\n李四 sbl")
+        #expect(rows.map(\.text) == ["---", "张三丰", "李四"])
+        #expect(rows[0].status == .needsCode)
+        #expect(!rows[0].selected)
+        #expect(rows[1].status == .ok)
+    }
+
+    @Test func 三个点在横线前面不跳头部() throws {
+        let rows = try parse("张三丰\n...\n---\n李四 sbl")
+        #expect(rows.map(\.text) == ["张三丰", "...", "---", "李四"])
+        #expect(rows.map(\.id) == [1, 2, 3, 4])
+        #expect(rows[0].status == .ok)
+        #expect(rows[1].status == .needsCode)
+    }
+
+    @Test func 词表中间的横线不吞掉前面的词() throws {
+        let rows = try parse("张三丰\n李四 sbl\n---\n王五 wgd\n...\n赵六 xyz")
+        #expect(rows.map(\.text) == ["张三丰", "李四", "---", "王五", "...", "赵六"])
+        #expect(rows[0].status == .ok)
+        #expect(rows[1].status == .ok)
+        #expect(rows[2].status == .needsCode)
+        #expect(rows[5].code == "xyz")
+    }
+
+    @Test func 头部前面只有注释和空行才算头部() throws {
+        let rows = try parse("# 说明\n\n---\nname: x\n...\n张三丰")
+        #expect(rows.map(\.text) == ["张三丰"])
+        #expect(rows[0].id == 6)
+    }
+
+    @Test func 词是空的行留着标需要编码() throws {
+        let rows = try parse("\t张三丰\n\tabcd\n  \t\n李四 sbl")
+        #expect(rows.map(\.id) == [1, 2, 4])
+        #expect(rows[0].text == "")
+        #expect(rows.prefix(2).allSatisfy { $0.status == .needsCode && !$0.selected })
+        // 勾上也不会生成空词的词条
+        var forced = rows
+        forced[1].selected = true
+        #expect(WubiImport.entries(from: forced) == [DictEntry(text: "李四", code: "sbl", weight: nil)])
     }
 
     @Test func 空文本没有行() throws {
