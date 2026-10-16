@@ -273,3 +273,8 @@ ORDER BY ZSHORTCUT;
 | 虚拟机里的系统版本不能比宿主机新；苹果规定一台 Mac 最多同时运行 2 台 macOS 虚拟机 | 查看 |
 | 宿主机的剪贴板目前粘贴不进虚拟机 | 实测 |
 | 用 computer-use 在 Tart 窗口里点击，坐标会偏（误点开了苹果菜单）。界面操作最好让用户自己点，或者改用 SSH 命令 | 实测 |
+| 测试机里访问宿主机用 `192.168.64.1`（宿主机 `bridge100` 的地址）；宿主机上 `python3 -m http.server --bind 192.168.64.1` 发的文件测试机能拿到 | 实测（2026-10-16） |
+| tart 2.41：`--dir=project:<项目目录>:ro` 报「directory sharing device configuration is invalid」，路径末尾加 `/`（`<项目目录>/:ro`）就好；`tools/vm` 那个共享不受影响 | 实测（2026-10-16） |
+| 启动已有测试机（不是克隆新的）：`tart run squirrel-dev --dir="vm:<项目>/tools/vm:ro" --dir="project:<项目>/:ro"`，要在命令沙箱外运行 | 实测（2026-10-16） |
+| macOS 自带的 bash 3.2 在 UTF-8 环境下，`"$VAR）"` 这种变量后面紧跟全角字符的写法会把字符的字节算进变量名（`set -u` 时报 unbound variable）。脚本里一律写 `${VAR}` | 实测（2026-10-16） |
+| raw.githubusercontent.com：推送后立即用 `curl` 拉，拿到的就是新内容（这次没遇到缓存延迟） | 实测（2026-10-16，只试了一次） |

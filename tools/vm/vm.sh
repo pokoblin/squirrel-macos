@@ -23,7 +23,8 @@ case "$cmd" in
     [ -n "$name" ] || usage
     [ "$name" != "$BASE" ] || { echo "不能用底板的名字"; exit 1; }
     tart clone "$BASE" "$name"
-    run_args=(--dir="vm:$PROJECT/tools/vm:ro" --dir="project:$PROJECT:ro")
+    # project 的路径末尾要带 /：tart 2.41 把「…/squirrel-macos:ro」解析错，报目录共享配置无效（2026-10-16 实测）
+    run_args=(--dir="vm:$PROJECT/tools/vm:ro" --dir="project:$PROJECT/:ro")
     [ "${3:-}" = "--headless" ] && run_args+=(--no-graphics)
     nohup tart run "$name" "${run_args[@]}" >"${TMPDIR:-/tmp}/tart-$name.log" 2>&1 &
     disown

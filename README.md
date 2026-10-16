@@ -92,13 +92,14 @@ shasum -a 256 SquirrelHelper-版本号.dmg
 | 雾凇拼音（全拼）、小鹤双拼、雾凇词库 | [iDvel/rime-ice](https://github.com/iDvel/rime-ice) | GPL-3.0 |
 | 极点五笔 86（可和拼音混输） | [KyleBing/rime-wubi86-jidian](https://github.com/KyleBing/rime-wubi86-jidian) | Apache-2.0 |
 
-起步方案有三个：雾凇拼音（全拼）、小鹤双拼、五笔 + 拼音混输。方案清单在 [`Sources/RimeKit/Resources/catalog.json`](Sources/RimeKit/Resources/catalog.json)，想加新方案欢迎提 issue 或 PR。
+起步方案有三个：雾凇拼音（全拼）、小鹤双拼、五笔 + 拼音混输。方案清单在 [`Sources/RimeKit/Resources/catalog.json`](Sources/RimeKit/Resources/catalog.json)，同时签名发布在 [`catalog/v1/`](catalog/v1/)：加新方案不用等应用发新版，在「方案」页点「检查方案清单更新」就能用上。想加新方案欢迎提 issue 或 PR。
 
 ## 隐私
 
 - 文本替换、个人词库只在你的电脑上处理，**不上传**。读文本替换不需要另外授权。
 - 导出文件里不放文本替换生成的短语（同一个 Apple 账户在新电脑上会自动同步）。
-- 应用只在安装鼠须管、下载方案时联网，都是从鼠须管和各方案的 GitHub 下载。没有统计、没有遥测。
+- 应用只在安装鼠须管、下载方案、检查方案清单更新时联网，都是从 GitHub 下载（鼠须管、各方案的仓库，以及本项目仓库里的方案清单），不上传任何内容。没有统计、没有遥测。「诊断」页列出了每种联网的时机和地址。
+- 方案清单带签名：在「方案」页点「检查方案清单更新」才会去拉，签名验不过就不用。
 
 ## 已知限制
 
