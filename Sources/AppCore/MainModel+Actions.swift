@@ -197,14 +197,29 @@ extension MainModel {
 
     /// 消息里的「把外面加的词收进来」：收进来以后接着把刚才那次应用做完
     func mergeWubiDictAndApply() async {
+        guard working == nil else {
+            notice = Self.busyMergeNotice(working)
+            return
+        }
         if !wubiDict.availability.canEdit { await wubiDict.load(settings: draft) }
-        await wubiDict.mergeExternal()
-        guard wubiDict.availability.canEdit, !wubiDict.externallyChanged else {
+        guard await wubiDict.mergeExternal() else {
             notice = Notice(kind: .error, title: "没能把外面加的词收进来",
                             lines: [wubiDict.message ?? wubiDict.availability.message ?? "请到「五笔词库」页再试一次"])
             return
         }
+        // 收的时候开始了别的事：这次先不应用，免得什么都没发生
+        guard working == nil else {
+            notice = Notice(kind: .info, title: "外面加的词已经收进来了", lines: ["等「\(working ?? "")」做完，再点「应用改动」"])
+            return
+        }
         await run(lastApply.options, usingCache: lastApply.usingCache, onlySync: lastApply.onlySync)
+    }
+
+    /// 正在忙别的事时点了「把外面加的词收进来」：留着按钮，等一下再点
+    static func busyMergeNotice(_ working: String?) -> Notice {
+        Notice(kind: .warning, title: "鼠须管目录里的五笔个人词库在应用外被改过",
+               lines: ["正在做别的事（\(working ?? "")），做完再点一次"],
+               action: .mergeWubiDict, actionTitle: "把外面加的词收进来")
     }
 
     // MARK: 还原（任务 5 补全备份列表）

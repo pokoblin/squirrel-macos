@@ -159,10 +159,7 @@ extension Rimectl {
             out.error("读不了文件（要 UTF-8 文本）：\(path)")
             return 1
         }
-        guard let rows = env.editor.parseImport(text) else {
-            out.error(WubiEditProblem.noEncoder.description)
-            return 1
-        }
+        let rows = env.editor.parseImport(text)
         let entries = WubiImport.entries(from: rows)
         if !entries.isEmpty { try env.userDict.save(env.editor.applying(entries).userFile) }
         out.line("加入 \(entries.count) 个")

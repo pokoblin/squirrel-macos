@@ -204,9 +204,9 @@ public struct WubiEditor: Sendable {
         return out
     }
 
-    /// 解析批量导入的文本（要有编码器）。查重把没写编码的个人词条也算在内
-    public func parseImport(_ text: String) -> [ImportRow]? {
-        guard let encoder else { return nil }
-        return WubiImport.parse(text, encoder: encoder, index: index)
+    /// 解析批量导入的文本。查重把没写编码的个人词条也算在内。
+    /// 没有编码器时只是算不了编码：没写编码的行要手填，写了编码的行照样能加
+    public func parseImport(_ text: String) -> [ImportRow] {
+        WubiImport.parse(text, encoder: encoder, index: index)
     }
 }

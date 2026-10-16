@@ -44,7 +44,8 @@ public struct ImportRow: Equatable, Sendable, Identifiable {
 /// 批量导入：把一段文本解析成一行行待加的词，并标出每行的状态。
 /// 格式：`词`、`词 编码`、`词<Tab>编码<Tab>权重`；空行和 `#` 行跳过；`---`…`...` 之间的头部跳过。
 public enum WubiImport {
-    public static func parse(_ text: String, encoder: WubiEncoder, index: WubiCodeIndex) -> [ImportRow] {
+    /// encoder 是 nil（主词库里没有组词规则）时，没写编码的行都是「需要编码」，写了合法编码的行照样能加
+    public static func parse(_ text: String, encoder: WubiEncoder?, index: WubiCodeIndex) -> [ImportRow] {
         var scalars = Substring(text).unicodeScalars
         if scalars.first == "\u{FEFF}" { scalars = scalars.dropFirst() }
         let body = String(scalars)
@@ -84,7 +85,7 @@ public enum WubiImport {
                 code = given
                 if !WubiEncoder.isValidCode(given) { status = .needsCode }
             } else {
-                switch fields.text.isEmpty ? .unknown([]) : encoder.encode(fields.text) {
+                switch fields.text.isEmpty ? .unknown([]) : (encoder?.encode(fields.text) ?? .unknown([])) {
                 case .codes(let list):
                     code = list[0]
                     choices = list

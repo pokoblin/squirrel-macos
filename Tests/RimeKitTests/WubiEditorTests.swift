@@ -114,7 +114,7 @@ import Testing
     @Test func 导入按自动编码查重() throws {
         let dir = try TempDir(); defer { dir.remove() }
         let e = try editor(WubiFixtures.userDict + "\n张三丰\n", in: dir)
-        let rows = try #require(e.parseImport("张三丰\n张三丰\txddh\n仰泳\n"))
+        let rows = e.parseImport("张三丰\n张三丰\txddh\n仰泳\n")
         #expect(rows.map(\.status) == [.alreadyPersonal, .duplicateInBatch, .alreadyInDict])
     }
 

@@ -15,9 +15,12 @@ private final class PageEngine: PreviewEngine {
     private let inner = Mutex(Inner())
     private let pages: [String: [[String]]]
     private let onOpen: @Sendable () async -> Void
+    /// 打字时抛的错（模拟辅助程序出问题）
+    private let inputError: PreviewError?
 
-    init(pages: [String: [[String]]], onOpen: @escaping @Sendable () async -> Void) {
+    init(pages: [String: [[String]]], inputError: PreviewError? = nil, onOpen: @escaping @Sendable () async -> Void) {
         self.pages = pages
+        self.inputError = inputError
         self.onOpen = onOpen
     }
 
@@ -38,7 +41,8 @@ private final class PageEngine: PreviewEngine {
         return PreviewOpened(librimeVersion: "fake", state: .empty)
     }
     func input(_ text: String) async throws -> PreviewState {
-        inner.withLock { $0.code = text; $0.page = 0; return state($0) }
+        if let inputError { throw inputError }
+        return inner.withLock { $0.code = text; $0.page = 0; return state($0) }
     }
     func key(_ key: PreviewKey) async throws -> PreviewState {
         inner.withLock { if key == .pageDown { $0.page += 1 }; return state($0) }
@@ -48,12 +52,20 @@ private final class PageEngine: PreviewEngine {
     func close() async { inner.withLock { $0.closed = true } }
 }
 
+/// 线程安全的计数（测试钩子里用）
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+    func next() -> Int { lock.withLock { n += 1; return n } }
+}
+
 /// 记下建过的引擎；打开时看到的 isChecking
 private final class PageEngines: @unchecked Sendable {
     private let lock = NSLock()
     private var made: [PageEngine] = []
     private var seen: [Bool] = []
     var pages: [String: [[String]]] = [:]
+    var inputError: PreviewError?
     /// 打开时读这个（测试里指向模型）
     var probe: (@MainActor @Sendable () -> Bool)?
 
@@ -62,7 +74,7 @@ private final class PageEngines: @unchecked Sendable {
 
     func make() -> any PreviewEngine {
         let probe = self.probe
-        let engine = PageEngine(pages: pages) { [weak self] in
+        let engine = PageEngine(pages: pages, inputError: inputError) { [weak self] in
             guard let probe else { return }
             let v = await MainActor.run { probe() }
             self?.lock.withLock { self?.seen.append(v) }
@@ -531,5 +543,181 @@ private final class PageEngines: @unchecked Sendable {
         #expect(main.notice?.title == "改动已经生效")
         #expect(model.entries.map(\.text).contains("丁戊己"))
         #expect(!model.externallyChanged)
+    }
+
+    // MARK: 同时发生的读、写（审阅修复）
+
+    /// 等到条件成立（最多让出 1000 次）
+    func wait(_ condition: () -> Bool) async {
+        for _ in 0..<1000 where !condition() { await Task.yield() }
+    }
+
+    @Test func 正在保存时不接受第二个修改() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        model.draftText = "张三丰"
+        let first = Task { await model.add() }
+        await wait { model.isSaving }
+        try #require(model.isSaving)
+        await model.remove(at: 0)
+        #expect(model.message == "正在保存上一个改动，等一下再试")
+        await first.value
+        #expect(!model.isSaving)
+        #expect(model.entries.map(\.text) == ["分组词条", "张三丰"])
+        #expect(s.personalText() == WubiFixtures.userDict + "\n张三丰\txddh\n")
+    }
+
+    @Test func 正在读时不接受修改_旧的读取结果丢掉() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)
+        model.draftText = "张三丰"
+        let slow = Task { await model.load(settings: Self.settings) }
+        await wait { model.isLoading }
+        try #require(model.isLoading)
+        await model.add()
+        #expect(model.message == "正在读五笔词库，等读完再试")
+        await model.mergeExternal()
+        #expect(model.message == "正在读五笔词库，等读完再试")
+        #expect(!FileManager.default.fileExists(atPath: s.personalFile.path))
+
+        // 这时又读了一次（关掉了极点五笔）：前一次的结果不要了，isLoading 也不会卡住
+        await model.load(settings: Settings(schemas: ["wb_py"]))
+        await slow.value
+        #expect(model.availability == .notEnabled)
+        #expect(!model.isLoading)
+
+        // 两次都是真的读：读完以后不卡在 isLoading
+        let a = Task { await model.load(settings: Self.settings) }
+        await wait { model.isLoading }
+        await model.load(settings: Self.settings)
+        await a.value
+        #expect(model.availability == .ready)
+        #expect(!model.isLoading)
+    }
+
+    @Test func personal在别处被改过时不覆盖_重新读() async throws {
+        let s = try setup(); defer { s.remove() }
+        let model = await loaded(s)   // 这时还没有 personal 里的文件
+        // 应用时采用了外面那份、或者 rimectl wubi add 写了文件
+        try s.writePersonal(WubiFixtures.userDict + "\n外面词\tabcd\n")
+        model.draftText = "张三丰"
+        await model.add()
+        #expect(s.personalText() == WubiFixtures.userDict + "\n外面词\tabcd\n")
+        #expect(model.entries.map(\.text) == ["分组词条", "外面词"])
+        #expect(model.message?.contains("在别处被改过") == true)
+        // 重新读了以后再加就行
+        model.draftText = "张三丰"
+        await model.add()
+        #expect(s.personalText() == WubiFixtures.userDict + "\n外面词\tabcd\n张三丰\txddh\n")
+
+        // 读的时候已经有文件、之后又被改了：删词也不覆盖
+        try s.writePersonal(WubiFixtures.userDict + "\n外面词\tabcd\n张三丰\txddh\n又一个\tabce\n")
+        await model.remove(at: 1)
+        #expect(s.personalText().contains("外面词\tabcd"))
+        #expect(s.personalText().contains("又一个\tabce"))
+        #expect(model.entries.map(\.text) == ["分组词条", "外面词", "张三丰", "又一个"])
+        #expect(model.message?.contains("在别处被改过") == true)
+    }
+
+    @Test func 收的时候外面又改了_再收一次() async throws {
+        let s = try setup(); defer { s.remove() }
+        try s.writeRime(WubiFixtures.userDict + "\n丁戊己\tsdnn\n")
+        try s.record(WubiFixtures.userDict)
+        let model = await loaded(s)
+        let rime = s.rimeFile
+        let counter = Counter()
+        // 第一次记账前，外面又加了一个词
+        model.mergeHook = {
+            guard counter.next() == 1 else { return }
+            let old = (try? String(contentsOf: rime, encoding: .utf8)) ?? ""
+            try? Data((old + "庚辛壬\tyuyu\n").utf8).write(to: rime)
+        }
+        #expect(await model.mergeExternal())
+        #expect(model.entries.map(\.text) == ["分组词条", "丁戊己", "庚辛壬"])
+        #expect(!model.externallyChanged)
+        #expect(model.message == "收进来 1 个词")   // 丁戊己 在起点里就有（还没有 personal 文件，起点用 Rime 目录里那份）
+    }
+
+    @Test func 收的时候外面一直在改_重试一次以后说明() async throws {
+        let s = try setup(); defer { s.remove() }
+        try s.writeRime(WubiFixtures.userDict + "\n丁戊己\tsdnn\n")
+        try s.record(WubiFixtures.userDict)
+        let model = await loaded(s)
+        let rime = s.rimeFile
+        let counter = Counter()
+        model.mergeHook = {
+            let n = counter.next()
+            let old = (try? String(contentsOf: rime, encoding: .utf8)) ?? ""
+            try? Data((old + "外面词\(n)\tabcd\n").utf8).write(to: rime)
+        }
+        #expect(await model.mergeExternal() == false)
+        #expect(counter.next() == 3)   // 只试了两次
+        #expect(model.message == WubiUserDictError.changedAgain.description)
+        #expect(model.externallyChanged)
+        // 收进来的词已经写进 personal，不丢
+        #expect(s.personalText().contains("丁戊己\tsdnn"))
+    }
+
+    @Test func 检查时试打出错也关掉引擎删掉副本() async throws {
+        let s = try setup(); defer { s.remove() }
+        try s.writePersonal(WubiFixtures.userDict + "\n甲乙\twqiy\t15\n")
+        s.engines.inputError = .timedOut
+        let model = await loaded(s)
+        await model.check(draft: Self.settings)
+        #expect(model.message?.contains("辅助程序太久没回应") == true)
+        #expect(model.checkResults.isEmpty)
+        #expect(!model.isChecking)
+        let engine = try #require(s.engines.all.first)
+        #expect(engine.closed)
+        #expect(s.stagingIsEmpty())
+    }
+
+    @Test func 收不进来时提示出错() async throws {
+        let s = try setup(); defer { s.remove() }
+        let main = try MainModel(env: s.env)
+        let model = main.wubiDict
+        await model.load(settings: main.draft)
+        model.draftText = "张三丰"
+        await model.add()
+        await main.apply()
+        try s.writeRime("坏掉的文件\n")
+        await main.apply()
+        #expect(main.notice?.action == .mergeWubiDict)
+
+        // 正在忙别的事：不收，按钮留着
+        main.working = "正在导出……"
+        await main.perform(.mergeWubiDict)
+        #expect(main.notice?.action == .mergeWubiDict)
+        #expect(main.notice?.kind == .warning)
+        main.working = nil
+
+        await main.perform(.mergeWubiDict)
+        #expect(main.notice?.kind == .error)
+        #expect(main.notice?.title == "没能把外面加的词收进来")
+        #expect(s.rimeText() == "坏掉的文件\n")
+    }
+
+    // MARK: 主词库认不出时手填编码
+
+    @Test func 主词库认不出时导入写了编码的行() async throws {
+        let s = try setup(); defer { s.remove() }
+        let main = s.package.filesDirectory.appending(path: WubiFixtures.mainName)
+        try Data(WubiFixtures.mainDict.replacingOccurrences(of: "encoder:", with: "encoder_off:").utf8).write(to: main)
+        let model = await loaded(s)
+        #expect(model.availability == .badDict)
+        let rows = await model.importRows("张三丰\n甲乙\twqiy\n仰泳\twqiy\n")
+        #expect(rows.map(\.status) == [.needsCode, .ok, .alreadyInDict])
+        #expect(rows.map(\.selected) == [false, true, false])
+        await model.confirmImport(rows)
+        #expect(model.entries.map(\.text) == ["分组词条", "甲乙"])
+        #expect(model.message == "加入 1 个，可以点「检查能不能打出来」")
+
+        // 手填编码加一个词
+        model.draftText = "丙丁"
+        #expect(!model.canAdd)
+        model.draftCode = "abcd"
+        #expect(model.canAdd)
+        await model.add()
+        #expect(model.entries.last == DictEntry(text: "丙丁", code: "abcd"))
     }
 }
