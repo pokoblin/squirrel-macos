@@ -12,6 +12,9 @@ struct PreviewPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("试打").font(.title2.bold())
+            // 候选窗口由鼠须管自己画，外观设置不经过 librime，这里看不出来
+            Text("这里看的是候选内容（出哪些字词、什么顺序）。字体、颜色、横排竖排这些外观，要在真的用鼠须管打字时看。")
+                .font(.callout).foregroundStyle(.secondary)
             controls
             if preview.needsReload(draft: model.draft) || (preview.source == .pending && !model.hasPendingChanges) {
                 reloadHint
