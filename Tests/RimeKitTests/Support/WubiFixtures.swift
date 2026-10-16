@@ -174,12 +174,14 @@ enum WubiFixtures {
         var description: String { "五笔夹具编译失败：\(stderr)" }
     }
 
-    /// 把夹具文件写进 dir（可换掉个人词库的内容），用 rime_deployer 编译，返回 dir
+    /// 把夹具文件写进 dir（可换掉个人词库的内容），用 rime_deployer 编译，返回 dir。
+    /// extraFiles：另外写进去或换掉的文件（文件名 → 内容），比如换掉 hamster 词库
     @discardableResult
-    static func compiled(in dir: URL, userDict: String? = nil) throws -> URL {
+    static func compiled(in dir: URL, userDict: String? = nil, extraFiles: [String: String] = [:]) throws -> URL {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var all = files
         if let userDict { all[userName] = userDict }
+        all.merge(extraFiles) { _, new in new }
         for (path, text) in all {
             try Data(text.utf8).write(to: dir.appending(path: path))
         }
