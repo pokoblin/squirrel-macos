@@ -7,6 +7,36 @@ struct FakeCompiler: RimeCompiler {
     func compile(_ directory: URL) throws -> CompileReport { report }
 }
 
+/// 会往编译目录写 build/ 的假编译器：记下编译的目录，按设定写出方案的编译结果
+final class WritingCompiler: RimeCompiler, @unchecked Sendable {
+    private let lock = NSLock()
+    private var dirs: [URL] = []
+    let report: CompileReport
+    /// 编译后在 build/ 里写出的方案（id → 名字，nil 表示没有 name）
+    let schemas: [(id: String, name: String?)]
+
+    init(schemas: [(id: String, name: String?)], report: CompileReport = CompileReport(succeeded: true, errors: [])) {
+        self.schemas = schemas
+        self.report = report
+    }
+
+    var compiled: [URL] { lock.withLock { dirs } }
+
+    func compile(_ directory: URL) throws -> CompileReport {
+        lock.withLock { dirs.append(directory) }
+        guard report.succeeded else { return report }
+        let build = directory.appending(path: "build", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: build, withIntermediateDirectories: true)
+        let list = schemas.map { "  - schema: \($0.id)\n" }.joined()
+        try Data("schema_list:\n\(list)".utf8).write(to: build.appending(path: "default.yaml"))
+        for schema in schemas {
+            let name = schema.name.map { "\n  name: \($0)" } ?? ""
+            try Data("schema:\n  schema_id: \(schema.id)\(name)\n".utf8).write(to: build.appending(path: "\(schema.id).schema.yaml"))
+        }
+        return report
+    }
+}
+
 /// 假的鼠须管：reload / launch 时往 Rime 目录写一个新的 user.yaml（模拟部署完成），
 /// errorLine 不为空时同时往日志目录的 ERROR 文件追加一行
 final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {

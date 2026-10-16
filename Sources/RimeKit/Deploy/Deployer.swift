@@ -129,14 +129,7 @@ public struct Deployer: Sendable {
 
         // 3. 拼出完整的目录编译：现有的、应用不管也不会覆盖的配置文件 + 新生成的
         let full = work.appending(path: "full", directoryHint: .isDirectory)
-        let existing = try RimeFiles.configFiles(in: rime)
-        let newSet = Set(newPaths)
-        for path in existing where ledger.entries[path] == nil && !newSet.contains(path) {
-            try Self.copy(rime.appending(path: path), to: full.appending(path: path))
-        }
-        for path in newPaths {
-            try Self.copy(generated.appending(path: path), to: full.appending(path: path))
-        }
+        let existing = try FullConfig.assemble(rime: rime, ledger: ledger, generated: generated, newPaths: newPaths, into: full)
         let compiled = try compiler.compile(full)
         guard compiled.succeeded else { return .compileFailed(RimeLog.explain(compiled.errors)) }
 
