@@ -22,6 +22,8 @@ public enum WubiEditProblem: Error, Equatable, Sendable, CustomStringConvertible
     case noRoom
     /// 位置要从 1 起
     case invalidPosition
+    /// 个人词库里没有这一条（序号不对，比如列表已经变了）
+    case noSuchEntry
 
     public var description: String {
         switch self {
@@ -36,6 +38,7 @@ public enum WubiEditProblem: Error, Equatable, Sendable, CustomStringConvertible
         case .alreadyInDict: return "词库里已经有了"
         case .noRoom: return "这个位置放不进去"
         case .invalidPosition: return "位置要从 1 起"
+        case .noSuchEntry: return "个人词库里没有这个词了，请重新打开这一页"
         }
     }
 }
@@ -134,7 +137,42 @@ public struct WubiEditor: Sendable {
     public func applying(_ entries: [DictEntry]) -> WubiEditor {
         var file = userFile
         for e in entries { file.append(e) }
-        return WubiEditor(main: main, imports: imports, userFile: file, target: target)
+        return replacing(userFile: file)
+    }
+
+    /// 换成另一份个人词库（改了、删了、合并了以后），主词库和导入词库不重新读。
+    /// 索引整个重建，花的时间和主词库大小成正比，别在主线程上做
+    public func replacing(userFile file: DictFile) -> WubiEditor {
+        WubiEditor(main: main, imports: imports, userFile: file, target: target)
+    }
+
+    /// 改个人词库里第 i 个词条（`userFile.entries` 里的序号）的编码和位置（从 1 起，nil 是最后）。
+    /// 查重时不算它自己；编码、位置都没变时原样返回（权重不动）。返回的词条一定写着编码
+    public func planUpdate(at i: Int, code: String, position: Int?) -> Result<DictEntry, WubiEditProblem> {
+        let entries = userFile.entries
+        guard entries.indices.contains(i) else { return .failure(.noSuchEntry) }
+        guard WubiEncoder.isValidCode(code) else { return .failure(.invalidCode) }
+        let old = entries[i]
+        let coded = entriesWithCodes
+        if coded.indices.contains(where: { $0 != i && coded[$0].text == old.text && coded[$0].code == code }) {
+            return .failure(.alreadyPersonal)
+        }
+        if index.contains(text: old.text, code: code).inOthers { return .failure(.alreadyInDict) }
+        // 它自己现在的样子（没写编码的按自动编码）：算位置时先把它去掉
+        let me = DictEntry(text: old.text, code: coded[i].code, weight: old.weight)
+        if me.code == code, let position, position == self.position(of: me) {
+            return .success(me)
+        }
+        var weight: Int?
+        if let position {
+            guard position >= 1 else { return .failure(.invalidPosition) }
+            switch index.weight(forPosition: position - 1, code: code, excluding: me) {
+            case .weight(let w): weight = w
+            case .noWeight: weight = nil
+            case .noRoom: return .failure(.noRoom)
+            }
+        }
+        return .success(DictEntry(text: old.text, code: code, weight: weight))
     }
 
     /// 这个词条在它的编码下排第几（从 1 起），在 `applying` 之后的编辑器上问

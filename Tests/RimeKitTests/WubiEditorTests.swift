@@ -117,4 +117,38 @@ import Testing
         let rows = try #require(e.parseImport("张三丰\n张三丰\txddh\n仰泳\n"))
         #expect(rows.map(\.status) == [.alreadyPersonal, .duplicateInBatch, .alreadyInDict])
     }
+
+    // MARK: 改
+
+    @Test func 改编码和位置_查重不算自己() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        // 0 分组词条、1 甲乙 wqiy 15、2 张三丰（自动 xddh）、3 甲乙 abcd
+        let e = try editor(WubiFixtures.userDict + "\n甲乙\twqiy\t15\n张三丰\n甲乙\tabcd\n", in: dir)
+        // 原地不动：编码、位置都没变，权重也不变
+        #expect(e.planUpdate(at: 1, code: "wqiy", position: 2) == .success(DictEntry(text: "甲乙", code: "wqiy", weight: 15)))
+        // 放第一个：不算自己，你 20 + 10
+        #expect(e.planUpdate(at: 1, code: "wqiy", position: 1) == .success(DictEntry(text: "甲乙", code: "wqiy", weight: 30)))
+        // 放最后：不写权重
+        #expect(e.planUpdate(at: 1, code: "wqiy", position: nil) == .success(DictEntry(text: "甲乙", code: "wqiy")))
+        // 没写编码的词改位置：写上编码
+        #expect(e.planUpdate(at: 2, code: "xddh", position: nil) == .success(DictEntry(text: "张三丰", code: "xddh")))
+        // 和个人词库里另一条重复、和主词库重复、编码不对、序号不对
+        #expect(e.planUpdate(at: 3, code: "wqiy", position: nil) == .failure(.alreadyPersonal))
+        #expect(e.planUpdate(at: 1, code: "gghg", position: nil) == .success(DictEntry(text: "甲乙", code: "gghg")))
+        #expect(e.planUpdate(at: 1, code: "ABC", position: nil) == .failure(.invalidCode))
+        #expect(e.planUpdate(at: 9, code: "wqiy", position: nil) == .failure(.noSuchEntry))
+        let dup = try editor(WubiFixtures.userDict + "\n仰泳\tabcd\n", in: dir)
+        #expect(dup.planUpdate(at: 1, code: "wqiy", position: nil) == .failure(.alreadyInDict))
+    }
+
+    @Test func 换个人词库_索引跟着变() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let e = try editor(in: dir)
+        var file = e.userFile
+        file.append(DictEntry(text: "甲乙", code: "wqiy", weight: 15))
+        let replaced = e.replacing(userFile: file)
+        #expect(replaced.userFile == file)
+        #expect(replaced.index.words(for: "wqiy").map(\.text) == ["你", "甲乙", "仰泳"])
+        #expect(replaced.replacing(userFile: e.userFile).index.words(for: "wqiy").map(\.text) == ["你", "仰泳"])
+    }
 }

@@ -64,6 +64,7 @@ extension MainModel {
             case .applied(let report):
                 saved = updated
                 catalogNeedsApply = false
+                wubiMergeOffered = false
                 preview.markCurrentChanged()
                 if onlySync {
                     draft.textReplacement.lastSyncedHash = updated.textReplacement.lastSyncedHash
@@ -73,12 +74,24 @@ extension MainModel {
                 }
                 refreshColorSchemes()   // 这次可能新下载了包
                 notice = Self.notice(for: report)
+                // 账本更新了；采用了外面的个人词库、包换了新版本时，五笔词库页要重新读
+                await wubiDict.reloadIfChanged(settings: draft)
             case .compileFailed(let errors):
                 notice = Notice(kind: .error, title: "新配置编译不过，没有写入", lines: errors)
             case .externalChanges(let changes):
                 if options.overwriteExternalChanges || changes.allSatisfy({ if case .outsideRimeDirectory = $0 { true } else { false } }) {
                     // 已经要求覆盖了还是不能写，或者只有覆盖也没用的改动：所在目录是指到 Rime 目录外面的链接
                     notice = Notice(kind: .error, title: "这些文件不能写，没有写入", lines: changes.map(\.description))
+                } else if !wubiMergeOffered, changes == [.modified(wubiDict.rimeFileName)],
+                          WubiCheck.checkSchema(in: settings, target: .jidian) != nil {
+                    // 只有五笔个人词库在外面被改过：先建议按词条收进来（设计 4.4），两边的词都留下。
+                    // 不收的话再点一次「应用改动」，按原来的外部改动流程问（覆盖 / 采用外面那份）
+                    wubiMergeOffered = true
+                    wubiDict.refresh()
+                    notice = Notice(kind: .warning, title: "鼠须管目录里的五笔个人词库在应用外被改过",
+                                    lines: ["可以先把外面加的词收进来再应用，两边的词都会留下",
+                                            "不收的话，再点一次「应用改动」，可以选覆盖或者采用外面那份"],
+                                    action: .mergeWubiDict, actionTitle: "把外面加的词收进来")
                 } else {
                     let ledger = try Ledger.load(env.paths)
                     pendingPersonalChanges = changes.contains {
@@ -177,7 +190,21 @@ extension MainModel {
             await restore(id)
         case .syncTextReplacement:
             await syncTextReplacement()
+        case .mergeWubiDict:
+            await mergeWubiDictAndApply()
         }
+    }
+
+    /// 消息里的「把外面加的词收进来」：收进来以后接着把刚才那次应用做完
+    func mergeWubiDictAndApply() async {
+        if !wubiDict.availability.canEdit { await wubiDict.load(settings: draft) }
+        await wubiDict.mergeExternal()
+        guard wubiDict.availability.canEdit, !wubiDict.externallyChanged else {
+            notice = Notice(kind: .error, title: "没能把外面加的词收进来",
+                            lines: [wubiDict.message ?? wubiDict.availability.message ?? "请到「五笔词库」页再试一次"])
+            return
+        }
+        await run(lastApply.options, usingCache: lastApply.usingCache, onlySync: lastApply.onlySync)
     }
 
     // MARK: 还原（任务 5 补全备份列表）
@@ -191,6 +218,7 @@ extension MainModel {
         do {
             let report = try await offMain { try await deployer.restore(id) }
             preview.markCurrentChanged()
+            wubiDict.refresh()
             // 还原会清掉文本替换的同步记录：重新读设置；没应用的改动留着，只换同步记录
             if let now = try SettingsStore(paths: env.paths).load() {
                 saved = now
@@ -344,6 +372,7 @@ extension MainModel {
                 preview.markCurrentChanged()
                 if let note = reloadSettingsAfterImport() { lines.append(note) }
                 refreshColorSchemes()
+                await wubiDict.reloadIfChanged(settings: draft)
                 var result = Self.notice(for: applied)
                 result.title = result.kind == .info ? "已导入" : result.title
                 result.lines += lines

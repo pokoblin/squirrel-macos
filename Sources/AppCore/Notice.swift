@@ -13,6 +13,8 @@ public struct Notice: Identifiable, Equatable, Sendable {
         case restore(String)
         /// 打开应用时发现文本替换有变化：只同步文本替换
         case syncTextReplacement
+        /// 应用时发现五笔个人词库在外面被改过：先把外面加的词收进来，再应用一次
+        case mergeWubiDict
     }
 
     public let id = UUID()

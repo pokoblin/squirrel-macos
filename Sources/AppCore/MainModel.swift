@@ -6,7 +6,7 @@ import RimeKit
 @MainActor @Observable
 public final class MainModel {
     public enum Page: String, CaseIterable, Identifiable, Sendable {
-        case schemas, preview, appearance, textReplacement, transfer, backups, diagnostics
+        case schemas, preview, wubiDict, appearance, textReplacement, transfer, backups, diagnostics
 
         public var id: String { rawValue }
 
@@ -14,6 +14,7 @@ public final class MainModel {
             switch self {
             case .schemas: return "方案"
             case .preview: return "试打"
+            case .wubiDict: return "五笔词库"
             case .appearance: return "外观"
             case .textReplacement: return "文本替换"
             case .transfer: return "导入导出"
@@ -26,6 +27,7 @@ public final class MainModel {
             switch self {
             case .schemas: return "list.bullet"
             case .preview: return "keyboard"
+            case .wubiDict: return "character.book.closed"
             case .appearance: return "textformat.size"
             case .textReplacement: return "text.badge.checkmark"
             case .transfer: return "arrow.up.arrow.down.square"
@@ -63,11 +65,15 @@ public final class MainModel {
     public var catalog: Catalog { catalogStatus.catalog }
     /// 方案清单更新改到了正在用的包：要重新应用一次
     public internal(set) var catalogNeedsApply = false
-    /// 底部要不要显示「应用改动」
-    public var hasPendingChanges: Bool { isDirty || catalogNeedsApply }
+    /// 底部要不要显示「应用改动」：设置改了、方案清单要重新应用、五笔个人词库有没应用的改动
+    public var hasPendingChanges: Bool { isDirty || catalogNeedsApply || wubiDict.needsApply }
+    /// 应用时只有五笔个人词库在外面被改过：已经提示过一次「收进来」（再应用就按原来的外部改动流程问）
+    var wubiMergeOffered = false
 
     /// 「试打」页
     public let preview: PreviewModel
+    /// 「五笔词库」页
+    public let wubiDict: WubiDictModel
 
     let env: AppEnvironment
 
@@ -75,6 +81,7 @@ public final class MainModel {
         guard let settings = try SettingsStore(paths: env.paths).load() else { throw TransferError.noSettings }
         self.env = env
         preview = PreviewModel(env: env)
+        wubiDict = WubiDictModel(env: env)
         catalogStatus = env.catalogs.status
         saved = settings
         draft = settings

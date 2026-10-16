@@ -49,6 +49,7 @@ struct MainView: View {
         switch model.page {
         case .schemas: SchemasPage(model: model)
         case .preview: PreviewPage(model: model)
+        case .wubiDict: Text("五笔词库")
         case .appearance: AppearancePage(model: model)
         case .textReplacement: TextReplacementPage(model: model)
         case .transfer: TransferPage(model: model)
