@@ -282,6 +282,8 @@ ORDER BY ZSHORTCUT;
 - librime 会往 stderr 打 glog 的 INFO 日志（`Logging before InitGoogleLogging()…`），`min_log_level` 管不住这几行。
 - 函数表更多下标（实测，雾凇全拼）：`data_size` 是 788（98 个函数指针）；get_current_schema 33、simulate_key_sequence 47（`"women{space}"` 上屏「我们」）、select_candidate 71（按总序号选）、get_version 72（返回 `1.16.0`）、select_candidate_on_current_page 74（按本页序号选，选中即上屏）。
 - `process_key` 直接传 X11 键码就能翻页、删除：Page_Up `0xff55`、Page_Down `0xff56`、BackSpace `0xff08`、Escape `0xff1b`（清空编码）。翻页后 `menu.page_no` 变化，`is_last_page` 表示是否最后一页。雾凇的 `select_labels` 是空指针（用默认的 1–9 数字）。
+- 回车、上下方向键也能直接传 X11 键码（宿主机集成测试 `PreviewHelperTests`，测试拼音方案，2026-10-16）：Return `0xff0d` 把原编码上屏（`ni` 回车上屏 `ni`，候选清空）；Down `0xff54` 把高亮移到下一个候选（`highlighted_candidate_index` 0 → 1），Up `0xff52` 移回来。
+- 用户目录里有 `rime.lua` 时，就算方案里没用 Lua 也会执行（初始化、开会话、选方案这一步里），顶层的 `print` 写到进程的 stdout（同上）。试打的辅助程序因此先把 stdout 转到 stderr，协议用另外留的一份。
 
 用临时副本，不和鼠须管抢目录：
 
