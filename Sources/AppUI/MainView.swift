@@ -48,7 +48,7 @@ struct MainView: View {
     @ViewBuilder var page: some View {
         switch model.page {
         case .schemas: SchemasPage(model: model)
-        case .preview: Text("试打")   // 任务 8 换成真正的试打页
+        case .preview: PreviewPage(model: model)
         case .appearance: AppearancePage(model: model)
         case .textReplacement: TextReplacementPage(model: model)
         case .transfer: TransferPage(model: model)
@@ -78,7 +78,8 @@ struct ApplyBar: View {
                 if model.isDirty { Button("撤销") { model.revert() } }
                 Button("应用改动") { Task { await model.apply() } }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
+                    // 试打页里回车是给输入法的，不能触发「应用改动」
+                    .keyboardShortcut(model.page == .preview ? nil : .defaultAction)
             }
             .padding(12)
             .background(.bar)
