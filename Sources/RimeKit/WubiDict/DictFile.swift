@@ -36,11 +36,12 @@ public struct DictFile: Equatable, Sendable {
     public private(set) var importTables: [String]
     public private(set) var sort: String?
 
-    /// 头部原文：第一行到 `...` 那一行（含开头的注释），不含换行
+    /// 头部原文：第一行到 `...` 那一行（含开头的注释）。每行自带的 `\r` 留在行尾，换行符 `\n` 不含
     private var headerLines: [String]
     private var body: [Line]
     private var hasBOM: Bool
-    private var eol: String
+    /// 新写的行用 CRLF 还是 LF（按原文里哪种多；没有已有的行时用 LF）
+    private var crlf: Bool
     private var endsWithNewline: Bool
 
     public static let defaultColumns = ["text", "code", "weight"]
@@ -52,8 +53,12 @@ public struct DictFile: Equatable, Sendable {
     // MARK: 读
 
     public static func parse(data: Data) throws -> DictFile {
-        guard let s = String(data: data, encoding: .utf8) else { throw DictFileError.notUTF8 }
-        return try parse(s)
+        // String(data:) 会吞掉开头的 BOM，所以先看字节
+        let bom: [UInt8] = [0xEF, 0xBB, 0xBF]
+        let hasBOM = data.starts(with: bom)
+        guard let s = String(data: hasBOM ? data.dropFirst(3) : data, encoding: .utf8)
+        else { throw DictFileError.notUTF8 }
+        return try parse((hasBOM ? "\u{FEFF}" : "") + s)
     }
 
     public static func parse(_ text: String) throws -> DictFile {
@@ -63,23 +68,22 @@ public struct DictFile: Equatable, Sendable {
             bom = true
             text.removeFirst()
         }
-        let eol = text.contains("\r\n") ? "\r\n" : "\n"
         var all = text.components(separatedBy: "\n")
         var endsWithNewline = false
         if all.last == "" {
             all.removeLast()
             endsWithNewline = true
         }
-        // 去掉行尾的 \r（Windows 换行），渲染时再按 eol 补回
-        if eol == "\r\n" {
-            all = all.map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
-        }
+        // 每行自己的 \r 留在行尾原样保留（可能一个文件里 CRLF、LF 混着）；认行时再去掉
+        let crCount = all.filter { $0.hasSuffix("\r") }.count
+        let lfCount = all.count - crCount - (endsWithNewline ? 0 : 1)
+        let crlf = crCount > lfCount
 
         guard let start = all.firstIndex(where: { isMarker($0, "---") }),
             let end = all[(start + 1)...].firstIndex(where: { isMarker($0, "...") })
         else { throw DictFileError.noHeader }
 
-        let yaml = all[(start + 1)..<end].joined(separator: "\n")
+        let yaml = all[(start + 1)..<end].map(stripCR).joined(separator: "\n")
         let parsed: [String: Any]
         do {
             parsed = (try Yams.load(yaml: yaml) as? [String: Any]) ?? [:]
@@ -96,11 +100,15 @@ public struct DictFile: Equatable, Sendable {
         return DictFile(
             columns: columns, importTables: importTables, sort: sort,
             headerLines: Array(all[...end]), body: Array(body),
-            hasBOM: bom, eol: eol, endsWithNewline: endsWithNewline)
+            hasBOM: bom, crlf: crlf, endsWithNewline: endsWithNewline)
+    }
+
+    private static func stripCR(_ line: String) -> String {
+        line.hasSuffix("\r") ? String(line.dropLast()) : line
     }
 
     private static func isMarker(_ line: String, _ marker: String) -> Bool {
-        line.trimmingCharacters(in: .whitespaces) == marker
+        line.trimmingCharacters(in: .whitespacesAndNewlines) == marker
     }
 
     // MARK: 写
@@ -110,16 +118,29 @@ public struct DictFile: Equatable, Sendable {
         for l in body {
             switch l {
             case .raw(let s): lines.append(s)
-            case .entry(let e, let original): lines.append(original ?? Layout(columns: columns).format(e))
+            case .entry(let e, let original):
+                lines.append(original ?? Layout(columns: columns).format(e) + (crlf ? "\r" : ""))
             }
         }
-        var out = lines.joined(separator: eol)
-        if endsWithNewline { out += eol }
+        var out = lines.joined(separator: "\n")
+        if endsWithNewline { out += "\n" }
         return (hasBOM ? "\u{FEFF}" : "") + out
     }
 
     /// 加在文件末尾。原来末尾没有换行的，补上
     public mutating func append(_ e: DictEntry) {
+        if !endsWithNewline && crlf {
+            // 原来最后一行没有换行：补的换行跟文件多数行一样用 CRLF
+            if let last = body.indices.last {
+                switch body[last] {
+                case .raw(let s): body[last] = .raw(s.hasSuffix("\r") ? s : s + "\r")
+                case .entry(let old, let o):
+                    body[last] = .entry(old, original: o.map { $0.hasSuffix("\r") ? $0 : $0 + "\r" })
+                }
+            } else if let last = headerLines.indices.last, !headerLines[last].hasSuffix("\r") {
+                headerLines[last] += "\r"
+            }
+        }
         body.append(.entry(e, original: nil))
         endsWithNewline = true
     }
@@ -138,8 +159,14 @@ public struct DictFile: Equatable, Sendable {
         for i in body.indices {
             guard case .entry(let old, let original) = body[i] else { continue }
             if n == index {
-                // 内容没变就保留原文（比如带 stem 的行）
-                body[i] = old == e ? .entry(old, original: original) : .entry(e, original: nil)
+                if old == e {
+                    body[i] = .entry(old, original: original)
+                } else if let original {
+                    // 只改 text/code/weight 那几格，其余格（比如 stem）和行尾的换行原样留着
+                    body[i] = .entry(e, original: Layout(columns: columns).update(original, with: e))
+                } else {
+                    body[i] = .entry(e, original: nil)
+                }
                 return
             }
             n += 1
@@ -160,24 +187,46 @@ public struct DictFile: Equatable, Sendable {
             weightIdx = columns.firstIndex(of: "weight")
         }
 
-        func classify(_ line: String) -> Line {
+        func classify(_ rawLine: String) -> Line {
+            let line = DictFile.stripCR(rawLine)
             guard let textIdx, !line.isEmpty, !line.hasPrefix("#"),
                 !line.trimmingCharacters(in: .whitespaces).isEmpty
-            else { return .raw(line) }
+            else { return .raw(rawLine) }
             let fields = line.components(separatedBy: "\t")
             // 没有 Tab 又带空格的行（「奇怪 的行」）不认，原样保留
-            if fields.count == 1 && line.contains(" ") { return .raw(line) }
-            guard textIdx < fields.count, !fields[textIdx].isEmpty else { return .raw(line) }
+            if fields.count == 1 && line.contains(" ") { return .raw(rawLine) }
+            guard textIdx < fields.count, !fields[textIdx].isEmpty else { return .raw(rawLine) }
 
             var code: String?
             if let codeIdx, codeIdx < fields.count, !fields[codeIdx].isEmpty { code = fields[codeIdx] }
             var weight: Int?
             if let weightIdx, weightIdx < fields.count, !fields[weightIdx].isEmpty {
                 // 权重读不出来就整行原样保留，不去猜
-                guard let w = Int(fields[weightIdx]) else { return .raw(line) }
+                guard let w = Int(fields[weightIdx]) else { return .raw(rawLine) }
                 weight = w
             }
-            return .entry(DictEntry(text: fields[textIdx], code: code, weight: weight), original: line)
+            return .entry(DictEntry(text: fields[textIdx], code: code, weight: weight), original: rawLine)
+        }
+
+        /// 在原来的行上只改 text/code/weight 对应的格，别的格不动
+        func update(_ original: String, with e: DictEntry) -> String {
+            let hasCR = original.hasSuffix("\r")
+            var cells = DictFile.stripCR(original).components(separatedBy: "\t")
+            func set(_ idx: Int?, _ value: String?) {
+                guard let idx else { return }
+                if idx >= cells.count {
+                    guard let value, !value.isEmpty else { return }
+                    cells += Array(repeating: "", count: idx - cells.count + 1)
+                }
+                cells[idx] = value ?? ""
+            }
+            set(textIdx, e.text)
+            set(codeIdx, e.code)
+            set(weightIdx, e.weight.map { String($0) })
+            // 末尾空出来的格去掉（至少留到 text 那一格）
+            let keep = (textIdx ?? 0) + 1
+            while cells.count > keep, cells.last == "" { cells.removeLast() }
+            return cells.joined(separator: "\t") + (hasCR ? "\r" : "")
         }
 
         func format(_ e: DictEntry) -> String {
