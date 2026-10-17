@@ -11,3 +11,10 @@ DerivedData/
 *.xcuserstate
 # 执行计划时的临时工作区
 .superpowers/
+# 虚拟机共享文件夹里系统生成的目录
+.fseventsd/
+# 用 Claude 写的过程文档（设计、计划、测试记录等）只留在本地；发布说明和图片照常跟踪
+CLAUDE.md
+/docs/*
+!/docs/images/
+!/docs/release-notes/

@@ -3,10 +3,12 @@
 #   → 做 dmg（应用 + 指向「应用程序」的快捷方式）→ 给 dmg 签名 → 公证 dmg、钉票据 → 算 sha256。
 # 应用和 dmg 都钉了票据：从 dmg 里拖出来的应用，没联网也能通过 Gatekeeper。
 # 用法：
-#   ./tools/release/build-release.sh                    完整流程（先按 docs/release.md 存好公证凭据）
+#   ./tools/release/build-release.sh                    完整流程（要先存好公证凭据，见下）
 #   SKIP_NOTARIZE=1 ./tools/release/build-release.sh    只签名、不公证（试流程用）
 # 环境变量：SIGN_IDENTITY（默认 TONDA K.K. 的 Developer ID）、NOTARY_PROFILE（默认 squirrel-helper-notary）
 # 版本号取自 tools/app/Info.plist 的 CFBundleShortVersionString。
+# 第一次在一台 Mac 上发布时存公证凭据（App 专用密码自己输入）：
+#   xcrun notarytool store-credentials squirrel-helper-notary --apple-id <Apple ID> --team-id VS555M5VA8
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 # 发布包要和提交对得上：工作区有没提交的改动就不打包（试流程可以加 ALLOW_DIRTY=1）
