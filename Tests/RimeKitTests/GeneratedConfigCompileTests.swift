@@ -47,6 +47,23 @@ struct GeneratedConfigCompileTests {
 }
 
 @Suite(.enabled(if: RimeTools.installed))
+struct UniquifierCompileTests {
+    @Test func 置顶的短语和词库里的同一个字只出现一次() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let packages = try GenFixtures.makePackages(in: dir.url.appending(path: "cache"))
+        let personal = PersonalContent(dicts: [], phrases: [Phrase(text: "一", code: "g", weight: nil)])
+        let out = dir.url.appending(path: "out")
+        _ = try ConfigGenerator().generate(
+            try GenFixtures.input(Settings(schemas: ["wb", "wpy"]), packages: packages, personal: personal), into: out)
+        let build = try RimeTools.build(out)
+        #expect(build.status == 0, "\(build.stderr)")
+        let wb = try RimeTools.type(out, schema: "wb", ["g"])
+        #expect(wb["g"]?.first == "一")
+        #expect(wb["g"]?.filter { $0 == "一" }.count == 1, "\(wb)")
+    }
+}
+
+@Suite(.enabled(if: RimeTools.installed))
 struct OptionDependencyCompileTests {
     @Test func 只启用五笔时拼音混输也能用() throws {
         let dir = try TempDir(); defer { dir.remove() }

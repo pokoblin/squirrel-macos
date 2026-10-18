@@ -153,6 +153,34 @@ final class RimeEngine {
         isOpen = false
     }
 
+    /// 开关现在开着没有（繁简转换这类，名字见方案的 switches 或过滤器的 option_name）
+    func option(_ name: String) -> PreviewResponse {
+        guard isOpen, let api else { return Self.notOpen }
+        // 成功的回复都要带现在的样子（应用那边把没有 state 的成功回复当成辅助程序坏了）
+        return PreviewResponse(ok: true, state: snapshot(), option: api.pointee.get_option(session, name) != 0)
+    }
+
+    /// 本页第 index 个候选是不是对应整段输入。librime 不给每个候选管多长的编码（sel_start、sel_end 是整个片段的），
+    /// 拼音里短的候选（打 nihao 时的「你」）和整句在同一页。所以开一个临时会话，重打同样的编码、翻到同一页、选它，
+    /// 看还剩不剩编码。正在打的会话不动
+    func covers(_ index: Int) -> PreviewResponse {
+        guard isOpen, let api else { return Self.notOpen }
+        guard index >= 0 else { return .failure(.badRequest, "候选序号不能是负数：\(index)") }
+        let state = snapshot()
+        guard !state.input.isEmpty, let schema = currentSchema() else { return PreviewResponse(ok: true, state: state, covers: false) }
+        let probe = api.pointee.create_session()
+        guard probe != 0 else { return .failure(.loadFailed, "librime 建不了会话") }
+        defer { _ = api.pointee.destroy_session(probe) }
+        guard api.pointee.select_schema(probe, schema) != 0 else { return PreviewResponse(ok: true, state: state, covers: false) }
+        for byte in state.input.utf8 { _ = api.pointee.process_key(probe, Int32(byte), 0) }
+        for _ in 0..<state.pageNo { _ = api.pointee.process_key(probe, PreviewKey.pageDown.keysym, 0) }
+        guard api.pointee.select_candidate_on_current_page(probe, index) != 0 else {
+            return PreviewResponse(ok: true, state: state, covers: false)
+        }
+        let rest = api.pointee.get_input(probe).map { String(cString: $0) } ?? ""
+        return PreviewResponse(ok: true, state: state, covers: rest.isEmpty)
+    }
+
     private static let notOpen = PreviewResponse.failure(.notOpen, "先发 open")
 
     /// 现在的样子。先读上屏再读候选：四码唯一自动上屏时候选为空，不算失败
@@ -169,6 +197,9 @@ final class RimeEngine {
         let composition = context.composition
         state.preedit = composition.preedit.map { String(cString: $0) } ?? ""
         state.cursor = Int(composition.cursor_pos)
+        state.input = api.pointee.get_input(session).map { String(cString: $0) } ?? ""
+        // sel_start、sel_end、length 都是 preedit 里的字节位置：选中的是整个 preedit 才算整段
+        state.wholeInput = !state.preedit.isEmpty && composition.sel_start == 0 && composition.sel_end == composition.length
 
         let menu = context.menu
         if let candidates = menu.candidates {

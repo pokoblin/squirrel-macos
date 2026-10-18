@@ -1,6 +1,6 @@
 // librime 1.16 的结构体和函数表前缀（鼠须管自带的 librime.1.dylib 只导出 rime_get_api）。
 // 字段和 tools/vm/rime-type-probe.c 一样，函数表下标见 docs/verified-facts.md 第 8、8.1 节。
-// 只给用到的十四个函数写类型和名字，其余用 void * 占位，保证下标对得上。
+// 只给用到的十七个函数写类型和名字，其余用 void * 占位，保证下标对得上。
 #ifndef RIME_API_PREFIX_H
 #define RIME_API_PREFIX_H
 
@@ -72,7 +72,9 @@ typedef struct {
   void (*finalize)(void);                                                     // 3
   void *unused_4_12[9];                                                       // 4..12
   RimeSessionId (*create_session)(void);                                      // 13
-  void *unused_14_17[4];                                                      // 14..17
+  void *unused_14_14[1];                                                      // 14
+  RimeBool (*destroy_session)(RimeSessionId session);                         // 15
+  void *unused_16_17[2];                                                      // 16..17
   RimeBool (*process_key)(RimeSessionId session, int keycode, int mask);      // 18
   void *unused_19_19[1];                                                      // 19
   void (*clear_composition)(RimeSessionId session);                           // 20
@@ -80,10 +82,14 @@ typedef struct {
   RimeBool (*free_commit)(RimeCommit *commit);                                // 22
   RimeBool (*get_context)(RimeSessionId session, RimeContext *context);       // 23
   RimeBool (*free_context)(RimeContext *context);                             // 24
-  void *unused_25_32[8];                                                      // 25..32
+  void *unused_25_27[3];                                                      // 25..27
+  RimeBool (*get_option)(RimeSessionId session, const char *option);          // 28
+  void *unused_29_32[4];                                                      // 29..32
   RimeBool (*get_current_schema)(RimeSessionId session, char *schema_id, size_t buffer_size);  // 33
   RimeBool (*select_schema)(RimeSessionId session, const char *schema_id);    // 34
-  void *unused_35_71[37];                                                     // 35..71
+  void *unused_35_68[34];                                                     // 35..68
+  const char *(*get_input)(RimeSessionId session);                            // 69
+  void *unused_70_71[2];                                                      // 70..71
   const char *(*get_version)(void);                                           // 72
   void *unused_73_73[1];                                                      // 73
   RimeBool (*select_candidate_on_current_page)(RimeSessionId session, size_t index);  // 74

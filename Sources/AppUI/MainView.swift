@@ -64,17 +64,7 @@ struct MainView: View {
 struct ApplyBar: View {
     let model: MainModel
 
-    /// 设置没动时要说清楚要应用的是什么（不然「撤销」找不到，也不知道点了会怎样）
-    private var pendingText: String {
-        if model.isDirty {
-            return model.wubiDict.needsApply ? "有改动还没应用（「撤销」只撤销设置，不撤销五笔词库的改动）" : "有改动还没应用"
-        }
-        var parts: [String] = []
-        if model.catalogNeedsApply { parts.append("方案清单更新了") }
-        if !model.packageUpdates.isEmpty { parts.append("\(model.packageUpdateNames.joined(separator: "、")) 有新版本") }
-        if model.wubiDict.needsApply { parts.append(parts.isEmpty ? "五笔词库有改动" : "五笔词库也有改动") }
-        return parts.joined(separator: "，") + "，还没应用"
-    }
+    private var pendingText: String { model.pendingSummary }
 
     var body: some View {
         if let working = model.working {

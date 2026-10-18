@@ -21,6 +21,17 @@ import Testing
         #expect(try Ledger.load(paths) == ledger)
     }
 
+    @Test func 老账本没有短语指纹() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let paths = Fixtures.paths(dir)
+        try write(paths.root, paths.ledgerFile.lastPathComponent, #"{"formatVersion":1,"entries":{}}"#)
+        #expect(try Ledger.load(paths).phrasesSHA256 == nil)
+        var ledger = Ledger()
+        ledger.phrasesSHA256 = sha("口\tkkkk\n")
+        try ledger.save(paths)
+        #expect(try Ledger.load(paths).phrasesSHA256 == sha("口\tkkkk\n"))
+    }
+
     @Test func 发现改过和删了的文件() throws {
         let dir = try TempDir(); defer { dir.remove() }
         let rime = dir.url.appending(path: "Rime")

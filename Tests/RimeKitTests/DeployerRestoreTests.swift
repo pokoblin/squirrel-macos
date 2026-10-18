@@ -30,6 +30,25 @@ import Testing
         #expect(e.squirrel.calls.last == "reload")
     }
 
+    @Test func 账本记下短语指纹还原时跟着退回() async throws {
+        let e = try DeployerTests().env(running: true); defer { e.dir.remove() }
+        let deployer = e.deployer()
+        let settings = Settings(schemas: ["wb"])
+        guard case .applied = try await deployer.apply(try e.input(settings)) else { throw CancellationError() }
+        #expect(try Ledger.load(e.paths).phrasesSHA256 == PhraseFile.fingerprint([]))
+
+        let kou = Phrase(text: "口", code: "kkkk", weight: nil)
+        try PersonalPhraseStore(paths: e.paths).save([kou])
+        guard case .applied = try await deployer.apply(try e.input(settings)) else { throw CancellationError() }
+        #expect(try Ledger.load(e.paths).phrasesSHA256 == PhraseFile.fingerprint([kou]))
+        #expect(!PersonalPhraseStore(paths: e.paths).needsApply())
+
+        let beforeSecond = try #require(BackupStore(paths: e.paths).list().first { $0.reason == "应用改动前" })
+        _ = try await deployer.restore(beforeSecond.id)
+        #expect(try Ledger.load(e.paths).phrasesSHA256 == PhraseFile.fingerprint([]))
+        #expect(PersonalPhraseStore(paths: e.paths).needsApply())   // 手动短语还在，Rime 目录里已经没有了
+    }
+
     @Test func 还原不存在的备份() async throws {
         let (e, deployer) = try await setup(); defer { e.dir.remove() }
         await #expect(throws: BackupError.notFound("nope")) { try await deployer.restore("nope") }

@@ -49,6 +49,11 @@ public enum PhraseFile {
     public static func render(_ phrases: [Phrase]) -> String {
         phrases.map { $0.line + "\n" }.joined()
     }
+
+    /// 短语内容的指纹（应用时记进账本，用来判断手动短语改了没应用）：只看短语，不看文件头和注释
+    public static func fingerprint(_ phrases: [Phrase]) -> String {
+        Hashing.sha256(of: Data(render(phrases).utf8))
+    }
 }
 
 /// 个人内容的正本（personal/ 目录）：个人词库和手动短语

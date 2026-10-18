@@ -59,6 +59,8 @@ while let line = readLine(strippingNewline: true) {
     case let .key(key): reply(engine.key(key))
     case let .select(index): reply(engine.select(index))
     case .clear: reply(engine.clear())
+    case let .option(name): reply(engine.option(name))
+    case let .covers(index): reply(engine.covers(index))
     }
 }
 engine.shutdown()

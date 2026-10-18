@@ -23,6 +23,13 @@ public enum PreviewKeyPress: Equatable, Sendable {
     }
 }
 
+/// 试打页上某个候选能不能置顶
+public enum PinAvailability: Equatable, Sendable {
+    case available(text: String, code: String)
+    /// 不能置顶，带着原因（按钮上的提示）
+    case unavailable(String)
+}
+
 /// 「试打」页的逻辑（设计 4.2、4.3）。重活（复制、编译）放到后台；辅助程序由 PreviewEngine 管
 @MainActor @Observable
 public final class PreviewModel {
@@ -54,6 +61,8 @@ public final class PreviewModel {
     /// 准备副本时的提醒（比如读不了文本替换）
     public private(set) var notes: [String] = []
     public private(set) var librimeVersion: String?
+    /// 正在试打的方案为什么整个不能置顶（nil：可以）
+    public private(set) var pinBlock: PinBlock?
 
     let env: AppEnvironment
     private var engine: (any PreviewEngine)?
@@ -69,6 +78,8 @@ public final class PreviewModel {
     private var hasPending = false
     /// 出错以后「重试」只要重新打开方案（副本还能用，只是辅助程序没了）
     private var retryReopens = false
+    /// 「应用后的样子」准备好以后又改了置顶：副本过期了
+    private var pendingStale = false
 
     public init(env: AppEnvironment) {
         self.env = env
@@ -240,8 +251,44 @@ public final class PreviewModel {
             return currentChanged
         case .pending:
             guard let pendingSettings else { return false }
-            return pendingSettings.normalized(for: env.catalog) != draft.normalized(for: env.catalog)
+            return pendingStale || pendingSettings.normalized(for: env.catalog) != draft.normalized(for: env.catalog)
         }
+    }
+
+    /// 置顶、还原以后由 MainModel 调用：「应用后的样子」是按旧的手动短语编译的，要重新载入
+    public func markPersonalChanged() {
+        if entered && source == .pending { pendingStale = true }
+    }
+
+    // MARK: 候选置顶（候选置顶设计 5.4）
+
+    /// 本页第 index 个候选能不能置顶。pinned：现在的置顶列表
+    public func pinAvailability(at index: Int, pinned: [Phrase]) -> PinAvailability {
+        if let pinBlock { return .unavailable(pinBlock.message) }
+        if state.input.isEmpty || !state.wholeInput { return .unavailable("只能置顶整段编码的候选") }
+        guard state.candidates.indices.contains(index) else { return .unavailable("这个候选不能置顶") }
+        if state.pageNo == 0 && index == 0 { return .unavailable("已经是第一个了") }
+        let phrase = Phrase(text: state.candidates[index].text, code: state.input, weight: nil)
+        if pinned.contains(phrase) { return .unavailable("已经置顶了") }
+        guard phrase.isValid else { return .unavailable("这个候选不能置顶") }
+        return .available(text: phrase.text, code: phrase.code)
+    }
+
+    /// 置顶前确认本页第 index 个候选对应整段输入（排在打字队列后面，不和按键抢）。辅助程序出错时是 nil
+    public func confirmCovers(_ index: Int) async -> Bool? {
+        let current = generation
+        let previous = tail
+        let task = Task { @MainActor [weak self] () -> Bool? in
+            await previous?.value
+            guard let self, self.generation == current, let engine = self.engine else { return nil }
+            return try? await engine.covers(index)
+        }
+        tail = Task { _ = await task.value }
+        return await task.value
+    }
+
+    nonisolated static func pinBlock(schema: String, userDir: URL, engine: any PreviewEngine) async -> PinBlock? {
+        await PinBlock.check(schema: schema, userDir: userDir) { try await engine.option($0) }
     }
 
     // MARK: 准备副本、打开方案
@@ -252,6 +299,7 @@ public final class PreviewModel {
         let current = generation
         self.hasPending = hasPending
         retryReopens = false
+        pendingStale = false
         state = .empty
         notes = []
         guard env.locations.squirrelInstalled else {
@@ -317,7 +365,10 @@ public final class PreviewModel {
         do {
             let opened = try await engine.open(userDir: copy.userDir, schema: id)
             guard current == generation else { return }
+            let block = await Self.pinBlock(schema: id, userDir: copy.userDir, engine: engine)
+            guard current == generation else { return }
             schema = id
+            pinBlock = block
             state = opened.state
             librimeVersion = opened.librimeVersion
             phase = .ready

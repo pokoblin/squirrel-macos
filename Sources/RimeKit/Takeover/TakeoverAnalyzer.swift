@@ -346,10 +346,13 @@ final class TakeoverAnalysis {
         }
     }
 
-    /// 应用注入短语翻译器的两项：有短语时生成器会再写。
-    /// 用户自己写了不一样的 custom_phrase 配置（例如用别的短语文件）时，两项都不算，原样保留
+    /// 应用注入短语翻译器的两项，和有手动短语时加的去重：有短语时生成器会再写。
+    /// 用户自己写了不一样的 custom_phrase 配置（例如用别的短语文件）时，两项都不算，原样保留。
+    /// 去重只在同一份补丁里有应用注入的短语翻译器时才算应用写的（单独一行分不出是谁写的，保留）
     func isPhraseInjection(_ entry: Patch.Entry, in patch: Patch) -> Bool {
         switch entry.key {
+        case "engine/filters/@next":
+            return entry.value.string == "uniquifier" && patch["engine/translators/@before 0"]?.string == Self.phraseTranslator
         case "engine/translators/@before 0":
             let ownConfig = patch["custom_phrase"].map { !YAMLNode.same($0, GenerationContext.phraseConfig()) } ?? false
             return entry.value.string == Self.phraseTranslator && !ownConfig

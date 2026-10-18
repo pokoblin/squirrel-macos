@@ -31,6 +31,8 @@ public struct Ledger: Sendable, Equatable, Codable {
     public var entries: [String: LedgerEntry]
     /// 这次应用时用的上游包：包 id → 版本（「检查更新」拿它和上游比）。0.2.1 以前写的账本没有这一项
     public var packages: [String: String]?
+    /// 这次应用时手动短语的指纹（`PhraseFile.fingerprint`）。跟着账本备份、还原；0.2.1 以前写的账本没有这一项
+    public var phrasesSHA256: String?
 
     public init(entries: [String: LedgerEntry] = [:], appliedAt: Date? = nil) {
         self.formatVersion = Self.currentFormatVersion

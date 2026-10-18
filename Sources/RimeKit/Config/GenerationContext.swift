@@ -9,6 +9,8 @@ final class GenerationContext {
     private let fm = FileManager.default
     private var files: [String: FileOrigin] = [:]
     private(set) var warnings: [String] = []
+    /// 要加去重的方案（有手动短语时，写了短语的那些）
+    private(set) var uniquifierSchemas: [String] = []
     /// 配置名（default、squirrel、方案 id）→ 补丁
     var patches: [String: Patch] = [:]
 
@@ -228,6 +230,7 @@ final class GenerationContext {
             warnings.append("有 \(invalid) 条短语格式不对（含换行、Tab，或以 # 开头），没有写进去")
         }
         guard !phrases.isEmpty else { return }
+        let hasManual = input.personal.phrases.contains(where: \.isValid)
         var targets: [String] = []
         for schema in input.settings.schemas {
             guard let root = try readYAML("\(schema).schema.yaml", label: "\(schema).schema.yaml") else { continue }
@@ -243,12 +246,37 @@ final class GenerationContext {
                 file = "custom_phrase.txt"
             }
             if !targets.contains(file) { targets.append(file) }
+            if hasManual { uniquifierSchemas.append(schema) }
         }
         for file in targets {
             let url = output.appending(path: file)
             var text = fm.fileExists(atPath: url.path) ? try TextFile.read(url) : PhraseFile.header
             if !text.isEmpty, !text.hasSuffix("\n") { text += "\n" }
             try write(text + PhraseFile.render(phrases), to: file, origin: .generated)
+        }
+    }
+
+    /// 有手动短语（置顶）时给写短语的方案加去重：置顶的字和词库里的同一个字只留前面那个（候选置顶设计 5.3）。
+    /// 放在保留补丁之后，按合并后的补丁判断，免得被整份替换 engine/filters 的补丁冲掉
+    func applyUniquifier() throws {
+        let name = "uniquifier"
+        for schema in uniquifierSchemas {
+            var p = patches[schema] ?? Patch()
+            if let whole = p["engine/filters"]?.sequence {
+                if whole.contains(where: { $0.string == name }) { continue }
+                p.set("engine/filters", YAMLNode.list(whole + [YAMLNode.text(name)]))
+            } else {
+                let root = try readYAML("\(schema).schema.yaml", label: "\(schema).schema.yaml")
+                let base = root?["engine"]?["filters"]?.sequence?.compactMap(\.string) ?? []
+                let added = p.entries.filter { $0.key.hasPrefix("engine/filters/") }.compactMap(\.value.string)
+                if (base + added).contains(name) { continue }
+                if p["engine/filters/@next"] != nil {
+                    warnings.append("\(schema) 的补丁已经用了 engine/filters/@next，没有加去重")
+                    continue
+                }
+                p.set("engine/filters/@next", YAMLNode.text(name))
+            }
+            patches[schema] = p
         }
     }
 

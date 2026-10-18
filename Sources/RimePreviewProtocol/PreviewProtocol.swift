@@ -29,6 +29,10 @@ public enum PreviewRequest: Codable, Sendable, Equatable {
     case key(PreviewKey)
     case select(Int)
     case clear
+    /// 查开关（比如繁简转换 zh_trad）现在开着没有
+    case option(String)
+    /// 本页第几个候选是不是对应整段输入（选了它以后不剩编码）。不改正在打的东西
+    case covers(Int)
 
     private enum CodingKeys: String, CodingKey {
         case op, userDir, schema, text, name, index
@@ -48,6 +52,10 @@ public enum PreviewRequest: Codable, Sendable, Equatable {
             self = .select(try c.decode(Int.self, forKey: .index))
         case "clear":
             self = .clear
+        case "option":
+            self = .option(try c.decode(String.self, forKey: .name))
+        case "covers":
+            self = .covers(try c.decode(Int.self, forKey: .index))
         default:
             throw DecodingError.dataCorruptedError(forKey: .op, in: c, debugDescription: "不认识的 op：\(op)")
         }
@@ -71,6 +79,12 @@ public enum PreviewRequest: Codable, Sendable, Equatable {
             try c.encode(index, forKey: .index)
         case .clear:
             try c.encode("clear", forKey: .op)
+        case let .option(name):
+            try c.encode("option", forKey: .op)
+            try c.encode(name, forKey: .name)
+        case let .covers(index):
+            try c.encode("covers", forKey: .op)
+            try c.encode(index, forKey: .index)
         }
     }
 }
@@ -96,11 +110,16 @@ public struct PreviewState: Codable, Sendable, Equatable {
     public var pageNo: Int
     public var isLastPage: Bool
     public var highlighted: Int
+    /// librime 的原始输入（preedit 里有分隔符、拼音的空格，这个没有）
+    public var input: String
+    /// 候选对应整段输入（不是只管前面一段）
+    public var wholeInput: Bool
 
     public init(
         committed: String? = nil, preedit: String = "", cursor: Int = 0,
         candidates: [PreviewCandidate] = [], labels: [String]? = nil,
-        pageNo: Int = 0, isLastPage: Bool = true, highlighted: Int = 0
+        pageNo: Int = 0, isLastPage: Bool = true, highlighted: Int = 0,
+        input: String = "", wholeInput: Bool = false
     ) {
         self.committed = committed
         self.preedit = preedit
@@ -110,6 +129,27 @@ public struct PreviewState: Codable, Sendable, Equatable {
         self.pageNo = pageNo
         self.isLastPage = isLastPage
         self.highlighted = highlighted
+        self.input = input
+        self.wholeInput = wholeInput
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case committed, preedit, cursor, candidates, labels, pageNo, isLastPage, highlighted, input, wholeInput
+    }
+
+    /// input、wholeInput 是后加的，没有时用默认值
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        committed = try c.decodeIfPresent(String.self, forKey: .committed)
+        preedit = try c.decode(String.self, forKey: .preedit)
+        cursor = try c.decode(Int.self, forKey: .cursor)
+        candidates = try c.decode([PreviewCandidate].self, forKey: .candidates)
+        labels = try c.decodeIfPresent([String].self, forKey: .labels)
+        pageNo = try c.decode(Int.self, forKey: .pageNo)
+        isLastPage = try c.decode(Bool.self, forKey: .isLastPage)
+        highlighted = try c.decode(Int.self, forKey: .highlighted)
+        input = try c.decodeIfPresent(String.self, forKey: .input) ?? ""
+        wholeInput = try c.decodeIfPresent(Bool.self, forKey: .wholeInput) ?? false
     }
 
     /// 什么都没有输入时的样子
@@ -136,12 +176,19 @@ public struct PreviewResponse: Codable, Sendable, Equatable {
     public var librimeVersion: String?
     public var state: PreviewState?
     public var error: PreviewFailure?
+    /// 查开关的结果（只有 option 请求才有）
+    public var option: Bool?
+    /// 候选是不是对应整段输入（只有 covers 请求才有）
+    public var covers: Bool?
 
-    public init(ok: Bool, librimeVersion: String? = nil, state: PreviewState? = nil, error: PreviewFailure? = nil) {
+    public init(ok: Bool, librimeVersion: String? = nil, state: PreviewState? = nil, error: PreviewFailure? = nil,
+                option: Bool? = nil, covers: Bool? = nil) {
         self.ok = ok
         self.librimeVersion = librimeVersion
         self.state = state
         self.error = error
+        self.option = option
+        self.covers = covers
     }
 
     public static func success(_ state: PreviewState, librimeVersion: String? = nil) -> PreviewResponse {

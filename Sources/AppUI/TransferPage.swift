@@ -33,7 +33,7 @@ struct TransferPage: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text(model.isDirty ? "现在的设置和个人内容会另存一份。还没应用的改动也会丢掉。" : "现在的设置和个人内容会另存一份。")
+            Text(model.importDropsUnappliedEdits ? "现在的设置和个人内容会另存一份。还没应用的改动也会丢掉。" : "现在的设置和个人内容会另存一份。")
         }
     }
 

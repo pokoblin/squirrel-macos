@@ -79,6 +79,10 @@ enum TransferFixtures {
             try FileManager.default.createDirectory(at: paths.personalDicts, withIntermediateDirectories: true)
             try Data(pyUser.utf8).write(to: paths.personalDicts.appending(path: "py_user.dict.yaml"))
             try Data((PhraseFile.header + PhraseFile.render([phrase])).utf8).write(to: paths.personalPhrases)
+            // 当作这条手动短语已经应用过（不然一打开就有「没应用的改动」）
+            var ledger = Ledger()
+            ledger.phrasesSHA256 = PhraseFile.fingerprint([phrase])
+            try ledger.save(paths)
         }
         return Machine(dir: dir, paths: paths, locations: locations,
                        squirrel: FakeSquirrel(locations: locations, running: running),

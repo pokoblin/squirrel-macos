@@ -16,10 +16,20 @@ actor FakePreviewEngine: PreviewEngine {
     var inputDelays: [String: Duration] = [:]
     /// 打开这些方案时抛的错（每次都失败）
     let openFailures: [String: PreviewError]
+    /// 开关的状态（没写的当作关着）
+    let options: [String: Bool]
 
-    init(openFailures: [String: PreviewError] = [:]) {
+    init(openFailures: [String: PreviewError] = [:], options: [String: Bool] = [:]) {
         self.openFailures = openFailures
+        self.options = options
     }
+
+    func option(_ name: String) async throws -> Bool { options[name] ?? false }
+
+    /// 这些序号的候选只对应前一段编码
+    var partial: Set<Int> = []
+    func setPartial(_ indices: Set<Int>) { partial = indices }
+    func covers(_ index: Int) async throws -> Bool { !partial.contains(index) }
 
     func setInput(_ state: PreviewState) { inputState = state }
     func failInput(_ error: PreviewError?) { inputError = error }
@@ -64,14 +74,18 @@ final class FakeEngines: @unchecked Sendable {
     private let lock = NSLock()
     private var made: [FakePreviewEngine] = []
     private var failures: [String: PreviewError] = [:]
+    private var options: [String: Bool] = [:]
 
     var all: [FakePreviewEngine] { lock.withLock { made } }
 
     /// 之后建的引擎打开这些方案时都失败
     func failOpen(_ failures: [String: PreviewError]) { lock.withLock { self.failures = failures } }
 
+    /// 之后建的引擎的开关状态
+    func setOptions(_ options: [String: Bool]) { lock.withLock { self.options = options } }
+
     func make() -> any PreviewEngine {
-        let engine = FakePreviewEngine(openFailures: lock.withLock { failures })
+        let engine = FakePreviewEngine(openFailures: lock.withLock { failures }, options: lock.withLock { options })
         lock.withLock { made.append(engine) }
         return engine
     }
@@ -546,7 +560,7 @@ final class GatedCompiler: RimeCompiler, @unchecked Sendable {
         let pages = MainModel.Page.allCases
         let index = try #require(pages.firstIndex(of: .schemas))
         #expect(pages[index + 1] == .preview)
-        #expect(MainModel.Page.preview.title == "试打")
+        #expect(MainModel.Page.preview.title == "试打和置顶")
         #expect(MainModel.Page.preview.symbol == "keyboard")
 
         let s = try setup(); defer { s.remove() }
@@ -568,5 +582,118 @@ final class GatedCompiler: RimeCompiler, @unchecked Sendable {
             guard ContinuousClock.now < deadline else { Issue.record("等不到"); return }
             try await Task.sleep(for: .milliseconds(5))
         }
+    }
+}
+
+/// 候选置顶：哪些候选能置顶（候选置顶设计 5.4）
+@MainActor @Suite struct PreviewPinTests {
+    let kkkk = PreviewState(preedit: "kkkk",
+                            candidates: ["串口", "叮叮咣咣", "口"].map { PreviewCandidate(text: $0, comment: "") },
+                            input: "kkkk", wholeInput: true)
+    let kou = Phrase(text: "口", code: "kkkk", weight: nil)
+
+    func ready(_ s: PreviewModelTests.Setup, state: PreviewState) async -> PreviewModel {
+        let model = PreviewModel(env: s.env)
+        await model.enter(draft: TransferFixtures.settings, hasPending: false)
+        await s.engine.setInput(state)
+        await model.press(.text("kkkk"))
+        return model
+    }
+
+    func put(_ s: PreviewModelTests.Setup, _ path: String, _ text: String) throws {
+        let url = s.machine.locations.rimeDirectory.appending(path: path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: url)
+    }
+
+    @Test func 整段编码的候选可以置顶() async throws {
+        let s = try PreviewModelTests().setup(); defer { s.remove() }
+        let model = await ready(s, state: kkkk)
+        #expect(model.pinBlock == nil)
+        #expect(model.pinAvailability(at: 2, pinned: []) == .available(text: "口", code: "kkkk"))
+        #expect(model.pinAvailability(at: 0, pinned: []) == .unavailable("已经是第一个了"))
+        #expect(model.pinAvailability(at: 2, pinned: [kou]) == .unavailable("已经置顶了"))
+        #expect(model.pinAvailability(at: 9, pinned: []) == .unavailable("这个候选不能置顶"))
+        await model.leave()
+    }
+
+    @Test func 第二页的第一个可以置顶() async throws {
+        let s = try PreviewModelTests().setup(); defer { s.remove() }
+        var state = kkkk
+        state.pageNo = 1
+        let model = await ready(s, state: state)
+        #expect(model.pinAvailability(at: 0, pinned: []) == .available(text: "串口", code: "kkkk"))
+        await model.leave()
+    }
+
+    @Test func 不是整段的候选不能置顶() async throws {
+        let s = try PreviewModelTests().setup(); defer { s.remove() }
+        var state = kkkk
+        state.wholeInput = false
+        let model = await ready(s, state: state)
+        #expect(model.pinAvailability(at: 2, pinned: []) == .unavailable("只能置顶整段编码的候选"))
+        await model.leave()
+    }
+
+    @Test func 繁简转换开着时不能置顶() async throws {
+        let s = try PreviewModelTests().setup(); defer { s.remove() }
+        try put(s, "build/wb_py.schema.yaml", """
+            schema:
+              schema_id: wb_py
+              name: 五笔拼音
+            engine:
+              filters:
+                - simplifier@tradition
+                - uniquifier
+            tradition:
+              option_name: zh_trad
+
+            """)
+        s.engines.setOptions(["zh_trad": true])
+        let model = await ready(s, state: kkkk)
+        #expect(model.pinBlock == .conversion)
+        #expect(model.pinAvailability(at: 2, pinned: []) == .unavailable("繁体方案里不能置顶，请换到简体方案再置顶"))
+        await model.leave()
+
+        let s2 = try PreviewModelTests().setup(); defer { s2.remove() }
+        try put(s2, "build/wb_py.schema.yaml", "engine:\n  filters:\n    - simplifier@tradition\ntradition:\n  option_name: zh_trad\n")
+        s2.engines.setOptions(["zh_trad": false])
+        let off = await ready(s2, state: kkkk)
+        #expect(off.pinBlock == nil)
+        await off.leave()
+    }
+
+    @Test func 没写开关名的简繁过滤器用默认开关() async throws {
+        let s = try PreviewModelTests().setup(); defer { s.remove() }
+        try put(s, "build/wb_py.schema.yaml", "engine:\n  filters:\n    - simplifier\n")
+        s.engines.setOptions(["simplification": true])
+        let model = await ready(s, state: kkkk)
+        #expect(model.pinBlock == .conversion)
+        await model.leave()
+    }
+
+    @Test func 自带短语的方案不能置顶() async throws {
+        let s = try PreviewModelTests().setup(); defer { s.remove() }
+        try put(s, "wb_py.schema.yaml", "engine:\n  translators:\n    - table_translator@custom_phrase\n    - table_translator\n")
+        let model = await ready(s, state: kkkk)
+        #expect(model.pinBlock == .ownPhrases)
+        #expect(model.pinAvailability(at: 2, pinned: []) == .unavailable("这个方案自带短语，置顶暂时只支持极点五笔这类方案"))
+        await model.leave()
+    }
+
+    @Test func 看应用后的样子时改了置顶要重新载入() async throws {
+        let s = try PreviewModelTests().setup(); defer { s.remove() }
+        let model = PreviewModel(env: s.env)
+        let draft = TransferFixtures.settings
+        await model.enter(draft: draft, hasPending: true)
+        model.markPersonalChanged()
+        #expect(!model.needsReload(draft: draft))   // 在「当前生效」时不用
+        await model.switchSource(.pending, draft: draft, hasPending: true)
+        #expect(!model.needsReload(draft: draft))
+        model.markPersonalChanged()
+        #expect(model.needsReload(draft: draft))
+        await model.reload(draft: draft, hasPending: true)
+        #expect(!model.needsReload(draft: draft))
+        await model.leave()
     }
 }

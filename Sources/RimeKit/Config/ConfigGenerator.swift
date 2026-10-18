@@ -78,6 +78,7 @@ public struct ConfigGenerator: Sendable {
         try context.copyPersonalDicts()
         try context.applyPhrases()
         try context.applyPreservedPatches()
+        try context.applyUniquifier()
         context.applySchemaList()
         try context.applyAppearance()
         try context.writePatches()

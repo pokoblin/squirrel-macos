@@ -31,6 +31,59 @@ struct PreviewHelperTests {
         }
     }
 
+    @Test func 回原始输入和整段标记() throws {
+        try withHelper { h, rime, _ in
+            #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)
+            let r = try h.send(.input("nihao"))
+            #expect(r.state?.input == "nihao", "\(r)")
+            #expect(r.state?.wholeInput == true, "\(r)")
+            let cleared = try h.send(.clear)
+            #expect(cleared.state?.input == "" && cleared.state?.wholeInput == false, "\(cleared)")
+        }
+    }
+
+    @Test func 查开关() throws {
+        let switches = "patch:\n  switches:\n    - name: test_on\n      reset: 1\n    - name: test_off\n      reset: 0\n"
+        try withHelper(extraFiles: ["py.custom.yaml": switches]) { h, rime, _ in
+            let early = try h.send(.option("test_on"))
+            #expect(!early.ok && early.error?.kind == .notOpen, "\(early)")
+            #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)
+            let on = try h.send(.option("test_on"))
+            #expect(on.ok && on.option == true, "\(on)")
+            #expect(try h.send(.option("test_off")).option == false)
+            #expect(try h.send(.option("ascii_mode")).option == false)
+        }
+    }
+
+    @Test func 只对应前一段编码的候选不算整段() throws {
+        try withHelper { h, rime, _ in
+            #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)
+            let typed = try h.send(.input("nihao"))
+            let texts = typed.state?.candidates.map(\.text) ?? []
+            let whole = try #require(texts.firstIndex(of: "你好"), "\(texts)")
+            let part = try #require(texts.firstIndex(of: "你"), "\(texts)")
+            let yes = try h.send(.covers(whole))
+            #expect(yes.ok && yes.covers == true, "\(yes)")
+            let no = try h.send(.covers(part))
+            #expect(no.ok && no.covers == false, "\(no)")
+            // 查完正在打的东西不变
+            #expect(no.state?.input == "nihao" && no.state?.candidates.map(\.text) == texts, "\(no)")
+        }
+    }
+
+    @Test func 通过会话查开关以后还能打字() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let rime = try PreviewFixtures.compiledConfig(in: dir.url)
+        let session = PreviewSession(helper: PreviewFixtures.helper)
+        _ = try await session.open(userDir: rime, schema: "py")
+        #expect(try await session.option("ascii_mode") == false)
+        let state = try await session.input("nihao")
+        #expect(state.candidates.first?.text == "你好")
+        #expect(try await session.covers(0) == true)
+        #expect(try await session.input("").candidates.first?.text == "你好")
+        await session.close()
+    }
+
     @Test func 翻页和本页选词() throws {
         try withHelper { h, rime, _ in
             #expect(try h.send(.open(userDir: rime.path, schema: "py")).ok)

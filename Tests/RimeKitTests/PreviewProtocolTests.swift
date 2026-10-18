@@ -10,9 +10,23 @@ import Testing
         #expect(obj["op"] as? String == "open" && obj["userDir"] as? String == "/tmp/a" && obj["schema"] as? String == "py")
     }
 
-    @Test(arguments: [PreviewRequest.open(userDir: "/x", schema: "s"), .input("nihao"), .key(.pageDown), .select(2), .clear])
+    @Test(arguments: [PreviewRequest.open(userDir: "/x", schema: "s"), .input("nihao"), .key(.pageDown), .select(2), .clear, .option("zh_trad"), .covers(1)])
     func 请求往返不变(_ r: PreviewRequest) throws {
         #expect(try PreviewLine.decode(PreviewRequest.self, from: String(decoding: PreviewLine.encode(r), as: UTF8.self)) == r)
+    }
+
+    @Test func 查开关的请求() throws {
+        let line = String(decoding: try PreviewLine.encode(PreviewRequest.option("zh_trad")), as: UTF8.self)
+        let obj = try JSONSerialization.jsonObject(with: Data(line.utf8)) as! [String: Any]
+        #expect(obj["op"] as? String == "option" && obj["name"] as? String == "zh_trad")
+    }
+
+    @Test func 原始输入整段标记和开关往返不变() throws {
+        let state = PreviewState(preedit: "kkkk", candidates: [PreviewCandidate(text: "口", comment: "")], input: "kkkk", wholeInput: true)
+        let r = PreviewResponse(ok: true, state: state, option: true)
+        let back = try PreviewLine.decode(PreviewResponse.self, from: String(decoding: PreviewLine.encode(r), as: UTF8.self))
+        #expect(back == r)
+        #expect(back.state?.input == "kkkk" && back.state?.wholeInput == true && back.option == true)
     }
 
     @Test func 键码() {
@@ -28,6 +42,7 @@ import Testing
     @Test func 设计里的结果例子能解码() throws {
         let r = try PreviewLine.decode(PreviewResponse.self, from: #"{"ok":true,"librimeVersion":"1.16.0","state":{"committed":"你好","preedit":"ni hao","cursor":6,"candidates":[{"text":"你好","comment":""}],"labels":null,"pageNo":0,"isLastPage":false,"highlighted":0}}"#)
         #expect(r.state?.committed == "你好" && r.state?.candidates.first?.text == "你好" && r.librimeVersion == "1.16.0")
+        #expect(r.state?.input == "" && r.state?.wholeInput == false && r.option == nil)   // 老格式没有这几项
     }
 
     @Test func 出错结果() throws {

@@ -9,7 +9,18 @@ public protocol PreviewEngine: Sendable {
     func key(_ key: PreviewKey) async throws -> PreviewState
     func select(_ index: Int) async throws -> PreviewState
     func clear() async throws -> PreviewState
+    /// 开关现在开着没有（候选置顶要知道繁简转换开没开）
+    func option(_ name: String) async throws -> Bool
+    /// 本页第 index 个候选是不是对应整段输入（候选置顶前确认）
+    func covers(_ index: Int) async throws -> Bool
     func close() async
+}
+
+extension PreviewEngine {
+    /// 不关心开关的引擎（测试里的假引擎）一律当作关着
+    public func option(_ name: String) async throws -> Bool { false }
+    /// 测试里的假引擎一律当作整段
+    public func covers(_ index: Int) async throws -> Bool { true }
 }
 
 /// open 的结果：librime 的版本和刚打开时的样子
@@ -157,6 +168,14 @@ public actor PreviewSession: PreviewEngine {
 
     public func clear() async throws -> PreviewState {
         try await send(.clear, timeout: requestTimeout).state ?? .empty
+    }
+
+    public func option(_ name: String) async throws -> Bool {
+        try await send(.option(name), timeout: requestTimeout).option ?? false
+    }
+
+    public func covers(_ index: Int) async throws -> Bool {
+        try await send(.covers(index), timeout: requestTimeout).covers ?? false
     }
 
     /// 关掉辅助程序的 stdin，等它自己收尾退出；等太久就杀掉

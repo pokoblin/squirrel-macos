@@ -169,6 +169,24 @@ import Testing
         #expect(wb["engine/translators/@before 0"]?.string == "table_translator@custom_phrase")
     }
 
+    @Test func 应用自己写的去重接管时不保留() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.wubiSample(e.packages, into: e.rime)
+        try F.put("patch:\n  reverse_lookup/dictionary: py_ext\n" + F.phraseInjection + "  \"engine/filters/@next\": uniquifier\n",
+                  "wb.custom.yaml", in: e.rime)
+        let p = try F.analyze(e)
+        #expect(p.settings.preservedPatches["wb"] == nil, "\(p.settings.preservedPatches)")
+    }
+
+    @Test func 用户自己写的去重接管时保留() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.wubiSample(e.packages, into: e.rime)
+        try F.put("patch:\n  reverse_lookup/dictionary: py_ext\n  \"engine/filters/@next\": uniquifier\n",
+                  "wb.custom.yaml", in: e.rime)
+        let p = try F.analyze(e)
+        #expect(p.settings.preservedPatches["wb"]?.map(\.key) == ["engine/filters/@next"])
+    }
+
     @Test func 包没给全时报错() throws {
         let e = try F.env(); defer { e.dir.remove() }
         try F.wubiSample(e.packages, into: e.rime)

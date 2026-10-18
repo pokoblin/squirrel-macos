@@ -13,7 +13,7 @@ public final class MainModel {
         public var title: String {
             switch self {
             case .schemas: return "方案"
-            case .preview: return "试打"
+            case .preview: return "试打和置顶"
             case .wubiDict: return "五笔词库"
             case .appearance: return "外观"
             case .textReplacement: return "文本替换"
@@ -79,8 +79,10 @@ public final class MainModel {
     public internal(set) var packageUpdates: [String] = [] {
         didSet { if packageUpdates != oldValue { savePending() } }
     }
-    /// 底部要不要显示「应用改动」：设置改了、方案清单要重新应用、方案包有新版本、五笔个人词库有没应用的改动
-    public var hasPendingChanges: Bool { isDirty || catalogNeedsApply || !packageUpdates.isEmpty || wubiDict.needsApply }
+    /// 底部要不要显示「应用改动」：设置改了、方案清单要重新应用、方案包有新版本、五笔个人词库或置顶有没应用的改动
+    public var hasPendingChanges: Bool {
+        isDirty || catalogNeedsApply || !packageUpdates.isEmpty || wubiDict.needsApply || pins.needsApply
+    }
     /// 应用时只有五笔个人词库在外面被改过：已经提示过一次「收进来」（再应用就按原来的外部改动流程问）
     var wubiMergeOffered = false
 
@@ -88,6 +90,8 @@ public final class MainModel {
     public let preview: PreviewModel
     /// 「五笔词库」页
     public let wubiDict: WubiDictModel
+    /// 候选置顶（在「试打和置顶」页）
+    public let pins: PinsModel
 
     let env: AppEnvironment
 
@@ -96,12 +100,14 @@ public final class MainModel {
         self.env = env
         preview = PreviewModel(env: env)
         wubiDict = WubiDictModel(env: env)
+        pins = PinsModel(env: env)
         catalogStatus = env.catalogs.status
         saved = settings
         draft = settings
         let pending = PendingApply.load(env.paths)
         catalogNeedsApply = pending.catalog
         packageUpdates = pending.packages
+        pins.refresh()
         if !welcome.isEmpty { notice = Notice(kind: .info, title: "设置好了", lines: welcome) }
         refreshColorSchemes()
     }
@@ -118,6 +124,23 @@ public final class MainModel {
     func savePending() {
         PendingApply(catalog: catalogNeedsApply, packages: packageUpdates).save(env.paths)
     }
+
+    /// 底栏「应用改动」旁边的说明。设置没动时要说清楚要应用的是什么（不然「撤销」找不到，也不知道点了会怎样）
+    public var pendingSummary: String {
+        if isDirty {
+            let others = [wubiDict.needsApply ? "五笔词库" : nil, pins.needsApply ? "置顶" : nil].compactMap { $0 }
+            return others.isEmpty ? "有改动还没应用" : "有改动还没应用（「撤销」只撤销设置，不撤销\(others.joined(separator: "和"))的改动）"
+        }
+        var parts: [String] = []
+        if catalogNeedsApply { parts.append("方案清单更新了") }
+        if !packageUpdates.isEmpty { parts.append("\(packageUpdateNames.joined(separator: "、")) 有新版本") }
+        if wubiDict.needsApply { parts.append(parts.isEmpty ? "五笔词库有改动" : "五笔词库也有改动") }
+        if pins.needsApply { parts.append(parts.isEmpty ? "置顶有改动" : "置顶也有改动") }
+        return parts.joined(separator: "，") + "，还没应用"
+    }
+
+    /// 导入会整份换掉设置和 personal：设置或置顶有没应用的改动时，导入前要提醒会丢掉
+    public var importDropsUnappliedEdits: Bool { isDirty || pins.needsApply }
 
     /// 底栏「应用改动」旁边的说明里，有新版本的包叫什么
     public var packageUpdateNames: [String] {

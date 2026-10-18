@@ -11,7 +11,7 @@ struct PreviewPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("试打").font(.title2.bold())
+            Text("试打和置顶").font(.title2.bold())
             // 候选窗口由鼠须管自己画，外观设置不经过 librime，这里看不出来
             Text("这里看的是候选内容（出哪些字词、什么顺序）。字体、颜色、横排竖排这些外观，要在真的用鼠须管打字时看。")
                 .font(.callout).foregroundStyle(.secondary)
@@ -39,6 +39,11 @@ struct PreviewPage: View {
             case let .failed(problem):
                 failure(problem)
             }
+            if let message = model.pins.message {
+                Label(message, systemImage: "pin").font(.callout)
+            }
+            // 不放进 .ready：准备中、出错（比如没装鼠须管）时也能看、能还原
+            PinListSection(model: model)
         }
         .task { await preview.enter(draft: model.draft, hasPending: model.hasPendingChanges) }
         .onDisappear { Task { await preview.leave() } }
@@ -120,25 +125,28 @@ struct PreviewPage: View {
                 if !state.candidates.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(state.candidates.enumerated()), id: \.offset) { index, candidate in
-                            Button {
-                                preview.submit(.choose(index))
-                                inputFocused = true
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text("\(label(index, state)).").foregroundStyle(.secondary)
-                                    Text(candidate.text)
-                                    if !candidate.comment.isEmpty {
-                                        Text(candidate.comment).font(.caption).foregroundStyle(.secondary)
+                            HStack(spacing: 4) {
+                                Button {
+                                    preview.submit(.choose(index))
+                                    inputFocused = true
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text("\(label(index, state)).").foregroundStyle(.secondary)
+                                        Text(candidate.text)
+                                        if !candidate.comment.isEmpty {
+                                            Text(candidate.comment).font(.caption).foregroundStyle(.secondary)
+                                        }
+                                        Spacer(minLength: 0)
                                     }
-                                    Spacer(minLength: 0)
+                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, 6)
+                                    .contentShape(Rectangle())
+                                    .background(index == state.highlighted ? Color.accentColor.opacity(0.25) : .clear,
+                                                in: RoundedRectangle(cornerRadius: 4))
                                 }
-                                .padding(.vertical, 3)
-                                .padding(.horizontal, 6)
-                                .contentShape(Rectangle())
-                                .background(index == state.highlighted ? Color.accentColor.opacity(0.25) : .clear,
-                                            in: RoundedRectangle(cornerRadius: 4))
+                                .buttonStyle(.plain)
+                                pinButton(index)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -178,6 +186,21 @@ struct PreviewPage: View {
             return .handled
         }
         .onAppear { inputFocused = true }
+    }
+
+    /// 候选旁边的图钉：把它调到这个编码的第一位（不能置顶时灰掉，悬停看原因）
+    private func pinButton(_ index: Int) -> some View {
+        let availability = preview.pinAvailability(at: index, pinned: model.pins.phrases)
+        let reason: String? = if case let .unavailable(why) = availability { why } else { nil }
+        return Button {
+            Task { await model.pinCandidate(at: index) }
+            inputFocused = true
+        } label: {
+            Image(systemName: "pin")
+        }
+        .buttonStyle(.borderless)
+        .disabled(reason != nil)
+        .help(reason ?? "调到第一位")
     }
 
     private func label(_ index: Int, _ state: PreviewState) -> String {

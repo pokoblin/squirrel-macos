@@ -76,6 +76,8 @@ extension MainModel {
                 }
                 refreshColorSchemes()   // 这次可能新下载了包
                 notice = Self.notice(for: report)
+                pins.refresh()   // 账本里记下了这次的手动短语
+                pins.message = nil   // 「点应用改动后生效」已经过时了
                 // 账本更新了；采用了外面的个人词库、包换了新版本时，五笔词库页要重新读
                 await wubiDict.reloadIfChanged(settings: draft)
             case .compileFailed(let errors):
@@ -238,6 +240,8 @@ extension MainModel {
             let report = try await offMain { try await deployer.restore(id) }
             preview.markCurrentChanged()
             wubiDict.refresh()
+            pins.refresh()   // 账本退回去了：手动短语可能又和 Rime 目录里的不一样了
+            pins.message = nil
             // 还原会清掉文本替换的同步记录：重新读设置；没应用的改动留着，只换同步记录
             if let now = try SettingsStore(paths: env.paths).load() {
                 saved = now
@@ -435,6 +439,8 @@ extension MainModel {
                 preview.markCurrentChanged()
                 if let note = reloadSettingsAfterImport() { lines.append(note) }
                 refreshColorSchemes()
+                pins.refresh()
+                pins.message = nil
                 await wubiDict.reloadIfChanged(settings: draft)
                 var result = Self.notice(for: applied)
                 result.title = result.kind == .info ? "已导入" : result.title
