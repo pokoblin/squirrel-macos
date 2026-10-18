@@ -27,6 +27,11 @@ extension TransferFixtures.Machine {
                 return package
             },
             cachedPackage: { packages[$0.id] },
-            installSquirrel: install, deployTimeout: .milliseconds(20), activationTimeout: 5, sleep: { _ in })
+            installSquirrel: install, deployTimeout: .milliseconds(20), activationTimeout: 5, sleep: { _ in },
+            // 默认：上游和本地一样（都是最新的）
+            latestPackageVersion: { spec in
+                guard let package = packages[spec.id] else { throw TakeoverError.missingPackage(spec.id) }
+                return ResolvedSource(version: package.info.version, downloadURL: package.info.sourceURL)
+            })
     }
 }

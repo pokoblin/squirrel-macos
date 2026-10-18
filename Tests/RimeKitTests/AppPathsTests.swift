@@ -34,4 +34,19 @@ import Testing
         #expect(!fm.fileExists(atPath: old.path))
         #expect(fm.fileExists(atPath: fresh.path))
     }
+
+    @Test func 打开应用时试打副本不管新旧都删() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let paths = Fixtures.paths(dir)
+        let fm = FileManager.default
+        let preview = paths.staging.appending(path: "preview-ABC", directoryHint: .isDirectory)
+        let fresh = paths.staging.appending(path: "fetch-new", directoryHint: .isDirectory)
+        try fm.createDirectory(at: preview, withIntermediateDirectories: true)
+        try fm.createDirectory(at: fresh, withIntermediateDirectories: true)
+        paths.cleanStaleStaging()
+        #expect(fm.fileExists(atPath: preview.path))   // 默认还是只删旧的
+        paths.cleanStaleStaging(includingPreviews: true)
+        #expect(!fm.fileExists(atPath: preview.path))
+        #expect(fm.fileExists(atPath: fresh.path))
+    }
 }

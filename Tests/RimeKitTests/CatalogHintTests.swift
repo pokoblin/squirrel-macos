@@ -13,7 +13,7 @@ import Testing
         #expect(text.contains("rimectl catalog check"))
         #expect(text.hasSuffix("还不行的话，请更新应用"))
         let app = AppWording.forApp(text)
-        #expect(app.contains("可以先到「方案」页点「检查方案清单更新」"))
+        #expect(app.contains("可以先到「方案」页点「检查更新」"))
         #expect(!app.contains("rimectl"))
     }
 }

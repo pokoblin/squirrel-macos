@@ -13,6 +13,8 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
     case patchForUnknownSchema(package: String, schema: String)
     case badUserDict(package: String, file: String)
     case badMinAppVersion(package: String, value: String)
+    case duplicateOptionID(package: String, option: String)
+    case duplicateChoiceID(package: String, option: String, choice: String)
 
     public var description: String {
         switch self {
@@ -40,6 +42,10 @@ public enum CatalogError: Error, Equatable, Sendable, CustomStringConvertible {
             return "包 \(package) 的个人词库模板 \(file) 必须是包根目录下、安装规则里有的 .dict.yaml"
         case let .badMinAppVersion(package, value):
             return "包 \(package) 的 minAppVersion 写成了 \(value)，要写成 0.3.0 这样的版本号"
+        case let .duplicateOptionID(package, option):
+            return "包 \(package) 里有两个选项都叫 \(option)"
+        case let .duplicateChoiceID(package, option, choice):
+            return "包 \(package) 的选项 \(option) 里有两个可选项都叫 \(choice)"
         }
     }
 }

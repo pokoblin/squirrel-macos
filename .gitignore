@@ -18,3 +18,5 @@ CLAUDE.md
 /docs/*
 !/docs/images/
 !/docs/release-notes/
+# Claude 生成的过程文档（全局约定：只留在本地）
+ai_docs/

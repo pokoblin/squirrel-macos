@@ -46,6 +46,21 @@ import Testing
         #expect(catalog.package("dicts")?.options == [])
     }
 
+
+    @Test func 同一个包里选项id重复() {
+        #expect(throws: CatalogError.duplicateOptionID(package: "wubi", option: "pinyinDictionary")) {
+            try Catalog.decode(Self.data(
+                replacing: #""options":[{"id":"pinyinDictionary""#,
+                with: #""options":[{"id":"pinyinDictionary","name":"重复","defaultChoice":"a","choices":[{"id":"a","name":"a","dependencies":[],"generatedDicts":[],"patches":{}}]},{"id":"pinyinDictionary""#))
+        }
+    }
+
+    @Test func 同一个选项里可选项id重复() {
+        #expect(throws: CatalogError.duplicateChoiceID(package: "wubi", option: "pinyinDictionary", choice: "ext")) {
+            try Catalog.decode(Self.data(replacing: #"{"id":"builtin","name":"自带""#, with: #"{"id":"ext","name":"自带""#))
+        }
+    }
+
     @Test func 默认选择不存在() {
         #expect(throws: CatalogError.unknownDefaultChoice(package: "wubi", option: "pinyinDictionary")) {
             try Catalog.decode(Self.data(replacing: #""defaultChoice":"ext""#, with: #""defaultChoice":"zzz""#))

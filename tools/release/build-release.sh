@@ -16,6 +16,11 @@ if [ -n "$(git status --porcelain)" ] && [ "${ALLOW_DIRTY:-}" != "1" ]; then
   echo "工作区有没提交的改动，先提交再打发布包（只是试流程的话加 ALLOW_DIRTY=1）" >&2
   exit 1
 fi
+# 内置清单要和已发布的在线清单一样：不然内置的比在线的新，在线那份就不起作用了
+if ! cmp -s Sources/RimeKit/Resources/catalog.json catalog/v1/catalog.json; then
+  echo "内置方案清单和 catalog/v1/catalog.json 不一样：先用 ./tools/catalog/publish.sh 发布清单，再打发布包" >&2
+  exit 1
+fi
 echo "提交：$(git rev-parse --short HEAD)" >&2
 SIGN_IDENTITY="${SIGN_IDENTITY:-Developer ID Application: TONDA K.K. (VS555M5VA8)}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-squirrel-helper-notary}"

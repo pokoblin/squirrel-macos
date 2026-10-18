@@ -95,7 +95,7 @@ import Testing
         let paths = Fixtures.paths(dir)
         let http = FakeHTTPClient()
         C.serve(http, C.json(serial: 11), signature: C.sign(Data("别的内容".utf8)))
-        #expect(await C.store(paths, http).check(inUse: nil) == .rejected("方案清单的签名不对，没有采用"))
+        #expect(await C.store(paths, http).check(inUse: nil) == .rejected("方案清单的签名不对，没有采用。如果方案清单刚发布不久，GitHub 可能还在给旧文件，过几分钟再试"))
         #expect(!cacheExists(paths))
     }
 

@@ -132,7 +132,7 @@ public struct CatalogStore: Sendable {
             return .rejected("没拉到方案清单：\(error)")
         }
         guard CatalogSignature.verify(data, signature: signature, keys: keys) else {
-            return .rejected("方案清单的签名不对，没有采用")
+            return .rejected("方案清单的签名不对，没有采用。如果方案清单刚发布不久，GitHub 可能还在给旧文件，过几分钟再试")
         }
         let fetched: Catalog
         do {

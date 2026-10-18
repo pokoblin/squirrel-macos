@@ -46,8 +46,9 @@ enum Fixtures {
         return Data(#"{"tag_name":"t","assets":[\#(items.joined(separator: ","))]}"#.utf8)
     }
 
-    static func commitJSON(sha: String) -> Data {
-        Data(#"{"sha":"\#(sha)","commit":{"message":"x"}}"#.utf8)
+    static func commitJSON(sha: String, date: String? = nil) -> Data {
+        let committer = date.map { #","committer":{"name":"n","date":"\#($0)"}"# } ?? ""
+        return Data(#"{"sha":"\#(sha)","commit":{"message":"x"\#(committer)}}"#.utf8)
     }
 
     // MARK: 测试 zip

@@ -3,10 +3,13 @@ import Foundation
 public struct ResolvedSource: Sendable, Equatable {
     public let version: String
     public let downloadURL: URL
+    /// 上游这个版本的时间（提交时间、发布文件的更新时间）；GitHub 没给时为 nil。只用来给人看
+    public let date: Date?
 
-    public init(version: String, downloadURL: URL) {
+    public init(version: String, downloadURL: URL, date: Date? = nil) {
         self.version = version
         self.downloadURL = downloadURL
+        self.date = date
     }
 }
 
@@ -42,14 +45,16 @@ public struct SourceResolver: Sendable {
             guard let found = release.assets.first(where: { $0.name == asset }) else {
                 throw SourceError.assetNotFound(repo: repo, tag: tag, asset: asset)
             }
-            return ResolvedSource(version: found.updatedAt, downloadURL: found.downloadURL)
+            return ResolvedSource(version: found.updatedAt, downloadURL: found.downloadURL,
+                                  date: ISO8601DateFormatter().date(from: found.updatedAt))
 
         case let .githubBranch(repo, branch):
             let url = URL(string: "https://api.github.com/repos/\(repo)/commits/\(branch)")!
             let commit: Commit = try await fetchJSON(url)
             return ResolvedSource(
                 version: commit.sha,
-                downloadURL: URL(string: "https://codeload.github.com/\(repo)/zip/\(commit.sha)")!)
+                downloadURL: URL(string: "https://codeload.github.com/\(repo)/zip/\(commit.sha)")!,
+                date: commit.commit?.committer?.date.flatMap { ISO8601DateFormatter().date(from: $0) })
         }
     }
 
@@ -79,6 +84,11 @@ public struct SourceResolver: Sendable {
     }
 
     private struct Commit: Decodable {
+        struct Detail: Decodable {
+            struct Person: Decodable { let date: String? }
+            let committer: Person?
+        }
         let sha: String
+        let commit: Detail?
     }
 }

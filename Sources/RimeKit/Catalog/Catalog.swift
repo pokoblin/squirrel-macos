@@ -88,6 +88,17 @@ public struct Catalog: Sendable, Equatable, Codable {
             }
         }
         for p in packages {
+            // 选项、可选项的 id 要唯一：界面和设置都按 id 找，重复了会选错甚至崩溃
+            var optionIDs = Set<String>()
+            for option in p.options {
+                guard optionIDs.insert(option.id).inserted else {
+                    throw CatalogError.duplicateOptionID(package: p.id, option: option.id)
+                }
+                var choiceIDs = Set<String>()
+                for choice in option.choices where !choiceIDs.insert(choice.id).inserted {
+                    throw CatalogError.duplicateChoiceID(package: p.id, option: option.id, choice: choice.id)
+                }
+            }
             for option in p.options {
                 guard option.choice(option.defaultChoice) != nil else {
                     throw CatalogError.unknownDefaultChoice(package: p.id, option: option.id)

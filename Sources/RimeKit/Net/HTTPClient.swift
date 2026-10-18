@@ -40,7 +40,7 @@ public struct URLSessionHTTPClient: HTTPClient {
     public func get(_ url: URL) async throws -> Data {
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: request(url))
+            (data, response) = try await URLSession.shared.data(for: Self.request(url))
         } catch {
             throw HTTPError.transport(error.localizedDescription)
         }
@@ -51,7 +51,7 @@ public struct URLSessionHTTPClient: HTTPClient {
     public func download(_ url: URL, to destination: URL) async throws {
         let (temp, response): (URL, URLResponse)
         do {
-            (temp, response) = try await URLSession.shared.download(for: request(url))
+            (temp, response) = try await URLSession.shared.download(for: Self.request(url))
         } catch {
             throw HTTPError.transport(error.localizedDescription)
         }
@@ -61,8 +61,10 @@ public struct URLSessionHTTPClient: HTTPClient {
         try fm.moveItem(at: temp, to: destination)
     }
 
-    private func request(_ url: URL) -> URLRequest {
+    static func request(_ url: URL) -> URLRequest {
         var request = URLRequest(url: url)
+        // 方案清单和签名是分开的两个文件：用本地缓存时可能拿到新清单配旧签名，误报「签名不对」
+        if url.host() == "raw.githubusercontent.com" { request.cachePolicy = .reloadIgnoringLocalCacheData }
         request.setValue("squirrel-macos", forHTTPHeaderField: "User-Agent")
         if url.host() == "api.github.com" {
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")

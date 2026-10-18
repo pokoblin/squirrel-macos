@@ -29,6 +29,8 @@ public struct Ledger: Sendable, Equatable, Codable {
     public var formatVersion: Int
     public var appliedAt: Date?
     public var entries: [String: LedgerEntry]
+    /// 这次应用时用的上游包：包 id → 版本（「检查更新」拿它和上游比）。0.2.1 以前写的账本没有这一项
+    public var packages: [String: String]?
 
     public init(entries: [String: LedgerEntry] = [:], appliedAt: Date? = nil) {
         self.formatVersion = Self.currentFormatVersion

@@ -64,6 +64,8 @@ extension MainModel {
             case .applied(let report):
                 saved = updated
                 catalogNeedsApply = false
+                // 用本地旧版本应用的：包还没更新，提醒留着
+                if !usingCache { packageUpdates = [] }
                 wubiMergeOffered = false
                 preview.markCurrentChanged()
                 if onlySync {
@@ -287,24 +289,64 @@ extension MainModel {
                         action: .syncTextReplacement, actionTitle: "现在同步")
     }
 
-    // MARK: 方案清单（在线方案清单设计 4.2）
+    // MARK: 检查更新（在线方案清单设计 4.2；0.2.1 加上方案包）
 
-    public func checkCatalog() async {
+    /// 「方案」页的「检查更新」：只在用户点按钮时联网。先查方案清单，再问 GitHub 在用的每个方案包现在的最新版本
+    /// （不下载包），和这次应用时用的版本比。有更新时「应用改动」可以点，点了就和平常一样下载最新的、备份、写入
+    public func checkUpdates() async {
         guard working == nil else { return }
         working = "正在检查方案清单更新……"
         defer { working = nil }
-        let store = env.catalogStore
-        let inUse = saved
-        switch await store.check(inUse: inUse) {
+        var lines: [String] = []
+        var failed = false
+
+        switch await env.catalogStore.check(inUse: saved) {
         case .upToDate:
-            notice = Notice(kind: .info, title: "方案清单已经是最新的", lines: [])
+            lines.append("方案清单：已经是最新的")
         case .updated(let diff, let status):
             adoptCatalog(status)
             if diff.affectsInUse { catalogNeedsApply = true }
-            notice = Notice(kind: .info, title: "方案清单更新了", lines: diff.lines)
+            lines += ["方案清单更新了"] + diff.lines
         case .rejected(let reason):
-            notice = Notice(kind: .warning, title: "没有用上新的方案清单", lines: [reason, "继续用现在的方案清单"])
+            failed = true
+            lines.append("方案清单没有用上新的：\(reason)。继续用现在的方案清单")
         }
+
+        let applied = (try? Ledger.load(env.paths))?.packages
+        let specs = (try? saved.requiredPackages(catalog)) ?? []
+        var updates = Set(packageUpdates)
+        for spec in specs {
+            working = "正在检查方案更新：\(spec.name)……"
+            // 0.2.1 以前应用的没记版本：当作用的是本地缓存里最新的那个
+            let current = applied?[spec.id] ?? env.cachedPackage(spec)?.info.version
+            do {
+                let latest = try await env.latestPackageVersion(spec)
+                if latest.version == current {
+                    updates.remove(spec.id)
+                    lines.append("\(spec.name)：已经是最新的")
+                } else {
+                    updates.insert(spec.id)
+                    lines.append("\(spec.name)：有新版本" + (latest.date.map { "（上游 \(Self.day($0)) 更新）" } ?? ""))
+                }
+            } catch {
+                failed = true
+                lines.append("\(spec.name)：没查到（\(error)）")
+            }
+        }
+        packageUpdates = specs.map(\.id).filter(updates.contains)
+
+        let needsApply = catalogNeedsApply || !packageUpdates.isEmpty
+        if needsApply { lines.append("点「应用改动」就会用上新版本（会先备份）") }
+        notice = Notice(kind: failed ? .warning : .info,
+                        title: failed ? "有些没查到" : needsApply ? "有更新" : "都是最新的", lines: lines)
+    }
+
+    /// 上游更新的日子（本地时区）
+    static func day(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     /// 换成新的方案清单；引导和主窗口共用一份
@@ -359,6 +401,8 @@ extension MainModel {
             var catalogNote: [String] = []
             if let updated = opened.updated {
                 adoptCatalog(updated)
+                // 导入成功时会清掉；导入失败的话，新清单还没用到 Rime 目录里，要提醒应用一次
+                catalogNeedsApply = true
                 catalogNote = ["导出文件里有现在的方案清单不认识的方案，已经更新了方案清单"]
             }
             let archive = opened.archive
@@ -386,6 +430,8 @@ extension MainModel {
             switch report.outcome {
             case .applied(let applied):
                 catalogNeedsApply = false
+                // 导入时下载的是最新的；下载失败用了本地旧版本时提醒留着
+                if fallback.isEmpty { packageUpdates = [] }
                 preview.markCurrentChanged()
                 if let note = reloadSettingsAfterImport() { lines.append(note) }
                 refreshColorSchemes()
@@ -427,6 +473,8 @@ extension MainModel {
         let read = env.textReplacements
         let doctor = Doctor(paths: env.paths, locations: env.locations, inputSource: env.inputSource, squirrel: env.squirrel,
                             releaseSource: nil, textReplacements: { try read().usable })
-        checks = await doctor.run()
+        checks = await doctor.run().map {
+            DoctorCheck(name: $0.name, level: $0.level, message: $0.message, hint: AppWording.diagnosticHint($0))
+        }
     }
 }

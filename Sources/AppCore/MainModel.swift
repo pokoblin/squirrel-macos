@@ -71,10 +71,16 @@ public final class MainModel {
     /// 生效的方案清单（检查更新、导入时会换）
     public internal(set) var catalogStatus: CatalogStatus
     public var catalog: Catalog { catalogStatus.catalog }
-    /// 方案清单更新改到了正在用的包：要重新应用一次
-    public internal(set) var catalogNeedsApply = false
-    /// 底部要不要显示「应用改动」：设置改了、方案清单要重新应用、五笔个人词库有没应用的改动
-    public var hasPendingChanges: Bool { isDirty || catalogNeedsApply || wubiDict.needsApply }
+    /// 方案清单更新改到了正在用的包：要重新应用一次（存到磁盘，退出再打开还提醒）
+    public internal(set) var catalogNeedsApply = false {
+        didSet { if catalogNeedsApply != oldValue { savePending() } }
+    }
+    /// 「检查更新」查到上游有新版本、还没应用的包 id（存到磁盘，退出再打开还提醒）
+    public internal(set) var packageUpdates: [String] = [] {
+        didSet { if packageUpdates != oldValue { savePending() } }
+    }
+    /// 底部要不要显示「应用改动」：设置改了、方案清单要重新应用、方案包有新版本、五笔个人词库有没应用的改动
+    public var hasPendingChanges: Bool { isDirty || catalogNeedsApply || !packageUpdates.isEmpty || wubiDict.needsApply }
     /// 应用时只有五笔个人词库在外面被改过：已经提示过一次「收进来」（再应用就按原来的外部改动流程问）
     var wubiMergeOffered = false
 
@@ -93,6 +99,9 @@ public final class MainModel {
         catalogStatus = env.catalogs.status
         saved = settings
         draft = settings
+        let pending = PendingApply.load(env.paths)
+        catalogNeedsApply = pending.catalog
+        packageUpdates = pending.packages
         if !welcome.isEmpty { notice = Notice(kind: .info, title: "设置好了", lines: welcome) }
         refreshColorSchemes()
     }
@@ -104,6 +113,15 @@ public final class MainModel {
 
     public func revert() {
         draft = saved
+    }
+
+    func savePending() {
+        PendingApply(catalog: catalogNeedsApply, packages: packageUpdates).save(env.paths)
+    }
+
+    /// 底栏「应用改动」旁边的说明里，有新版本的包叫什么
+    public var packageUpdateNames: [String] {
+        packageUpdates.map { catalog.package($0)?.name ?? $0 }
     }
 
     // MARK: 方案

@@ -155,6 +155,7 @@ public struct Deployer: Sendable {
         do {
             try fm.createDirectory(at: rime, withIntermediateDirectories: true)
             var newLedger = Ledger(appliedAt: now())
+            newLedger.packages = input.packages.mapValues(\.info.version)
             for file in result.files {
                 let source = generated.appending(path: file.path)
                 let sha = try Hashing.sha256(of: source)

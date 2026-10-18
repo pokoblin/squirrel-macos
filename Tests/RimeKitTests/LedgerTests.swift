@@ -63,3 +63,18 @@ import Testing
         #expect(throws: LedgerError.unsupportedFormat(9)) { try Ledger.load(paths) }
     }
 }
+
+@Suite struct LedgerPackagesTests {
+    @Test func 以前的账本没有包版本也能读() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let paths = Fixtures.paths(dir)
+        try FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
+        try Data(#"{"formatVersion":1,"entries":{}}"#.utf8).write(to: paths.ledgerFile)
+        let ledger = try Ledger.load(paths)
+        #expect(ledger.packages == nil)
+        var next = ledger
+        next.packages = ["wubi": "abc"]
+        try next.save(paths)
+        #expect(try Ledger.load(paths).packages == ["wubi": "abc"])
+    }
+}

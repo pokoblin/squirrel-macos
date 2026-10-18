@@ -68,6 +68,15 @@ import Testing
         #expect(staging.isEmpty)
     }
 
+    @Test func 账本记下这次用的包版本() async throws {
+        let e = try env(); defer { e.dir.remove() }
+        let input = try e.input(Settings(schemas: ["wb", "py"]))
+        _ = try applied(try await e.deployer().apply(input))
+        let ledger = try Ledger.load(e.paths)
+        #expect(ledger.packages == input.packages.mapValues(\.info.version))
+        #expect(ledger.packages?.isEmpty == false)
+    }
+
     @Test func 要覆盖应用不管的文件时先列出来什么都不写() async throws {
         let e = try env(); defer { e.dir.remove() }
         try e.write("default.custom.yaml", "mine")

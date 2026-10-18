@@ -28,7 +28,7 @@ public final class AppState {
     /// 打开应用时：已经由应用管理的直接进主窗口
     public func start() async {
         guard main == nil else { return }
-        env.paths.cleanStaleStaging()   // 上次被杀留下的临时文件
+        env.paths.cleanStaleStaging(includingPreviews: true)   // 上次被杀留下的临时文件，试打副本不管新旧都删
         await setup.start()
         if case .done = setup.step {
             openMain(welcome: [])

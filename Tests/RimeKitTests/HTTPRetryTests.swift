@@ -50,3 +50,14 @@ import Testing
     }
 
 }
+
+/// 方案清单和签名是两个文件：本地缓存可能给出新清单配旧签名，误报「签名不对」。raw.githubusercontent.com 的请求不用本地缓存
+@Suite struct HTTPRequestCacheTests {
+    @Test func 方案清单的请求不用本地缓存() {
+        let raw = URLSessionHTTPClient.request(URL(string: "https://raw.githubusercontent.com/o/r/main/catalog/v1/catalog.json")!)
+        #expect(raw.cachePolicy == .reloadIgnoringLocalCacheData)
+        let api = URLSessionHTTPClient.request(URL(string: "https://api.github.com/repos/o/r/commits/main")!)
+        #expect(api.cachePolicy == .useProtocolCachePolicy)
+        #expect(api.value(forHTTPHeaderField: "Accept") == "application/vnd.github+json")
+    }
+}

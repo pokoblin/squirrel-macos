@@ -63,3 +63,20 @@ import Testing
         }
     }
 }
+
+/// 内置清单（正本）和已经发布的在线清单 catalog/v1/ 对得上：已发布的包、方案不能删，serial 不能变小（在线方案清单设计 5.1）
+@Suite struct PublishedCatalogTests {
+    static var published: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "catalog/v1/catalog.json")
+    }
+
+    @Test func 内置清单没删已发布的包和方案() throws {
+        let published = try Catalog.decode(Data(contentsOf: Self.published))
+        let builtIn = try Catalog.builtIn()
+        #expect(builtIn.serial >= published.serial)
+        // serial 一样时就是同一份，只看删没删
+        let problems = CatalogPublishCheck.problems(old: published, new: builtIn).filter { !$0.hasPrefix("serial") }
+        #expect(problems.isEmpty, "\(problems)")
+    }
+}

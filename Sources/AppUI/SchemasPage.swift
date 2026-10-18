@@ -33,7 +33,7 @@ struct SchemasPage: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("可以启用的方案").font(.title2.bold())
                 Spacer()
-                Button("检查方案清单更新") { Task { await model.checkCatalog() } }
+                Button("检查更新") { Task { await model.checkUpdates() } }
                     .disabled(model.working != nil)
             }
             Text(NetworkUse.catalogCheckNote).font(.caption).foregroundStyle(.secondary)

@@ -28,6 +28,10 @@ public struct AppEnvironment: Sendable {
     public var sleep: @Sendable (Duration) async -> Void
     /// 新建一个试打引擎（辅助程序）。超时、崩溃以后的会话不能再用，重试时再建一个
     public var previewEngine: @Sendable () throws -> any PreviewEngine = { throw PreviewError.helperMissing }
+    /// 问 GitHub 这个包现在的最新版本（「检查更新」用，不下载包）
+    public var latestPackageVersion: @Sendable (PackageSpec) async throws -> ResolvedSource = { _ in
+        throw HTTPError.transport("没有设置检查更新的方法")
+    }
 
     public func deployer() -> Deployer {
         Deployer(paths: paths, locations: locations, compiler: compiler, squirrel: squirrel,
@@ -55,6 +59,8 @@ public struct AppEnvironment: Sendable {
             },
             deployTimeout: .seconds(120), activationTimeout: 600,
             sleep: { try? await Task.sleep(for: $0) })
+        let resolver = SourceResolver(http: http)
+        env.latestPackageVersion = { try await resolver.resolve($0.source) }
         env.previewEngine = {
             guard let helper = PreviewHelperLocator.locate() else { throw PreviewError.helperMissing }
             return PreviewSession(helper: helper, squirrelApp: locations.squirrelApp)

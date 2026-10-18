@@ -23,12 +23,17 @@ public struct AppPaths: Sendable, Equatable {
     /// 生成、下载用的暂存区
     public var staging: URL { root.appending(path: "staging", directoryHint: .isDirectory) }
 
-    /// 暂存区里只放临时文件。进程被杀会留下来：打开应用时删掉 olderThan 秒以前的（不碰正在跑的操作）
-    public func cleanStaleStaging(olderThan seconds: TimeInterval = 3_600, now: Date = Date()) {
+    /// 暂存区里只放临时文件。进程被杀会留下来：打开应用时删掉 olderThan 秒以前的（不碰正在跑的操作）。
+    /// includingPreviews：试打副本（preview-*，约 70 MB）只有应用自己用，应用刚打开时一定是上次留下的，不管新旧都删
+    public func cleanStaleStaging(olderThan seconds: TimeInterval = 3_600, now: Date = Date(), includingPreviews: Bool = false) {
         let fm = FileManager.default
         let names = (try? fm.contentsOfDirectory(atPath: staging.path)) ?? []
         for name in names {
             let url = staging.appending(path: name)
+            if includingPreviews, name.hasPrefix("preview-") {
+                try? fm.removeItem(at: url)
+                continue
+            }
             guard let modified = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
                   now.timeIntervalSince(modified) > seconds else { continue }
             try? fm.removeItem(at: url)

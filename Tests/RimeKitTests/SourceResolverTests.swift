@@ -11,7 +11,8 @@ import Testing
         ])))
         let resolver = SourceResolver(http: http, retry: .immediate)
         let r = try await resolver.resolve(.githubReleaseAsset(repo: "o/base", tag: "t", asset: "base.zip"))
-        #expect(r == ResolvedSource(version: "2026-10-05T13:38:43Z", downloadURL: Fixtures.baseZipURL))
+        #expect(r == ResolvedSource(version: "2026-10-05T13:38:43Z", downloadURL: Fixtures.baseZipURL,
+                                    date: Date(timeIntervalSince1970: 1_791_207_523)))
     }
 
     @Test func Release里没有这个附件() async {
@@ -47,5 +48,14 @@ import Testing
         await #expect(throws: SourceError.badResponse(Fixtures.appCommitURL)) {
             try await resolver.resolve(.githubBranch(repo: "o/app", branch: "main"))
         }
+    }
+
+    @Test func 分支带上提交时间() async throws {
+        let http = FakeHTTPClient()
+        http.stub(Fixtures.appCommitURL, .success(Fixtures.commitJSON(sha: "18a6016c", date: "2026-10-17T02:03:04Z")))
+        let resolver = SourceResolver(http: http, retry: .immediate)
+        let r = try await resolver.resolve(.githubBranch(repo: "o/app", branch: "main"))
+        #expect(r.date == ISO8601DateFormatter().date(from: "2026-10-17T02:03:04Z"))
+        #expect(r.version == "18a6016c")
     }
 }
