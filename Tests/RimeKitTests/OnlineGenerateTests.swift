@@ -27,10 +27,13 @@ struct OnlineGenerateTests {
     @Test func 五笔加拼音混输() async throws {
         let dir = try TempDir(); defer { dir.remove() }
         let out = try await run(.wubiPinyin, dir)
-        let r = try RimeTools.type(out, schema: "wubi86_jidian_pinyin", ["g", "weixin", "qukuailian", "tstx"])
+        let r = try RimeTools.type(out, schema: "wubi86_jidian_pinyin", ["g", "weixin", "qukuailian", "hulue", "hulve", "nuedai", "tstx"])
         #expect(r["g"]?.first == "一")
         #expect(r["weixin"]?.first == "微信")
         #expect(r["qukuailian"]?.first == "区块链")   // 雾凇大词库生效
+        #expect(r["hulue"]?.first == "忽略")         // 雾凇词库写 lve，lue 也要能打
+        #expect(r["hulve"]?.first == "忽略")
+        #expect(r["nuedai"]?.first == "虐待")
         #expect(r["tstx"]?.first == "测试短语")
         let squirrel = try GenFixtures.patch(out, "squirrel")
         #expect(squirrel["preset_color_schemes/roseo_maple/font_point"]?.string == "24")

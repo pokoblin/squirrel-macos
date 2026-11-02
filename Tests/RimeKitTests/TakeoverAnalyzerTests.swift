@@ -21,7 +21,7 @@ import Testing
         #expect(p.personalDicts.map(\.lastPathComponent) == ["py_user.dict.yaml", "wb_user.dict.yaml"])
         #expect(p.manualPhrases == [F.manual])
         #expect(p.textReplacementMatches == 1)
-        #expect(p.notes.isEmpty, "\(p.notes)")
+        #expect(p.notes == ["wpy.custom.yaml 里没有上游默认补丁的这些项，接管后会按上游默认加上：speller/algebra/@before 0"])
     }
 
     @Test func 没有文本替换时短语都是手动的() throws {

@@ -30,7 +30,10 @@ import Testing
         let ice = try #require(option.choice("rime-ice"))
         #expect(ice.dependencies == ["rime-ice-dicts"])
         #expect(ice.generatedDicts.map(\.name) == ["pinyin_ext"])
-        #expect(ice.patches["pinyin_simp"] == ["translator/dictionary": "pinyin_ext"])
+        #expect(ice.patches["pinyin_simp"] == [
+            "translator/dictionary": "pinyin_ext",
+            "speller/algebra/@before 0": "derive/^([nl])ve$/$1ue/",   // 雾凇词库写 lve，打 lue 也要能出来
+        ])
         #expect(ice.patches["wubi86_jidian_pinyin"] == ["reverse_lookup/dictionary": "pinyin_ext"])
         #expect(option.choice("builtin")?.dependencies == [])
     }

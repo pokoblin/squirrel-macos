@@ -33,7 +33,7 @@ struct OnlineTakeoverTests {
         #expect(p.personalDicts.map(\.lastPathComponent) == ["pinyin_user.dict.yaml", "wubi86_jidian_user.dict.yaml"])
         #expect(p.manualPhrases == [WubiSample.manualPhrase])
         #expect(p.textReplacementMatches == 1)
-        #expect(p.notes.isEmpty, "\(p.notes)")
+        #expect(p.notes == ["pinyin_simp.custom.yaml 里没有上游默认补丁的这些项，接管后会按上游默认加上：speller/algebra/@before 0"])
 
         let packages = ["wubi86-jidian": wubi, "rime-ice-dicts": dicts]
         let preview = try TakeoverPreview.make(p, rime: rime, catalog: catalog, packages: packages, textReplacement: tr,

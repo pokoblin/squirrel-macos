@@ -198,7 +198,8 @@ final class TakeoverAnalysis {
         var total = 0
         for (schema, values) in choice.patches {
             let leaves = PatchLeaves(existing[schema] ?? Patch())
-            for (key, value) in values {
+            // 往列表里插东西的项（`…/@before 0` 这种）只是微调，旧配置没有它也算这个选择
+            for (key, value) in values where !key.contains("/@") {
                 total += 1
                 if leaves[key]?.string == value { matched += 1 }
             }

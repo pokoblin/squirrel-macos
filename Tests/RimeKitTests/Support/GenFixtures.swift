@@ -23,7 +23,7 @@ enum GenFixtures {
         {"id":"builtin","name":"自带","dependencies":[],"generatedDicts":[],"patches":{}},
         {"id":"ext","name":"大词库","dependencies":["words"],
          "generatedDicts":[{"name":"py_ext","importTables":[{"name":"py_user","onlyIfPersonal":true},{"name":"cn/a"}]}],
-         "patches":{"wpy":{"translator/dictionary":"py_ext"},"wb":{"reverse_lookup/dictionary":"py_ext"},"wb_py":{"reverse_lookup/dictionary":"py_ext"}}}
+         "patches":{"wpy":{"translator/dictionary":"py_ext","speller/algebra/@before 0":"derive/^([nl])ve$/$1ue/"},"wb":{"reverse_lookup/dictionary":"py_ext"},"wb_py":{"reverse_lookup/dictionary":"py_ext"}}}
       ]}]}
     ]}
     """
