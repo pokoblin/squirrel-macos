@@ -70,6 +70,7 @@ import Testing
         func launch() throws { try reload() }
         func registerInputSource() throws {}
         func quit() throws {}
+        func forceQuit() throws {}
     }
 
     @Test func 等部署之前就保存好设置和个人内容() async throws {

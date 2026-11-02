@@ -51,6 +51,21 @@ import Testing
         #expect(e.output.text.contains("你取消了授权"))
     }
 
+    @Test func restart重启鼠须管() async throws {
+        let e = try env(installed: "1.1.2"); defer { e.dir.remove() }
+        try e.squirrel.launch()
+        #expect(await e.run(["restart"]) == 0)
+        #expect(e.squirrel.calls == ["launch", "quit", "launch"])
+        #expect(e.output.text.contains("鼠须管已重启"))
+    }
+
+    @Test func restart失败时退出码是1() async throws {
+        let e = try env(installed: "1.1.2"); defer { e.dir.remove() }
+        e.squirrel.launchDoesNothing = true
+        #expect(await e.run(["restart"]) == 1)
+        #expect(e.output.text.contains("鼠须管没有启动起来"))
+    }
+
     @Test func activate等用户添加() async throws {
         let e = try env(installed: "1.1.2"); defer { e.dir.remove() }
         e.input.enableAfterPumps = 2

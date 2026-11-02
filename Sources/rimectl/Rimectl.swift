@@ -65,6 +65,7 @@ struct Rimectl {
       rimectl install [--force] [--gui-auth]                   下载、检查、安装鼠须管（--gui-auth 弹系统授权框，否则用免密 sudo）
       rimectl activate [--timeout 秒]                           打开系统设置等你添加鼠须管，然后切换过去并启动它
       rimectl doctor [--offline]                               检查环境，告诉你下一步做什么
+      rimectl restart                                          重启鼠须管（不碰配置，要在桌面会话里运行）
       rimectl preview [--pending] [--data-dir <目录>] --schema <方案id> <编码>...
       rimectl preview [--pending] --list                      列出方案
       rimectl preview --schema <方案id> --find <词> <编码>      找这个词在第几页第几个
@@ -225,6 +226,11 @@ struct Rimectl {
                 return try await activate(timeout: timeout ?? context.activationTimeout, locations: locations, context)
             case "doctor":
                 return await doctor(offline: offline, paths: paths, locations: locations, context)
+            case "restart":
+                try await SquirrelRestarter(squirrel: context.squirrel ?? SquirrelControl(locations: locations),
+                                            sleep: context.sleep).restart()
+                out.line("鼠须管已重启")
+                return 0
             case "preview":
                 return await preview(Array(positional.dropFirst()),
                                      options: PreviewOptions(pending: pending, list: listOnly, schema: schema, find: find),

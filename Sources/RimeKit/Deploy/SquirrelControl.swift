@@ -9,14 +9,20 @@ public protocol SquirrelControlling: Sendable {
     func registerInputSource() throws
     /// 退出鼠须管：导出、合并输入习惯前要先退出，不然数据库被它占着
     func quit() throws
+    /// 强制退出：鼠须管卡死、普通退出没反应时用
+    func forceQuit() throws
 }
 
 public enum SquirrelError: Error, Equatable, Sendable, CustomStringConvertible {
     case commandFailed(String, String)
+    case stillRunning
+    case notStarted
 
     public var description: String {
         switch self {
         case let .commandFailed(command, message): return "\(command) 失败：\(message)"
+        case .stillRunning: return "强制退出后鼠须管还在运行"
+        case .notStarted: return "鼠须管没有启动起来"
         }
     }
 }
@@ -49,6 +55,13 @@ public struct SquirrelControl: SquirrelControlling {
         let r = try Shell.run("/usr/bin/killall", ["-u", NSUserName(), "Squirrel"])
         if Self.quitFailed(status: r.status, stderr: r.stderr) {
             throw SquirrelError.commandFailed("退出鼠须管", r.stderr)
+        }
+    }
+
+    public func forceQuit() throws {
+        let r = try Shell.run("/usr/bin/killall", ["-KILL", "-u", NSUserName(), "Squirrel"])
+        if Self.quitFailed(status: r.status, stderr: r.stderr) {
+            throw SquirrelError.commandFailed("强制退出鼠须管", r.stderr)
         }
     }
 

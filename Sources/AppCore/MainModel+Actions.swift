@@ -475,6 +475,21 @@ extension MainModel {
         backups = BackupStore(paths: env.paths).list()
     }
 
+    /// 诊断页的「重启鼠须管」：别的软件把输入法弄出问题时用
+    public func restartSquirrel() async {
+        guard working == nil else { return }
+        working = "正在重启鼠须管……"
+        defer { working = nil }
+        let restarter = SquirrelRestarter(squirrel: env.squirrel, sleep: env.sleep)
+        do {
+            try await offMain { try await restarter.restart() }
+            notice = Notice(kind: .info, title: "鼠须管已重启", lines: [])
+        } catch {
+            notice = Notice(kind: .error, title: "没能重启鼠须管", lines: ["\(error)"])
+        }
+        await runDiagnostics()
+    }
+
     public func runDiagnostics() async {
         let read = env.textReplacements
         let doctor = Doctor(paths: env.paths, locations: env.locations, inputSource: env.inputSource, squirrel: env.squirrel,

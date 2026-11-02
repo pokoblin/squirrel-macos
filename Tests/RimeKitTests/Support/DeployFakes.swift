@@ -52,6 +52,11 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
     /// 不为空时 launch / reload 抛这个错（模拟通知鼠须管失败）
     var launchError: SquirrelError?
     var reloadError: SquirrelError?
+    /// 模拟卡死的鼠须管：quit 没用；forceKillWorks 为 false 时 forceQuit 也没用
+    var ignoresQuit = false
+    var forceKillWorks = true
+    /// launch 不报错，但进程起不来
+    var launchDoesNothing = false
 
     init(locations: RimeLocations, running: Bool) {
         self.locations = locations
@@ -71,7 +76,7 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
     func launch() throws {
         lock.withLock {
             log.append("launch")
-            running = true
+            if !launchDoesNothing { running = true }
         }
         if let launchError { throw launchError }
         try simulateDeploy()
@@ -80,7 +85,14 @@ final class FakeSquirrel: SquirrelControlling, @unchecked Sendable {
     func quit() throws {
         lock.withLock {
             log.append("quit")
-            running = false
+            if !ignoresQuit { running = false }
+        }
+    }
+
+    func forceQuit() throws {
+        lock.withLock {
+            log.append("forceQuit")
+            if forceKillWorks { running = false }
         }
     }
 

@@ -10,6 +10,7 @@ struct DiagnosticsPage: View {
             HStack {
                 Text("诊断").font(.title2.bold())
                 Spacer()
+                Button("重启鼠须管") { Task { await model.restartSquirrel() } }
                 Button("重新检查") { Task { await model.runDiagnostics() } }
             }
             ForEach(Array(model.checks.enumerated()), id: \.offset) { _, check in
