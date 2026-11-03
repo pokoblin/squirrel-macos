@@ -115,6 +115,25 @@ macOS 不允许程序替用户启用第三方输入法，这一步只能你亲�
 </details>
 
 <details>
+<summary><b>用了一阵后，有些应用里突然只能打出英文</b></summary>
+
+常见于备忘录、Safari 这类沙盒应用：打出来直接是英文字母，切换输入法时光标旁一直显示 A；其他应用却正常。原因还没查清。按下面的顺序试，每做一步等两分钟，再回到出问题的应用里试，不用重开应用：
+
+1. 在「诊断」页点「重启鼠须管」。
+2. 还不行，在「终端」里运行：
+
+   ```bash
+   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Library/Input Methods/Squirrel.app"
+   ```
+
+3. 还不行，重启电脑。这一步一定能恢复。
+
+前两步也可以交给仓库里的脚本 [`tools/fix-english-only.sh`](tools/fix-english-only.sh) 来做：它按顺序执行，每步做完问你好了没有，最后告诉你是第几步起的作用。
+
+如果你遇到了，欢迎[报告问题](https://github.com/pokoblin/squirrel-macos/issues)，写上是第几步恢复的，帮我们找到原因。
+</details>
+
+<details>
 <summary><b>会不会弄坏我现有的配置？</b></summary>
 
 - 接管前会先给你看预览：哪些文件会被换掉、哪些原样保留、带过去哪些个人词库和短语。你确认了才动手，动手前完整备份一次，这份永久保留。
