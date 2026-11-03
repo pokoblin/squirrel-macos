@@ -8,7 +8,7 @@
 set -euo pipefail
 
 BASE="macos-base"
-VM_USER="tester"
+VM_USER="test"   # 2026-11-03 重建的底板账户名是 test（之前是 tester）
 KEY="$HOME/.ssh/tart_vm_ed25519"
 PROJECT="$(cd "$(dirname "$0")/../.." && pwd)"
 SSH_OPTS=(-i "$KEY" -o BatchMode=yes -o ConnectTimeout=5 -o LogLevel=ERROR

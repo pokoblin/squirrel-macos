@@ -4,11 +4,11 @@
 
 用的是 [Tart](https://tart.run/)。做法是先有一台**干净的底板** `macos-base`，每次测试从它**克隆**一台出来，测完删掉。
 
-## 现状（2026-10-15）
+## 现状（2026-11-03 重建）
 
-- Tart 2.41.0：装在 `~/Applications/tart.app`，命令是 `/opt/homebrew/bin/tart`（一个包装脚本）。
+- Tart 2.41.1：装在 `~/Applications/tart.app`，命令是 `/opt/homebrew/bin/tart`（一个包装脚本）。
   - Homebrew 上的官方配方 `cirruslabs/cli/tart` 和新版 Homebrew 不兼容，所以是从 GitHub Release 下载的，校验了哈希和苹果公证。
-- 底板 `macos-base`：macOS 27.0.1，6 核、8 GB 内存、60 GB 磁盘（实际占用约 32 GB），账户 `tester`。已经运行过 `setup-guest.sh`：SSH 免密登录、sudo 免密码、不休眠。**和 squirrel-wubi86 项目共用。**
+- 底板 `macos-base`：macOS 27.2，6 核、8 GB 内存、60 GB 磁盘（实际占用约 32 GB），账户 `test`。已经运行过 `setup-guest.sh`：SSH 免密登录、sudo 免密码、不休眠。**和 squirrel-wubi86 项目共用。**
 - SSH 密钥：`~/.ssh/tart_vm_ed25519`（只给虚拟机用）。
 - 系统安装镜像缓存在 `~/.tart/cache/IPSWs`（约 25 GB），只有重建底板时才用得到。
 
@@ -33,8 +33,8 @@
 测完删掉。底板不会被删。
 
 - 测试机里能看到本项目（只读）：`/Volumes/My Shared Files/project`。
-- 克隆出来的测试机启动后停在登录界面。SSH 能用，但**输入法相关的测试必须先在窗口里登录桌面**（要用户本人输入 `tester` 的密码）。
-- 查输入法状态要在桌面会话里运行：`sudo launchctl asuser $(id -u) sudo -u tester <命令>`。
+- 克隆出来的测试机启动后停在登录界面。SSH 能用，但**输入法相关的测试必须先在窗口里登录桌面**（要用户本人输入 `test` 的密码）。
+- 查输入法状态要在桌面会话里运行：`sudo launchctl asuser $(id -u) sudo -u test <命令>`。
 
 ## 查看输入法状态：`tis-probe`
 
@@ -43,11 +43,11 @@ swiftc -O tools/vm/tis-probe.swift -o tools/vm/tis-probe
 ```
 
 ```bash
-scp -i ~/.ssh/tart_vm_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null tools/vm/tis-probe tester@$(tart ip test-1):/tmp/
+scp -i ~/.ssh/tart_vm_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null tools/vm/tis-probe test@$(tart ip test-1):/tmp/
 ```
 
 ```bash
-./tools/vm/vm.sh ssh test-1 'sudo launchctl asuser $(id -u) sudo -u tester /tmp/tis-probe list squirrel'
+./tools/vm/vm.sh ssh test-1 'sudo launchctl asuser $(id -u) sudo -u test /tmp/tis-probe list squirrel'
 ```
 
 - `list 关键字`：列出已安装的输入法，以及是否启用、是否选中。
@@ -58,9 +58,9 @@ scp -i ~/.ssh/tart_vm_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=
 
 1. 删除旧底板：`tart delete macos-base`
 2. 新建：`tart create macos-base --from-ipsw latest --disk-size 60 --disk-format asif`，然后 `tart set macos-base --cpu 6 --memory 8192 --display 1440x900`
-3. 启动：`tart run macos-base --dir=vm:$PWD/tools/vm:ro`，在窗口里走完开机设置。Apple 账户跳过；账户名 `tester`；FileVault 不开。
+3. 启动：`tart run macos-base --dir=vm:$PWD/tools/vm:ro`，在窗口里走完开机设置。Apple 账户跳过；账户名 `test`；FileVault 不开。
 4. 在虚拟机终端里运行：`bash "/Volumes/My Shared Files/vm/setup-guest.sh"`（需要 `tools/vm/tart_vm_ed25519.pub`，这个文件不进 git，从 `~/.ssh/tart_vm_ed25519.pub` 复制过来）。
-5. 关机定型：`ssh -i ~/.ssh/tart_vm_ed25519 tester@$(tart ip macos-base) 'sudo shutdown -h now'`
+5. 关机定型：`ssh -i ~/.ssh/tart_vm_ed25519 test@$(tart ip macos-base) 'sudo shutdown -h now'`
 
 ## 注意
 
