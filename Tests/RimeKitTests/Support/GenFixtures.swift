@@ -69,8 +69,10 @@ enum GenFixtures {
         """ + phrase
     }
 
-    static func wubiSchema(id: String, filters: [String] = []) -> String {
+    /// prefix 不是 nil 时像上游繁体混输那样：拼音也能用这个前缀打（recognizer 认出来只带 reverse_lookup 标签）
+    static func wubiSchema(id: String, filters: [String] = [], prefix: String? = nil) -> String {
         let filterLines = filters.isEmpty ? "" : "  filters:\n" + filters.map { "    - \($0)\n" }.joined()
+        let prefixLines = prefix.map { "  prefix: \"\($0)\"\nrecognizer:\n  patterns:\n    reverse_lookup: \"\($0)[a-z]*'?$\"\n" } ?? ""
         return """
         schema:
           schema_id: \(id)
@@ -103,7 +105,7 @@ enum GenFixtures {
             - reverse_lookup
         reverse_lookup:
           dictionary: wpy
-
+        \(prefixLines)
         """
     }
 
@@ -126,7 +128,7 @@ enum GenFixtures {
         "wubi": [
             "wb.schema.yaml": wubiSchema(id: "wb"),
             "wb_py.schema.yaml": wubiSchema(id: "wb_py"),
-            "wb_py_t.schema.yaml": wubiSchema(id: "wb_py_t", filters: ["simplifier@tradition", "uniquifier"]),
+            "wb_py_t.schema.yaml": wubiSchema(id: "wb_py_t", filters: ["simplifier@tradition", "uniquifier"], prefix: "`"),
             "wpy.schema.yaml": pinyinSchema(id: "wpy", name: "五笔里的拼音", dictionary: "wpy", phraseFile: nil),
             "wb.dict.yaml": dict("wb", ["一\tg\t100", "工\ta\t100"]),
             "wpy.dict.yaml": dict("wpy", ["拼\tpin\t1"]),

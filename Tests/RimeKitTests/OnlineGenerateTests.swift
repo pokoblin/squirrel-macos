@@ -162,6 +162,24 @@ struct OnlinePinyinLearningTests {
         try checkUnchanged("wubi86_jidian_trad_pinyin", step: 32, baseline: baseline, learning: learning)
     }
 
+    @Test func 繁体混输用反引号打拼音和原来一样() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let settings = Settings.starter(.wubiPinyin)
+        let packages = try await fetch(dir, settings)
+        let baseline = try make(dir, settings, baseline: true, packages: packages)
+        let learning = try make(dir, settings, baseline: false, packages: packages)
+        let schema = "wubi86_jidian_trad_pinyin"
+        let codes = ["`ni", "`gyx"]
+        let before = try RimeTools.typeWithComments(baseline, schema: schema, codes)
+        let after = try RimeTools.typeWithComments(learning, schema: schema, codes)
+        for code in codes {
+            let b = (before[code] ?? []).prefix(5).map { "\($0.text) \($0.comment)" }
+            let a = (after[code] ?? []).prefix(5).map { "\($0.text) \($0.comment)" }
+            #expect(!b.isEmpty, "\(code) 对照里就没有候选")
+            #expect(a == b, "\(code)：\(b) → \(a)")
+        }
+    }
+
     @Test func 混输能连词能记词() async throws {
         let dir = try TempDir(); defer { dir.remove() }
         let settings = Settings.starter(.wubiPinyin)

@@ -43,7 +43,22 @@ import Yams
         let p = try G.patch(out, "wb_py_t")
         #expect(p["engine/filters/@before 0"]?.string == "lua_filter@*code_hint_wb")
         #expect(p["engine/filters"] == nil)
+    }
+
+    @Test func 上游能用前缀打拼音时反查翻译器留着只接前缀() throws {
+        let (dir, out, _) = try generate(Settings(schemas: ["wb_py_t"]))
+        defer { dir.remove() }
+        let p = try G.patch(out, "wb_py_t")
+        #expect(strings(p["engine/translators"]) == ["table_translator", "script_translator@mixed_pinyin", "reverse_lookup_translator"])
+        #expect(strings(p["abc_segmentor/extra_tags"]) == [])
+    }
+
+    @Test func 上游没有前缀时不留反查翻译器() throws {
+        let (dir, out, _) = try generate(Settings(schemas: ["wb_py"]))
+        defer { dir.remove() }
+        let p = try G.patch(out, "wb_py")
         #expect(strings(p["engine/translators"]) == ["table_translator", "script_translator@mixed_pinyin"])
+        #expect(p["abc_segmentor/extra_tags"] == nil)
     }
 
     @Test func 选自带词库时不加记词补丁也不写脚本() throws {

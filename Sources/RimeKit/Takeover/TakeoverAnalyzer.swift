@@ -379,7 +379,11 @@ final class TakeoverAnalysis {
         let base = expected[name] ?? Patch()
         let baseLeaves = PatchLeaves(base)
         let managed = managedPaths(name)
-        var entries = mine.entries.filter { !isPhraseInjection($0, in: mine) && !PinyinLearningPatch.isGenerated($0, expected: base) }
+        let learningEntries = mine.entries.filter { PinyinLearningPatch.isGenerated($0, in: mine) }
+        if learningEntries.contains(where: { !PinyinLearningPatch.matches($0, expected: base) }) {
+            notes.append("\(name).custom.yaml 里的混输记词补丁和这一版生成的不一样，接管后按这一版重新生成")
+        }
+        var entries = mine.entries.filter { !isPhraseInjection($0, in: mine) && !PinyinLearningPatch.isGenerated($0, in: mine) }
         // 值是空的项（「key:」）保存后读回来就没了：不保留，告诉用户
         for entry in entries where entry.value.null != nil {
             notes.append("\(name).custom.yaml 里 \(entry.key) 的值是空的，接管后不保留")

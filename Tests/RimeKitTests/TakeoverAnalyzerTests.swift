@@ -239,9 +239,47 @@ import Testing
         #expect(p.notes.contains { $0.contains("default.custom.yaml") && $0.contains("符号链接") })
     }
 
-    func generated(_ e: F.Env, phrases: [Phrase]) throws {
+    @Test func 接管繁体混输的生成配置也不保留记词补丁() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try generated(e, phrases: [F.manual], schemas: ["wb_py_t", "wb"])
+        let p = try F.analyze(e, textReplacement: [])
+        #expect(p.settings.preservedPatches["wb_py_t"] ?? [] == [], "\(p.settings.preservedPatches)")
+    }
+
+    @Test func 旧版本生成的记词补丁和这一版不同时也不保留() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try generated(e, phrases: [], schemas: ["wb_py", "wb_py_t", "wb"])
+        // 旧版本的清单调过 initial_quality；繁体混输那时还没有过滤器，写的是整份 engine/filters
+        try edit(e, "wb_py") { $0.replacingOccurrences(of: "initial_quality: -2", with: "initial_quality: -5") }
+        try edit(e, "wb_py_t") {
+            $0.replacingOccurrences(of: "engine/filters/@before 0: lua_filter@*code_hint_wb",
+                                    with: "engine/filters:\n  - lua_filter@*code_hint_wb")
+        }
+        let p = try F.analyze(e, textReplacement: [])
+        #expect(p.settings.preservedPatches["wb_py"] ?? [] == [], "\(p.settings.preservedPatches)")
+        #expect(p.settings.preservedPatches["wb_py_t"] ?? [] == [], "\(p.settings.preservedPatches)")
+        #expect(p.notes.contains { $0.contains("wb_py.custom.yaml") && $0.contains("混输记词") }, "\(p.notes)")
+    }
+
+    @Test func 没有记词配置时用户自己的翻译器列表照样保留() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try generated(e, phrases: [], schemas: ["wb_py", "wb"])
+        try edit(e, "wb_py") { _ in
+            "patch:\n  engine/translators:\n    - table_translator\n    - script_translator@mixed_pinyin\n"
+        }
+        let p = try F.analyze(e, textReplacement: [])
+        #expect(p.settings.preservedPatches["wb_py"]?.map(\.key) == ["engine/translators"], "\(p.settings.preservedPatches)")
+    }
+
+    func edit(_ e: F.Env, _ schema: String, _ change: (String) -> String) throws {
+        let url = e.rime.appending(path: "\(schema).custom.yaml")
+        let text = change(try String(contentsOf: url, encoding: .utf8))
+        try Data(text.utf8).write(to: url)
+    }
+
+    func generated(_ e: F.Env, phrases: [Phrase], schemas: [String] = ["wb_py", "wb"]) throws {
         _ = try ConfigGenerator().generate(
-            GenFixtures.input(Settings(schemas: ["wb_py", "wb"]), packages: e.packages,
+            GenFixtures.input(Settings(schemas: schemas), packages: e.packages,
                               personal: PersonalContent(dicts: [], phrases: phrases)), into: e.rime)
     }
 
