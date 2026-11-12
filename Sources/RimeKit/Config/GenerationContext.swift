@@ -13,6 +13,8 @@ final class GenerationContext {
     private(set) var uniquifierSchemas: [String] = []
     /// 配置名（default、squirrel、方案 id）→ 补丁
     var patches: [String: Patch] = [:]
+    /// 打开了混输记词的方案
+    private(set) var learningSchemas: [String] = []
 
     init(input: GenerationInput, output: URL) throws {
         self.input = input
@@ -111,6 +113,10 @@ final class GenerationContext {
                     throw GenerationError.badYAML(file: "settings.json 里保留的 \(name) 补丁 \(item.key)", message: String(describing: error))
                 }
                 if let node { patches[name, default: Patch()].set(item.key, node) }
+                if learningSchemas.contains(name),
+                   let key = ["engine/translators", "engine/filters"].first(where: { PatchLeaves.overlaps($0, item.key) }) {
+                    warnings.append("\(name) 的保留补丁改了 \(key)，混输记词可能不生效")
+                }
             }
         }
     }
@@ -194,6 +200,31 @@ final class GenerationContext {
             + "import_tables:\n"
             + tables
             + "...\n"
+    }
+
+    // MARK: 混输记词
+
+    func applyPinyinLearning() throws {
+        var scripts: [String] = []
+        for spec in required {
+            for option in spec.options {
+                guard let learning = input.settings.choice(option, of: spec).pinyinLearning else { continue }
+                for schema in learning.schemas {
+                    guard let root = try readYAML("\(schema).schema.yaml", label: "\(schema).schema.yaml") else { continue }
+                    guard let entries = PinyinLearningPatch.entries(learning, upstreamSchema: root) else {
+                        warnings.append("\(schema) 里没有 \(PinyinLearningPatch.replaced)，没有打开混输记词")
+                        continue
+                    }
+                    for entry in entries { patches[schema, default: Patch()].set(entry.key, entry.value) }
+                    learningSchemas.append(schema)
+                    if !scripts.contains(learning.codeDictionary) {
+                        scripts.append(learning.codeDictionary)
+                        try write(PinyinLearningPatch.luaScript(codeDictionary: learning.codeDictionary),
+                                  to: PinyinLearningPatch.luaPath(learning.codeDictionary), origin: .generated)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: 规则 6：个人词库（和上游同名时用个人的）

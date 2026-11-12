@@ -75,6 +75,7 @@ public struct ConfigGenerator: Sendable {
         try context.copyPackageFiles()
         try context.collectUpstreamPatches()
         try context.applyOptions()
+        try context.applyPinyinLearning()
         try context.copyPersonalDicts()
         try context.applyPhrases()
         try context.applyPreservedPatches()

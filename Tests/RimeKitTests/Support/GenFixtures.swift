@@ -17,13 +17,14 @@ enum GenFixtures {
      {"id":"wubi","name":"测试五笔","summary":"s","license":"MIT","homepage":"https://example.com/wb",
       "source":{"type":"githubBranch","repo":"o/wb","branch":"main"},
       "anchor":"wb.schema.yaml","include":["*"],"exclude":[],"requiredFiles":["wb.schema.yaml"],
-      "schemas":[{"id":"wb","name":"五笔","category":"wubi"},{"id":"wb_py","name":"五笔拼音","category":"wubi"},{"id":"wpy","name":"五笔里的拼音","category":"pinyin"}],
+      "schemas":[{"id":"wb","name":"五笔","category":"wubi"},{"id":"wb_py","name":"五笔拼音","category":"wubi"},{"id":"wpy","name":"五笔里的拼音","category":"pinyin"},{"id":"wb_py_t","name":"五笔拼音繁","category":"wubi"}],
       "dependencies":[],"userDicts":["wb_user.dict.yaml"],
       "options":[{"id":"pinyinDictionary","name":"拼音词库","defaultChoice":"ext","choices":[
         {"id":"builtin","name":"自带","dependencies":[],"generatedDicts":[],"patches":{}},
         {"id":"ext","name":"大词库","dependencies":["words"],
          "generatedDicts":[{"name":"py_ext","importTables":[{"name":"py_user","onlyIfPersonal":true},{"name":"cn/a"}]}],
-         "patches":{"wpy":{"translator/dictionary":"py_ext","speller/algebra/@before 0":"derive/^([nl])ve$/$1ue/"},"wb":{"reverse_lookup/dictionary":"py_ext"},"wb_py":{"reverse_lookup/dictionary":"py_ext"}}}
+         "patches":{"wpy":{"translator/dictionary":"py_ext","speller/algebra/@before 0":"derive/^([nl])ve$/$1ue/"},"wb":{"reverse_lookup/dictionary":"py_ext"},"wb_py":{"reverse_lookup/dictionary":"py_ext"}},
+         "pinyinLearning":{"schemas":["wb_py","wb_py_t"],"dictionary":"py_ext","codeDictionary":"wb","initialQuality":-2}}
       ]}]}
     ]}
     """
@@ -68,8 +69,9 @@ enum GenFixtures {
         """ + phrase
     }
 
-    static func wubiSchema(id: String) -> String {
-        """
+    static func wubiSchema(id: String, filters: [String] = []) -> String {
+        let filterLines = filters.isEmpty ? "" : "  filters:\n" + filters.map { "    - \($0)\n" }.joined()
+        return """
         schema:
           schema_id: \(id)
           name: 测试五笔 \(id)
@@ -91,7 +93,7 @@ enum GenFixtures {
           translators:
             - table_translator
             - reverse_lookup_translator
-        speller:
+        \(filterLines)speller:
           alphabet: zyxwvutsrqponmlkjihgfedcba
         translator:
           dictionary: wb
@@ -124,6 +126,7 @@ enum GenFixtures {
         "wubi": [
             "wb.schema.yaml": wubiSchema(id: "wb"),
             "wb_py.schema.yaml": wubiSchema(id: "wb_py"),
+            "wb_py_t.schema.yaml": wubiSchema(id: "wb_py_t", filters: ["simplifier@tradition", "uniquifier"]),
             "wpy.schema.yaml": pinyinSchema(id: "wpy", name: "五笔里的拼音", dictionary: "wpy", phraseFile: nil),
             "wb.dict.yaml": dict("wb", ["一\tg\t100", "工\ta\t100"]),
             "wpy.dict.yaml": dict("wpy", ["拼\tpin\t1"]),
