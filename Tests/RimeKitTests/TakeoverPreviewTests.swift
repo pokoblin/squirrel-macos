@@ -67,7 +67,8 @@ import Testing
         #expect(v.replaced.contains("squirrel.custom.yaml"))
         #expect(v.unchanged.contains("wb.dict.yaml"))
         #expect(v.unchanged.contains("wb_user.dict.yaml"))
-        #expect(v.added == [])
+        // 手写的混输配置接管后打开混输记词：多出编码提示脚本，没装的繁体混输也写补丁（和选项补丁一样）
+        #expect(v.added == ["lua/code_hint_wb.lua", "wb_py_t.custom.yaml"])
         #expect(try snapshot(e.rime) == before)   // 预览不改 Rime 目录
         #expect(try FileManager.default.contentsOfDirectory(atPath: e.dir.url.appending(path: "staging").path).isEmpty)
     }
