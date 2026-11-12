@@ -110,6 +110,9 @@ public struct Catalog: Sendable, Equatable, Codable {
                     for schema in choice.patches.keys.sorted() where !p.schemas.contains(where: { $0.id == schema }) {
                         throw CatalogError.patchForUnknownSchema(package: p.id, schema: schema)
                     }
+                    for schema in choice.pinyinLearning?.schemas ?? [] where !p.schemas.contains(where: { $0.id == schema }) {
+                        throw CatalogError.patchForUnknownSchema(package: p.id, schema: schema)
+                    }
                 }
             }
         }

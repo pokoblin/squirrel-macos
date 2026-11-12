@@ -21,6 +21,27 @@ public struct OptionChoice: Sendable, Equatable, Codable {
     public let generatedDicts: [GeneratedDict]
     /// 方案 id → 补丁键 → 值，写进 <方案>.custom.yaml
     public let patches: [String: [String: String]]
+    /// 选了这一项时，哪些混输方案的拼音改成会记词的翻译器（没写就不改）
+    public let pinyinLearning: PinyinLearning?
+}
+
+/// 混输记词：把方案里的反查换成会记住用户凑出的词的拼音翻译器，五笔编码提示由 Lua 过滤器补上
+public struct PinyinLearning: Sendable, Equatable, Codable {
+    /// 要改的混输方案 id
+    public let schemas: [String]
+    /// 拼音词库（也当 prism 名用）
+    public let dictionary: String
+    /// 给拼音单字查五笔编码用的词库
+    public let codeDictionary: String
+    /// 拼音候选的 initial_quality，要让五笔完整编码排在前面、五笔补全排在后面
+    public let initialQuality: Int
+
+    public init(schemas: [String], dictionary: String, codeDictionary: String, initialQuality: Int) {
+        self.schemas = schemas
+        self.dictionary = dictionary
+        self.codeDictionary = codeDictionary
+        self.initialQuality = initialQuality
+    }
 }
 
 /// 只写 import_tables 的总词库，例如 pinyin_ext.dict.yaml

@@ -89,4 +89,27 @@ import Testing
         let catalog = try Catalog.decode(Data(Self.json.utf8))
         #expect(try Catalog.decode(try JSONCoding.encoder.encode(catalog)) == catalog)
     }
+
+    static let learning = #","pinyinLearning":{"schemas":["wb"],"dictionary":"py_ext","codeDictionary":"wb","initialQuality":-2}"#
+    static let extPatches = #""patches":{"wpy":{"translator/dictionary":"py_ext"},"wb":{"reverse_lookup/dictionary":"py_ext"}}"#
+
+    @Test func 带记词设置的选项能读出来() throws {
+        let catalog = try Catalog.decode(Self.data(replacing: Self.extPatches, with: Self.extPatches + Self.learning))
+        let ext = try #require(catalog.package("wubi")?.options.first?.choice("ext"))
+        #expect(ext.pinyinLearning == PinyinLearning(schemas: ["wb"], dictionary: "py_ext", codeDictionary: "wb", initialQuality: -2))
+        #expect(try Catalog.decode(try JSONCoding.encoder.encode(catalog)) == catalog)
+    }
+
+    @Test func 没有记词设置时是nil() throws {
+        let catalog = try Catalog.decode(Data(Self.json.utf8))
+        let option = try #require(catalog.package("wubi")?.options.first)
+        #expect(option.choices.allSatisfy { $0.pinyinLearning == nil })
+    }
+
+    @Test func 记词设置写了不存在的方案时校验失败() {
+        let bad = Self.learning.replacingOccurrences(of: #"["wb"]"#, with: #"["nope"]"#)
+        #expect(throws: CatalogError.patchForUnknownSchema(package: "wubi", schema: "nope")) {
+            try Catalog.decode(Self.data(replacing: Self.extPatches, with: Self.extPatches + bad))
+        }
+    }
 }
