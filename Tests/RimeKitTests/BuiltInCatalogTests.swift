@@ -82,4 +82,13 @@ import Testing
         let problems = CatalogPublishCheck.problems(old: published, new: builtIn).filter { !$0.hasPrefix("serial") }
         #expect(problems.isEmpty, "\(problems)")
     }
+
+    @Test func 雾凇大词库打开混输记词() throws {
+        let wubi = try #require(try Catalog.builtIn().package("wubi86-jidian"))
+        let option = try #require(wubi.options.first { $0.id == "pinyinDictionary" })
+        #expect(option.choice("rime-ice")?.pinyinLearning == PinyinLearning(
+            schemas: ["wubi86_jidian_pinyin", "wubi86_jidian_trad_pinyin"], dictionary: "pinyin_ext",
+            codeDictionary: "wubi86_jidian", initialQuality: -2))
+        #expect(option.choice("builtin")?.pinyinLearning == nil)
+    }
 }

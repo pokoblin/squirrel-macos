@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "serial": 2026110201,
+  "serial": 2026111201,
   "packages": [
     {
       "id": "rime-ice",
@@ -102,6 +102,12 @@
                 "wubi86_jidian_pinyin": { "reverse_lookup/dictionary": "pinyin_ext" },
                 "wubi86_jidian_trad": { "reverse_lookup/dictionary": "pinyin_ext" },
                 "wubi86_jidian_trad_pinyin": { "reverse_lookup/dictionary": "pinyin_ext" }
+              },
+              "pinyinLearning": {
+                "schemas": ["wubi86_jidian_pinyin", "wubi86_jidian_trad_pinyin"],
+                "dictionary": "pinyin_ext",
+                "codeDictionary": "wubi86_jidian",
+                "initialQuality": -2
               }
             }
           ]
