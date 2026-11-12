@@ -28,10 +28,20 @@ enum RimeTools {
         var description: String { "找不到 tools/vm/rime-type-probe，先运行 ./tools/vm/build-probes.sh" }
     }
 
-    /// 编码 → 候选（自动上屏的字放在第一个）
-    static func type(_ dir: URL, schema: String, _ codes: [String]) throws -> [String: [String]] {
+    /// 编码 → 候选和注释（探针的 --comments；自动上屏的字放在第一个，注释是空的）
+    static func typeWithComments(_ dir: URL, schema: String, _ codes: [String]) throws -> [String: [(text: String, comment: String)]] {
+        try type(dir, schema: schema, codes, flags: ["--comments"]).mapValues { list in
+            list.map { item in
+                let parts = item.split(separator: "\u{1F}", maxSplits: 1, omittingEmptySubsequences: false)
+                return (String(parts[0]), parts.count > 1 ? String(parts[1]) : "")
+            }
+        }
+    }
+
+    /// 编码 → 候选（自动上屏的字放在第一个）。编码里的 ^x 是 Control+x
+    static func type(_ dir: URL, schema: String, _ codes: [String], flags: [String] = []) throws -> [String: [String]] {
         guard FileManager.default.isExecutableFile(atPath: probe.path) else { throw ProbeMissing() }
-        let r = try Shell.run(probe.path, [dir.path, schema] + codes)
+        let r = try Shell.run(probe.path, flags + [dir.path, schema] + codes)
         var result: [String: [String]] = [:]
         for line in r.stdout.split(separator: "\n") {
             let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)

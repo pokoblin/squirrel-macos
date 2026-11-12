@@ -124,8 +124,12 @@ static int is_safe_dir(const char *dir) {
 int main(int argc, char **argv) {
   // --guard-only <目录>：只做防误用检查，不加载 librime（给测试用）
   if (argc == 3 && strcmp(argv[1], "--guard-only") == 0) return is_safe_dir(argv[2]) ? 0 : 3;
+  // --comments：候选写成「文字<0x1F>注释」，看反查、编码提示用
+  int comments = argc > 1 && strcmp(argv[1], "--comments") == 0;
+  if (comments) { argv++; argc--; }
   if (argc < 4) {
-    fprintf(stderr, "用法：%s <用户目录> <方案id> <编码>...\n", argv[0]);
+    fprintf(stderr, "用法：%s [--comments] <用户目录> <方案id> <编码>...\n"
+                    "编码里的 ^x 表示按 Control+x（例如 ^k 删掉当前候选记住的词）\n", argv[0]);
     return 2;
   }
   if (!is_safe_dir(argv[1])) {
@@ -160,7 +164,10 @@ int main(int argc, char **argv) {
   }
   for (int i = 3; i < argc; i++) {
     api->clear_composition(session);
-    for (const char *p = argv[i]; *p; p++) api->process_key(session, (unsigned char)*p, 0);
+    for (const char *p = argv[i]; *p; p++) {
+      if (*p == '^' && p[1]) { p++; api->process_key(session, (unsigned char)*p, 1 << 2); }   // Control
+      else api->process_key(session, (unsigned char)*p, 0);
+    }
     printf("%s\t", argv[i]);
     // 先读上屏：四码唯一会自动上屏，这时候选为空不算失败
     RimeCommit commit = {0};
@@ -174,7 +181,11 @@ int main(int argc, char **argv) {
     ctx.data_size = (int)(sizeof(RimeContext) - sizeof(int));
     if (api->get_context(session, &ctx)) {
       for (int k = 0; k < ctx.menu.num_candidates && k < 5; k++)
+      {
+        const char *comment = ctx.menu.candidates[k].comment;
         printf("%s%s", k ? " | " : "", ctx.menu.candidates[k].text);
+        if (comments && comment && *comment) printf("\x1f%s", comment);
+      }
       api->free_context(&ctx);
     }
     printf("\n");

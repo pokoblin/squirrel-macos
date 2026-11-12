@@ -79,3 +79,57 @@ struct OptionDependencyCompileTests {
         #expect(wb["daciku"]?.contains("大词库") == true, "\(wb["daciku"] ?? [])")
     }
 }
+
+@Suite(.enabled(if: RimeTools.installed))
+struct PinyinLearningCompileTests {
+    func make(_ dir: TempDir) throws -> URL {
+        let packages = try GenFixtures.makePackages(in: dir.url.appending(path: "cache"))
+        let personalDir = dir.url.appending(path: "personal", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: personalDir, withIntermediateDirectories: true)
+        let userDict = personalDir.appending(path: "py_user.dict.yaml")
+        try Data(GenFixtures.dict("py_user", ["工\tgong\t1", "鲸\tjing\t10", "京\tjing\t1", "鱼\tyu\t1"]).utf8).write(to: userDict)
+        let out = dir.url.appending(path: "out")
+        // wpy 要在列表里（或被依赖），py_ext 的 prism 才会被编出来
+        var settings = Settings(schemas: ["wb", "wb_py", "wpy"])
+        // 夹具方案没导入鼠须管默认的按键绑定；真实的极点五笔有 Control+k → Shift+Delete
+        settings.preservedPatches["wb_py"] = [PreservedPatch(
+            key: "key_binder/bindings", yaml: "- {accept: \"Control+k\", send: \"Shift+Delete\", when: composing}\n")]
+        _ = try ConfigGenerator().generate(
+            try GenFixtures.input(settings, packages: packages,
+                                  personal: PersonalContent(dicts: [userDict], phrases: [])), into: out)
+        let build = try RimeTools.build(out)
+        #expect(build.status == 0, "\(build.stderr)")
+        return out
+    }
+
+    @Test func 混输记词能编译能用() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let out = try make(dir)
+        let compiled = try GenFixtures.read(out, "build/wb_py.schema.yaml")
+        #expect(compiled.contains("script_translator@mixed_pinyin"))
+        #expect(compiled.contains("lua_filter@*code_hint_wb"))
+
+        let wb = try RimeTools.type(out, schema: "wb", ["g", "a"])
+        let mixed = try RimeTools.type(out, schema: "wb_py", ["g", "a", "jingyu"])
+        #expect(mixed["g"]?.first == wb["g"]?.first)
+        #expect(mixed["a"]?.first == wb["a"]?.first)
+        #expect(mixed["jingyu"]?.first == "鲸鱼", "\(mixed["jingyu"] ?? [])")   // 自动连词
+
+        let hints = try RimeTools.typeWithComments(out, schema: "wb_py", ["gong", "a"])
+        #expect(hints["gong"]?.first { $0.text == "工" }?.comment == "a", "\(hints["gong"] ?? [])")
+        #expect(hints["a"]?.first { $0.text == "工" }?.comment == "", "\(hints["a"] ?? [])")
+    }
+
+    @Test func 凑出的词会记住_ctrl_k能删() throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let out = try make(dir)
+        // jingyu 的候选是「鲸鱼 鲸 京」：3 选「京」，再 1 选「鱼」，凑出和自动连词不一样的「京鱼」
+        let typed = try RimeTools.type(out, schema: "wb_py", ["jingyu31"])
+        #expect(typed["jingyu31"]?.first == "京鱼", "\(typed)")
+        // 每次都是新进程：记住的词写进了用户词库
+        #expect(try RimeTools.type(out, schema: "wb_py", ["jingyu"])["jingyu"]?.first == "京鱼")
+        _ = try RimeTools.type(out, schema: "wb_py", ["jingyu^k"])
+        let after = try RimeTools.type(out, schema: "wb_py", ["jingyu"])["jingyu"] ?? []
+        #expect(after.first == "鲸鱼", "\(after)")
+    }
+}
