@@ -40,7 +40,8 @@ struct OnlineTakeoverTests {
                                                staging: dir.url.appending(path: "staging", directoryHint: .isDirectory))
         #expect(preview.kept == ["default.custom.yaml.bak", "weasel.custom.yaml"])
         // 生成规则会给每个启用的、没自带短语的方案注入短语翻译器（设计 5.1 第 7 条），作者原来只给 5 个方案加了
-        #expect(preview.added == ["numbers.custom.yaml"])
+        // 雾凇大词库打开混输记词，多出五笔编码提示脚本
+        #expect(preview.added == ["lua/code_hint_wubi86_jidian.lua", "numbers.custom.yaml"])
 
         let out = dir.url.appending(path: "out", directoryHint: .isDirectory)
         _ = try ConfigGenerator().generate(p.generationInput(catalog: catalog, packages: packages, textReplacement: tr), into: out)
