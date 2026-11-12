@@ -57,3 +57,133 @@ struct OnlineGenerateTests {
         #expect(r["tstx"]?.first == "测试短语")
     }
 }
+
+/// 混输记词用真实的极点五笔、雾凇检查（设计：ai_docs/specs/2026-11-12-mixed-pinyin-learning-design.md）。
+/// 对照组是把清单里的 pinyinLearning 去掉后生成的配置，也就是改之前的样子。
+/// RIMEKIT_ONLINE=1 swift test --filter OnlinePinyinLearningTests
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["RIMEKIT_ONLINE"] == "1" && RimeTools.installed))
+struct OnlinePinyinLearningTests {
+    static func catalogWithoutLearning() throws -> Catalog {
+        let url = try #require(Bundle.module.url(forResource: "catalog", withExtension: "json", subdirectory: nil)
+            ?? Bundle.allBundles.lazy.compactMap { $0.url(forResource: "catalog", withExtension: "json") }.first)
+        var root = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        var packages = try #require(root["packages"] as? [[String: Any]])
+        for i in packages.indices {
+            guard var options = packages[i]["options"] as? [[String: Any]] else { continue }
+            for j in options.indices {
+                guard var choices = options[j]["choices"] as? [[String: Any]] else { continue }
+                for k in choices.indices { choices[k]["pinyinLearning"] = nil }
+                options[j]["choices"] = choices
+            }
+            packages[i]["options"] = options
+        }
+        root["packages"] = packages
+        return try Catalog.decode(JSONSerialization.data(withJSONObject: root))
+    }
+
+    /// 生成并编译；baseline 为 true 时用去掉记词的清单
+    func make(_ dir: TempDir, _ settings: Settings, baseline: Bool, packages: [String: CachedPackage]) throws -> URL {
+        let catalog = baseline ? try Self.catalogWithoutLearning() : try Catalog.builtIn()
+        let out = dir.url.appending(path: baseline ? "baseline" : "learning")
+        let result = try ConfigGenerator().generate(
+            GenerationInput(settings: settings, catalog: catalog, packages: packages, personal: .empty, textReplacementPhrases: []),
+            into: out)
+        #expect(result.warnings.isEmpty, "\(result.warnings)")
+        #expect(try RimeTools.build(out).status == 0)
+        return out
+    }
+
+    func fetch(_ dir: TempDir, _ settings: Settings) async throws -> [String: CachedPackage] {
+        let store = PackageStore(paths: Fixtures.paths(dir))
+        var packages: [String: CachedPackage] = [:]
+        for spec in try settings.requiredPackages(try Catalog.builtIn()) { packages[spec.id] = try await store.fetch(spec) }
+        return packages
+    }
+
+    /// 五笔词库里的编码：全部一、二码，加上三、四码里每 step 个取 1 个
+    func sampleCodes(_ out: URL, step: Int) throws -> [String] {
+        let text = try GenFixtures.read(out, "wubi86_jidian.dict.yaml")
+        var seen = Set<String>()
+        var codes: [String] = []
+        for line in text.split(separator: "\n") {
+            let cols = line.split(separator: "\t")
+            guard cols.count >= 2 else { continue }
+            let code = String(cols[1])
+            guard (1...4).contains(code.count), code.allSatisfy({ ("a"..."y").contains($0) }), seen.insert(code).inserted else { continue }
+            codes.append(code)
+        }
+        codes.sort()
+        let short = codes.filter { $0.count <= 2 }
+        let long = codes.filter { $0.count > 2 }.enumerated().filter { ($0.offset + 1) % step == 0 }.map(\.element)
+        return short + long
+    }
+
+    /// Process 一次最多 4096 个参数，分批跑
+    func typeInBatches(_ dir: URL, schema: String, _ codes: [String]) throws -> [String: [String]] {
+        var result: [String: [String]] = [:]
+        for start in stride(from: 0, to: codes.count, by: 2000) {
+            let batch = Array(codes[start..<min(start + 2000, codes.count)])
+            result.merge(try RimeTools.type(dir, schema: schema, batch)) { _, new in new }
+        }
+        return result
+    }
+
+    func checkUnchanged(_ schema: String, step: Int, baseline: URL, learning: URL) throws {
+        let codes = try sampleCodes(baseline, step: step)
+        #expect(codes.count > 500)
+        let before = try typeInBatches(baseline, schema: schema, codes)
+        let after = try typeInBatches(learning, schema: schema, codes)
+        var changed: [String] = []
+        for code in codes {
+            guard let first = before[code]?.first else { continue }
+            if after[code]?.first != first { changed.append("\(code): \(first) → \(after[code]?.first ?? "（无）")") }
+        }
+        #expect(changed.isEmpty, "\(schema) 有 \(changed.count) 个五笔编码首选变了：\(changed.prefix(20))")
+
+        let common = ["shi", "a", "xian"]
+        let b = try RimeTools.type(baseline, schema: schema, common)
+        let l = try RimeTools.type(learning, schema: schema, common)
+        for code in common {
+            #expect(Array((b[code] ?? []).prefix(5)) == Array((l[code] ?? []).prefix(5)), "\(schema) \(code)")
+        }
+        let bc = try RimeTools.typeWithComments(baseline, schema: schema, ["xian"])["xian"] ?? []
+        let lc = try RimeTools.typeWithComments(learning, schema: schema, ["xian"])["xian"] ?? []
+        #expect(bc.map(\.comment) == lc.map(\.comment), "\(schema) xian 的编码提示：\(bc) vs \(lc)")
+        #expect(lc.first?.comment.isEmpty == false)
+    }
+
+    @Test func 混输记词不改五笔首选和常见拼音() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let settings = Settings.starter(.wubiPinyin)
+        let packages = try await fetch(dir, settings)
+        let baseline = try make(dir, settings, baseline: true, packages: packages)
+        let learning = try make(dir, settings, baseline: false, packages: packages)
+        try checkUnchanged("wubi86_jidian_pinyin", step: 8, baseline: baseline, learning: learning)
+        try checkUnchanged("wubi86_jidian_trad_pinyin", step: 32, baseline: baseline, learning: learning)
+    }
+
+    @Test func 混输能连词能记词() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let settings = Settings.starter(.wubiPinyin)
+        let out = try make(dir, settings, baseline: false, packages: try await fetch(dir, settings))
+        let schema = "wubi86_jidian_pinyin"
+        let r = try RimeTools.type(out, schema: schema, ["niuleitiao", "huangrenxun"])
+        #expect(r["niuleitiao"]?.first == "牛肋条")
+        #expect(r["huangrenxun"]?.first == "黄仁勋")
+        // guoyixun 的候选是「过依循 过亿 过意 国医 过」：4 选「国医」，1 选「寻」
+        #expect(try RimeTools.type(out, schema: schema, ["guoyixun41"])["guoyixun41"]?.first == "国医寻")
+        #expect(try RimeTools.type(out, schema: schema, ["guoyixun"])["guoyixun"]?.first == "国医寻")
+        _ = try RimeTools.type(out, schema: schema, ["guoyixun^k"])
+        let after = try RimeTools.type(out, schema: schema, ["guoyixun"])["guoyixun"] ?? []
+        #expect(after.first != "国医寻", "\(after)")
+    }
+
+    @Test func 只启用混输时也能记词() async throws {
+        let dir = try TempDir(); defer { dir.remove() }
+        let settings = Settings(schemas: ["wubi86_jidian_pinyin"])
+        let out = try make(dir, settings, baseline: false, packages: try await fetch(dir, settings))
+        let r = try RimeTools.type(out, schema: "wubi86_jidian_pinyin", ["niuleitiao", "hulue"])
+        #expect(r["niuleitiao"]?.first == "牛肋条")
+        #expect(r["hulue"]?.first == "忽略")
+    }
+}
