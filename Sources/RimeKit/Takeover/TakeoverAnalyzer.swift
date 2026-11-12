@@ -62,6 +62,8 @@ final class TakeoverAnalysis {
     var existing: [String: Patch] = [:]
     /// 配置名 → 不接管时生成器会写的默认补丁：上游自带的 + 所选选项的
     var expected: [String: Patch] = [:]
+    /// expected 里属于混输记词的键（方案 id → 键）：不是上游默认补丁，旧配置没有时不提示
+    var learningKeys: [String: [String]] = [:]
     var chosen: [OptionChoice] = []
     var schemes = Schemes()
     var notes: [String] = []
@@ -185,6 +187,16 @@ final class TakeoverAnalysis {
                 for (schema, values) in choice.patches.sorted(by: { $0.key < $1.key }) {
                     for (key, value) in values.sorted(by: { $0.key < $1.key }) {
                         expected[schema, default: Patch()].set(key, YAMLNode.text(value))
+                    }
+                }
+                // 混输记词的补丁也是生成器按这个选择写的（和生成时一样按上游方案算）
+                for schema in choice.pinyinLearning?.schemas ?? [] {
+                    guard let learning = choice.pinyinLearning,
+                          let root = try? upstreamYAML("\(schema).schema.yaml"),
+                          let entries = PinyinLearningPatch.entries(learning, upstreamSchema: root) else { continue }
+                    for entry in entries {
+                        expected[schema, default: Patch()].set(entry.key, entry.value)
+                        learningKeys[schema, default: []].append(entry.key)
                     }
                 }
             }
@@ -367,7 +379,7 @@ final class TakeoverAnalysis {
         let base = expected[name] ?? Patch()
         let baseLeaves = PatchLeaves(base)
         let managed = managedPaths(name)
-        var entries = mine.entries.filter { !isPhraseInjection($0, in: mine) }
+        var entries = mine.entries.filter { !isPhraseInjection($0, in: mine) && !PinyinLearningPatch.isGenerated($0, expected: base) }
         // 值是空的项（「key:」）保存后读回来就没了：不保留，告诉用户
         for entry in entries where entry.value.null != nil {
             notes.append("\(name).custom.yaml 里 \(entry.key) 的值是空的，接管后不保留")
@@ -403,7 +415,10 @@ final class TakeoverAnalysis {
         }
 
         let all = PatchLeaves(mine)
-        let missing = baseLeaves.paths.filter { all[$0] == nil && !managed.contains($0) }
+        let learning = learningKeys[name] ?? []
+        let missing = baseLeaves.paths.filter { path in
+            all[path] == nil && !managed.contains(path) && !learning.contains { PatchLeaves.overlaps($0, path) }
+        }
         if !missing.isEmpty {
             notes.append("\(name).custom.yaml 里没有上游默认补丁的这些项，接管后会按上游默认加上：\(missing.joined(separator: "、"))")
         }

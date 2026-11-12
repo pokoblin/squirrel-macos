@@ -238,4 +238,27 @@ import Testing
         let p = try F.analyze(e)
         #expect(p.notes.contains { $0.contains("default.custom.yaml") && $0.contains("符号链接") })
     }
+
+    func generated(_ e: F.Env, phrases: [Phrase]) throws {
+        _ = try ConfigGenerator().generate(
+            GenFixtures.input(Settings(schemas: ["wb_py", "wb"]), packages: e.packages,
+                              personal: PersonalContent(dicts: [], phrases: phrases)), into: e.rime)
+    }
+
+    @Test func 接管本应用生成的记词配置时不保留补丁() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try generated(e, phrases: [])
+        let p = try F.analyze(e, textReplacement: [])
+        #expect(p.settings.options == ["wubi": ["pinyinDictionary": "ext"]])
+        #expect(p.settings.preservedPatches["wb_py"] ?? [] == [])
+        #expect(!p.notes.contains { $0.contains("wb_py.custom.yaml") }, "\(p.notes)")
+    }
+
+    @Test func 有手动短语时接管也不保留记词补丁() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try generated(e, phrases: [F.manual])
+        let p = try F.analyze(e, textReplacement: [])
+        #expect(p.settings.preservedPatches["wb_py"] ?? [] == [], "\(p.settings.preservedPatches)")
+        #expect(p.manualPhrases == [F.manual])
+    }
 }
