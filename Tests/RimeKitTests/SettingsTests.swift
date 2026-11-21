@@ -78,4 +78,28 @@ import Testing
         try Data(#"{"formatVersion":9}"#.utf8).write(to: paths.settingsFile)
         #expect(throws: SettingsError.unsupportedFormat(9)) { try SettingsStore(paths: paths).load() }
     }
+
+    @Test func 旧设置文件没有keys也能读() throws {
+        let json = #"{"formatVersion":1,"schemas":["py"],"options":{},"appearance":{},"textReplacement":{"sync":false},"preservedPatches":{}}"#
+        let s = try JSONDecoder().decode(Settings.self, from: Data(json.utf8))
+        #expect(s.keys == KeySettings())
+        #expect(s == Settings(schemas: ["py"]))
+    }
+
+    @Test func keys能存能读() throws {
+        var s = Settings(schemas: ["py"])
+        s.keys.asciiSwitchKey = .leftControl
+        let back = try JSONDecoder().decode(Settings.self, from: try JSONEncoder().encode(s))
+        #expect(back == s)
+    }
+
+    @Test func 按切换的键反推选项() {
+        #expect(AsciiSwitchKey(switching: ["Shift_L", "Shift_R"]) == .bothShift)
+        #expect(AsciiSwitchKey(switching: ["Shift_L"]) == .leftShift)
+        #expect(AsciiSwitchKey(switching: ["Shift_R"]) == .rightShift)
+        #expect(AsciiSwitchKey(switching: ["Control_L"]) == .leftControl)
+        #expect(AsciiSwitchKey(switching: []) == AsciiSwitchKey.none)
+        #expect(AsciiSwitchKey(switching: ["Shift_L", "Control_R"]) == nil)
+        for key in AsciiSwitchKey.allCases { #expect(AsciiSwitchKey(switching: Set(key.switching)) == key) }
+    }
 }

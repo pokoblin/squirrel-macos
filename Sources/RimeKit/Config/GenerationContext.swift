@@ -121,6 +121,37 @@ final class GenerationContext {
         }
     }
 
+    // MARK: 单按切换中英文的按键
+
+    static let switchKeyPath = "ascii_composer/switch_key"
+    static let noSwitch = "noop"
+
+    /// 放在保留补丁之后：设置要盖过保留补丁里同一个键。
+    /// 要切换的键沿用上游原来的动作（不是 noop 时），没有就用 commit_code
+    func applyKeys() throws {
+        guard let choice = input.settings.keys.asciiSwitchKey else { return }
+        var p = patches["default"] ?? Patch()
+        let leaves = PatchLeaves(p)
+        let file = try readYAML("default.yaml", label: "default.yaml")?["ascii_composer"]?["switch_key"]
+        for key in AsciiSwitchKey.keys {
+            let path = "\(Self.switchKeyPath)/\(key)"
+            var value = Self.noSwitch
+            if choice.switching.contains(key) {
+                let before = (leaves[path] ?? file?[key])?.string
+                value = before.flatMap { $0 == Self.noSwitch || $0.isEmpty ? nil : $0 } ?? "commit_code"
+            }
+            p.set(path, YAMLNode.text(value))
+        }
+        patches["default"] = p
+        // librime 先看方案自己的 switch_key，有就整个用方案的
+        for schema in input.settings.schemas {
+            let root = try readYAML("\(schema).schema.yaml", label: "\(schema).schema.yaml")
+            let own = root?["ascii_composer"]?["switch_key"] != nil
+                || (patches[schema].map { PatchLeaves($0).paths.contains { PatchLeaves.overlaps($0, Self.switchKeyPath) } } ?? false)
+            if own { warnings.append("\(schema) 方案自己设置了切换中英文的按键，这个方案里不按「按键」页的设置来") }
+        }
+    }
+
     // MARK: 规则 4：方案列表、每页候选数
 
     func applySchemaList() {

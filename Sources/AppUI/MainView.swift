@@ -2,7 +2,7 @@ import AppCore
 import RimeKit
 import SwiftUI
 
-/// 主窗口：左边栏 7 页；底部是「应用改动」栏；消息和外部改动用弹窗
+/// 主窗口：左边栏各页；底部是「应用改动」栏；消息和外部改动用弹窗
 struct MainView: View {
     @Bindable var model: MainModel
 
@@ -52,6 +52,7 @@ struct MainView: View {
         case .preview: PreviewPage(model: model)
         case .wubiDict: WubiDictPage(model: model)
         case .appearance: AppearancePage(model: model)
+        case .keys: KeysPage(model: model)
         case .textReplacement: TextReplacementPage(model: model)
         case .transfer: TransferPage(model: model)
         case .backups: BackupsPage(model: model)

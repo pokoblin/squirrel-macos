@@ -67,6 +67,8 @@ final class TakeoverAnalysis {
     var chosen: [OptionChoice] = []
     var schemes = Schemes()
     var notes: [String] = []
+    /// 认出了切换中英文的按键：这几个键归应用管，不再保留
+    var keysManaged = false
 
     init(rime: URL, catalog: Catalog, survey: TakeoverSurvey, packages: [String: CachedPackage], textReplacement: [Phrase]) throws {
         self.rime = rime.resolvingSymlinksInPath()
@@ -86,6 +88,7 @@ final class TakeoverAnalysis {
         let personalDicts = detectPersonalDicts()
         try checkGeneratedDicts(personal: personalDicts)
         let appearance = try detectAppearance()
+        let keys = try detectKeys()
         var preserved: [String: [PreservedPatch]] = [:]
         for name in existing.keys.sorted() {
             let items = try preservedItems(name)
@@ -96,7 +99,8 @@ final class TakeoverAnalysis {
             notes.append("方案列表里的 \(survey.unknownSchemas.joined(separator: "、")) 不在方案清单里，接管后不会出现在方案列表里（文件原样保留）")
         }
         let settings = Settings(schemas: survey.schemas, options: options, appearance: appearance,
-                                textReplacement: TextReplacementSettings(sync: matches > 0), preservedPatches: preserved)
+                                textReplacement: TextReplacementSettings(sync: matches > 0), preservedPatches: preserved,
+                                keys: keys)
         try settings.validate(catalog)
         return TakeoverProposal(settings: settings, personalDicts: personalDicts, manualPhrases: manual,
                                 textReplacementMatches: matches, notes: notes)
@@ -319,6 +323,32 @@ final class TakeoverAnalysis {
         return appearance
     }
 
+    // MARK: 单按切换中英文的按键
+
+    /// default 补丁里这四个键和默认的不一样、又正好对得上某个选项时，认成那个选项；对不上的原样保留
+    func detectKeys() throws -> KeySettings {
+        let mine = PatchLeaves(existing["default"] ?? Patch())
+        let base = PatchLeaves(expected["default"] ?? Patch())
+        let file = try upstreamYAML("default.yaml")?["ascii_composer"]?["switch_key"]
+        func path(_ key: String) -> String { "\(GenerationContext.switchKeyPath)/\(key)" }
+        func before(_ key: String) -> String? { (base[path(key)] ?? file?[key])?.string }
+        func switches(_ value: String?) -> Bool { value.map { !$0.isEmpty && $0 != GenerationContext.noSwitch } ?? false }
+        var now: [String: String?] = [:]
+        for key in AsciiSwitchKey.keys { now[key] = mine[path(key)]?.string ?? before(key) }
+        guard AsciiSwitchKey.keys.contains(where: { now[$0]! != before($0) }),
+              let choice = AsciiSwitchKey(switching: Set(AsciiSwitchKey.keys.filter { switches(now[$0]!) })) else {
+            return KeySettings()
+        }
+        keysManaged = true
+        for key in choice.switching {
+            let generated = switches(before(key)) ? before(key)! : "commit_code"
+            if let mineValue = now[key]!, mineValue != generated {
+                notes.append("接管后单按 \(key) 切换中英文时，动作从 \(mineValue) 改成 \(generated)")
+            }
+        }
+        return KeySettings(asciiSwitchKey: choice)
+    }
+
     /// 写进设置；值认不出或超出范围时返回 false
     func set(_ appearance: inout Appearance, _ key: String, _ value: Node) -> Bool {
         let text = value.string ?? ""
@@ -347,6 +377,7 @@ final class TakeoverAnalysis {
         switch name {
         case "default":
             return ["schema_list", "schema_list/+", "menu/page_size"]
+                + (keysManaged ? AsciiSwitchKey.keys.map { "\(GenerationContext.switchKeyPath)/\($0)" } : [])
         case "squirrel":
             var paths = ["style/color_scheme", "style/color_scheme_dark"] + Self.appearanceKeys.map { "style/\($0)" }
             for scheme in [schemes.light, schemes.dark].compactMap({ $0 }) {

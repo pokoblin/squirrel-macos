@@ -6,7 +6,7 @@ import RimeKit
 @MainActor @Observable
 public final class MainModel {
     public enum Page: String, CaseIterable, Identifiable, Sendable {
-        case schemas, preview, wubiDict, appearance, textReplacement, transfer, backups, diagnostics
+        case schemas, preview, wubiDict, appearance, keys, textReplacement, transfer, backups, diagnostics
 
         public var id: String { rawValue }
 
@@ -16,6 +16,7 @@ public final class MainModel {
             case .preview: return "试打和置顶"
             case .wubiDict: return "五笔词库"
             case .appearance: return "外观"
+            case .keys: return "按键"
             case .textReplacement: return "文本替换"
             case .transfer: return "导入导出"
             case .backups: return "备份"
@@ -29,6 +30,7 @@ public final class MainModel {
             case .preview: return "keyboard"
             case .wubiDict: return "character.book.closed"
             case .appearance: return "textformat.size"
+            case .keys: return "shift"
             case .textReplacement: return "text.badge.checkmark"
             case .transfer: return "arrow.up.arrow.down.square"
             case .backups: return "clock.arrow.circlepath"

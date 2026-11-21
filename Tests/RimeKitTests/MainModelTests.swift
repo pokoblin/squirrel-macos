@@ -15,6 +15,18 @@ import Testing
         #expect(model.notice?.lines == ["设置好了"])
     }
 
+    @Test func 按键页在外观后面_改切换键算有改动() throws {
+        let pages = MainModel.Page.allCases
+        #expect(pages[pages.firstIndex(of: .appearance)! + 1] == .keys)
+        #expect(MainModel.Page.keys.title == "按键")
+        let m = try T.machine(); defer { m.dir.remove() }
+        let model = try MainModel(env: m.environment())
+        model.draft.keys.asciiSwitchKey = .leftControl
+        #expect(model.isDirty)
+        model.revert()
+        #expect(model.draft.keys == KeySettings())
+    }
+
     @Test func 没有设置时打不开() throws {
         let m = try T.machine(withSettings: false); defer { m.dir.remove() }
         #expect(throws: TransferError.noSettings) { try MainModel(env: m.environment()) }

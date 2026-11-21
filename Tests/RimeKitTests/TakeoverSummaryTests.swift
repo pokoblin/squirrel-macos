@@ -16,6 +16,7 @@ import Testing
         #expect(s.schemas == ["五笔拼音（wb_py）", "五笔（wb）"])
         #expect(s.options == ["测试五笔 · 拼音词库：大词库"])
         #expect(s.appearance == ["候选字字号 24", "序号字号 20"])
+        #expect(s.keys == [])
         #expect(s.preservedPatches == ["default.custom.yaml：key_binder/bindings"])
         #expect(s.personalDicts == ["py_user.dict.yaml", "wb_user.dict.yaml"])
         #expect(s.manualPhrases == 1)
@@ -37,5 +38,16 @@ import Testing
         let s = TakeoverSummary.make(p, preview: preview, catalog: e.catalog, blockedReason: "读不了文本替换")
         #expect(!s.canConfirm)
         #expect(s.blockedReason == "读不了文本替换")
+    }
+
+    @Test func 摘要里有单按切换中英文() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try F.wubiSample(e.packages, into: e.rime)
+        var p = try F.analyze(e)
+        p.settings.keys.asciiSwitchKey = .leftShift
+        let preview = try TakeoverPreview.make(p, rime: e.rime, catalog: e.catalog, packages: e.packages,
+                                               textReplacement: [F.fromTR], staging: e.dir.url.appending(path: "staging"))
+        let s = TakeoverSummary.make(p, preview: preview, catalog: e.catalog, blockedReason: nil)
+        #expect(s.keys == ["单按切换中英文：只用左 Shift"])
     }
 }

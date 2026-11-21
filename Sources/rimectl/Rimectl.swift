@@ -52,7 +52,9 @@ struct Rimectl {
       rimectl settings show                                    打印当前设置
       rimectl settings set <键> <值>                            改一项设置（键：schemas、font-point、label-font-point、
                                                                comment-font-point、page-size、layout、orientation、
-                                                               color-scheme、color-scheme-dark、option；值写 - 表示清空）
+                                                               color-scheme、color-scheme-dark、option、
+                                                               switch-key（bothShift、leftShift、rightShift、leftControl、none）；
+                                                               值写 - 表示清空）
       rimectl generate --out 目录 [--cache-only]                按设置生成一份 Rime 配置（只往空目录写）
       rimectl apply [--cache-only] [--overwrite] [--adopt-personal]   把设置应用到 Rime 目录并通知鼠须管部署
       rimectl takeover [--confirm] [--force] [--cache-only]    认出已有的 Rime 配置并预览；加 --confirm 才真的接管（先完整备份）
@@ -799,6 +801,11 @@ struct Rimectl {
             s.appearance.colorScheme = clear ? nil : value
         case "color-scheme-dark":
             s.appearance.colorSchemeDark = clear ? nil : value
+        case "switch-key":
+            if clear { s.keys.asciiSwitchKey = nil } else {
+                guard let v = AsciiSwitchKey(rawValue: value) else { return false }
+                s.keys.asciiSwitchKey = v
+            }
         case "option":
             let parts = value.split(separator: "=", maxSplits: 1).map(String.init)
             let head = parts.first?.split(separator: ".", maxSplits: 1).map(String.init) ?? []

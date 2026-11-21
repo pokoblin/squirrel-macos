@@ -80,6 +80,7 @@ public struct ConfigGenerator: Sendable {
         try context.applyPhrases()
         try context.applyPreservedPatches()
         try context.applyUniquifier()
+        try context.applyKeys()
         context.applySchemaList()
         try context.applyAppearance()
         try context.writePatches()

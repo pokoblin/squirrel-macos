@@ -17,13 +17,15 @@ public struct Settings: Sendable, Equatable, Codable {
     public var textReplacement: TextReplacementSettings
     /// 接管时认不出的补丁项，按文件名（不带 .custom.yaml）存，生成时原样写回
     public var preservedPatches: [String: [PreservedPatch]]
+    public var keys: KeySettings
 
     public init(
         schemas: [String],
         options: [String: [String: String]] = [:],
         appearance: Appearance = Appearance(),
         textReplacement: TextReplacementSettings = TextReplacementSettings(),
-        preservedPatches: [String: [PreservedPatch]] = [:]
+        preservedPatches: [String: [PreservedPatch]] = [:],
+        keys: KeySettings = KeySettings()
     ) {
         self.formatVersion = Self.currentFormatVersion
         self.schemas = schemas
@@ -31,6 +33,23 @@ public struct Settings: Sendable, Equatable, Codable {
         self.appearance = appearance
         self.textReplacement = textReplacement
         self.preservedPatches = preservedPatches
+        self.keys = keys
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case formatVersion, schemas, options, appearance, textReplacement, preservedPatches, keys
+    }
+
+    /// 旧的设置文件里没有 keys：当成空的
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try c.decode(Int.self, forKey: .formatVersion)
+        schemas = try c.decode([String].self, forKey: .schemas)
+        options = try c.decode([String: [String: String]].self, forKey: .options)
+        appearance = try c.decode(Appearance.self, forKey: .appearance)
+        textReplacement = try c.decode(TextReplacementSettings.self, forKey: .textReplacement)
+        preservedPatches = try c.decode([String: [PreservedPatch]].self, forKey: .preservedPatches)
+        keys = try c.decodeIfPresent(KeySettings.self, forKey: .keys) ?? KeySettings()
     }
 
     public func validate(_ catalog: Catalog) throws {
@@ -127,6 +146,50 @@ public struct Appearance: Sendable, Equatable, Codable {
         self.candidateListLayout = candidateListLayout
         self.textOrientation = textOrientation
         self.pageSize = pageSize
+    }
+}
+
+public struct KeySettings: Sendable, Equatable, Codable {
+    /// 单按哪个键切换中英文；nil 是方案默认
+    public var asciiSwitchKey: AsciiSwitchKey?
+
+    public init(asciiSwitchKey: AsciiSwitchKey? = nil) {
+        self.asciiSwitchKey = asciiSwitchKey
+    }
+}
+
+/// 单按切换中英文的按键（Caps Lock 不归这里管，照方案默认）
+public enum AsciiSwitchKey: String, CaseIterable, Sendable, Equatable, Codable {
+    case bothShift, leftShift, rightShift, leftControl, none
+
+    /// 应用管的四个键（ascii_composer/switch_key 下面的键名）
+    public static let keys = ["Shift_L", "Shift_R", "Control_L", "Control_R"]
+
+    public var displayName: String {
+        switch self {
+        case .bothShift: return "左右 Shift"
+        case .leftShift: return "只用左 Shift"
+        case .rightShift: return "只用右 Shift"
+        case .leftControl: return "左 Control"
+        case .none: return "不用 Shift（只用 Caps Lock）"
+        }
+    }
+
+    /// 要切换的键，其余三个写 noop
+    public var switching: [String] {
+        switch self {
+        case .bothShift: return ["Shift_L", "Shift_R"]
+        case .leftShift: return ["Shift_L"]
+        case .rightShift: return ["Shift_R"]
+        case .leftControl: return ["Control_L"]
+        case .none: return []
+        }
+    }
+
+    /// 从「哪些键切换」反推选项；对不上任何一项时是 nil
+    public init?(switching: Set<String>) {
+        guard let match = Self.allCases.first(where: { Set($0.switching) == switching }) else { return nil }
+        self = match
     }
 }
 

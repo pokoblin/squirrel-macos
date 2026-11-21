@@ -299,4 +299,54 @@ import Testing
         #expect(p.settings.preservedPatches["wb_py"] ?? [] == [], "\(p.settings.preservedPatches)")
         #expect(p.manualPhrases == [F.manual])
     }
+
+    // MARK: 单按切换中英文的按键
+
+    func putDefault(_ e: F.Env, _ extraLines: String, upstream: Bool = true) throws {
+        try F.install(["wubi"], from: e.packages, into: e.rime)
+        let base = upstream ? F.upstream("wubi", "default.custom.yaml") : "patch:\n  schema_list:\n    - schema: wb\n"
+        try F.put(base.trimmingCharacters(in: .newlines) + "\n" + extraLines, "default.custom.yaml", in: e.rime)
+    }
+
+    @Test func 改过的切换键认成选项_不再保留() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try putDefault(e, "  ascii_composer/switch_key/Shift_L: noop\n  ascii_composer/switch_key/Shift_R: noop\n")
+        let p = try F.analyze(e)
+        #expect(p.settings.keys == KeySettings(asciiSwitchKey: AsciiSwitchKey.none))
+        #expect(!(p.settings.preservedPatches["default"] ?? []).contains { $0.key.hasPrefix("ascii_composer") })
+    }
+
+    @Test func 整段写法也认得出() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try putDefault(e, "  ascii_composer:\n    good_old_caps_lock: true\n    switch_key:\n      Shift_L: noop\n      Shift_R: commit_code\n")
+        let p = try F.analyze(e)
+        #expect(p.settings.keys == KeySettings(asciiSwitchKey: .rightShift))
+        // 不归应用管的 good_old_caps_lock 原样保留
+        #expect((p.settings.preservedPatches["default"] ?? []).map(\.key).contains("ascii_composer/good_old_caps_lock"))
+        #expect(!(p.settings.preservedPatches["default"] ?? []).contains { $0.key.hasPrefix("ascii_composer/switch_key") })
+    }
+
+    @Test func 和默认一样时不写设置() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try putDefault(e, "")
+        #expect(try F.analyze(e).settings.keys == KeySettings())
+    }
+
+    @Test func 对不上的组合原样保留() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try putDefault(e, "  ascii_composer/switch_key/Shift_L: commit_code\n  ascii_composer/switch_key/Shift_R: noop\n  ascii_composer/switch_key/Control_R: commit_code\n")
+        let p = try F.analyze(e)
+        #expect(p.settings.keys == KeySettings())
+        let kept = (p.settings.preservedPatches["default"] ?? []).map(\.key)
+        #expect(kept.contains("ascii_composer/switch_key/Control_R"))
+        #expect(kept.contains("ascii_composer/switch_key/Shift_L"))
+    }
+
+    @Test func 动作和生成的不一样时提示() throws {
+        let e = try F.env(); defer { e.dir.remove() }
+        try putDefault(e, "  ascii_composer/switch_key/Shift_L: inline_ascii\n  ascii_composer/switch_key/Shift_R: noop\n")
+        let p = try F.analyze(e)
+        #expect(p.settings.keys == KeySettings(asciiSwitchKey: .leftShift))
+        #expect(p.notes.contains { $0.contains("Shift_L") && $0.contains("inline_ascii") && $0.contains("commit_code") }, "\(p.notes)")
+    }
 }

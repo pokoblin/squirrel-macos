@@ -6,6 +6,7 @@ public struct TakeoverSummary: Sendable, Equatable {
     public var schemas: [String]
     public var options: [String]
     public var appearance: [String]
+    public var keys: [String]
     /// 「文件：键」
     public var preservedPatches: [String]
     public var personalDicts: [String]
@@ -45,11 +46,12 @@ public struct TakeoverSummary: Sendable, Equatable {
         if let v = a.candidateListLayout { look.append(v == .linear ? "候选横排" : "候选竖排") }
         if let v = a.textOrientation { look.append(v == .horizontal ? "文字横排" : "文字竖排") }
         if let v = a.pageSize { look.append("每页 \(v) 个候选") }
+        let keys = s.keys.asciiSwitchKey.map { ["单按切换中英文：\($0.displayName)"] } ?? []
         let preserved = s.preservedPatches.sorted { $0.key < $1.key }.flatMap { name, items in
             items.map { "\(name).custom.yaml：\($0.key)" }
         }
         return TakeoverSummary(
-            schemas: s.schemas.map(schemaName), options: options, appearance: look, preservedPatches: preserved,
+            schemas: s.schemas.map(schemaName), options: options, appearance: look, keys: keys, preservedPatches: preserved,
             personalDicts: proposal.personalDicts.map(\.lastPathComponent), manualPhrases: proposal.manualPhrases.count,
             textReplacementMatches: proposal.textReplacementMatches, notes: proposal.notes + preview.warnings,
             replaced: preview.replaced, unchanged: preview.unchanged.count, added: preview.added, kept: preview.kept,

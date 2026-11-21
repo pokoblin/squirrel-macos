@@ -91,5 +91,10 @@ import Testing
         #expect(await e.run(["settings", "set", "font-point", "999"]) == 1)
         #expect(e.output.text.contains("候选字字号是 999"))
         #expect(await e.run(["settings", "set", "nope", "1"]) == 2)
+        #expect(await e.run(["settings", "set", "switch-key", "leftControl"]) == 0)
+        #expect(try SettingsStore(paths: e.paths).load()?.keys.asciiSwitchKey == .leftControl)
+        #expect(await e.run(["settings", "set", "switch-key", "-"]) == 0)
+        #expect(try SettingsStore(paths: e.paths).load()?.keys.asciiSwitchKey == nil)
+        #expect(await e.run(["settings", "set", "switch-key", "Shift"]) == 2)
     }
 }

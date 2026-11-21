@@ -11,6 +11,7 @@ struct TakeoverPreviewView: View {
                 Row(title: "方案（第一个是默认）", items: summary.schemas)
                 if !summary.options.isEmpty { Row(title: "选项", items: summary.options) }
                 Row(title: "外观", items: summary.appearance.isEmpty ? ["都是方案默认的"] : summary.appearance)
+                if !summary.keys.isEmpty { Row(title: "按键", items: summary.keys) }
                 if !summary.preservedPatches.isEmpty { Row(title: "保留你改过的", items: summary.preservedPatches) }
                 Row(title: "个人内容", items: [
                     "个人词库 \(summary.personalDicts.count) 个" + (summary.personalDicts.isEmpty ? "" : "（\(summary.personalDicts.joined(separator: "、"))）"),
